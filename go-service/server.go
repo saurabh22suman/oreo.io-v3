@@ -56,6 +56,9 @@ func SetupRouter() *gin.Engine {
 				ds.GET("/:datasetId", controllers.DatasetsGet)
 				ds.PUT("/:datasetId", controllers.DatasetsUpdate)
 				ds.DELETE("/:datasetId", controllers.DatasetsDelete)
+
+				// File uploads for append or schema inference
+				ds.POST("/:datasetId/upload", controllers.DatasetUpload)
 			}
 		}
 

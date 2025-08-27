@@ -3,6 +3,7 @@ package main
 import (
     "bytes"
     "encoding/json"
+    "mime/multipart"
     "net/http"
     "net/http/httptest"
     "testing"
@@ -48,6 +49,174 @@ func TestDatasetsCRUD(t *testing.T) {
     req.Header.Set("Authorization", "Bearer "+token)
     r.ServeHTTP(w, req)
     if w.Code != http.StatusCreated { t.Fatalf("create ds %d %s", w.Code, w.Body.String()) }
+
+    // List
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodGet, "/api/projects/"+itoa(pid)+"/datasets", nil)
+    req.Header.Set("Authorization", "Bearer "+token)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusOK { t.Fatalf("list ds %d %s", w.Code, w.Body.String()) }
+
+    // Get 1
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodGet, "/api/projects/"+itoa(pid)+"/datasets/1", nil)
+    req.Header.Set("Authorization", "Bearer "+token)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusOK { t.Fatalf("get ds %d %s", w.Code, w.Body.String()) }
+
+    // Update
+    body, _ = json.Marshal(map[string]any{"name": "DS1-upd", "schema": "{}\n"})
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodPut, "/api/projects/"+itoa(pid)+"/datasets/1", bytes.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+token)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusOK { t.Fatalf("update ds %d %s", w.Code, w.Body.String()) }
+
+    // Delete (owner allowed)
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodDelete, "/api/projects/"+itoa(pid)+"/datasets/1", nil)
+    req.Header.Set("Authorization", "Bearer "+token)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusNoContent { t.Fatalf("delete ds %d %s", w.Code, w.Body.String()) }
+}
+
+func TestDatasetsRBAC(t *testing.T) {
+    // Setup DB with schemas
+    gdb, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+    _ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.ProjectRole{}, &models.Dataset{})
+    dbpkg.Set(gdb)
+    r := SetupRouter()
+
+    owner := tokenFor(t, r, "owner@test.local")
+    viewer := tokenFor(t, r, "viewer@test.local")
+    editor := tokenFor(t, r, "editor@test.local")
+
+    // Create project as owner
+    body, _ := json.Marshal(map[string]any{"name": "P1"})
+    w := httptest.NewRecorder()
+    req := httptest.NewRequest(http.MethodPost, "/api/projects", bytes.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+owner)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusCreated { t.Fatalf("create proj %d %s", w.Code, w.Body.String()) }
+    var p models.Project
+    _ = json.Unmarshal(w.Body.Bytes(), &p)
+
+    // add roles for viewer and editor
+    var uView, uEdit models.User
+    _ = gdb.Where("email = ?", "viewer@test.local").First(&uView).Error
+    _ = gdb.Where("email = ?", "editor@test.local").First(&uEdit).Error
+    _ = gdb.Create(&models.ProjectRole{ProjectID: p.ID, UserID: uView.ID, Role: "viewer"}).Error
+    _ = gdb.Create(&models.ProjectRole{ProjectID: p.ID, UserID: uEdit.ID, Role: "editor"}).Error
+
+    // owner creates dataset
+    body, _ = json.Marshal(map[string]any{"name": "DS1"})
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodPost, "/api/projects/"+itoa(p.ID)+"/datasets", bytes.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+owner)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusCreated { t.Fatalf("owner create ds %d %s", w.Code, w.Body.String()) }
+
+    // viewer can list/get
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodGet, "/api/projects/"+itoa(p.ID)+"/datasets", nil)
+    req.Header.Set("Authorization", "Bearer "+viewer)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusOK { t.Fatalf("viewer list %d", w.Code) }
+
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodGet, "/api/projects/"+itoa(p.ID)+"/datasets/1", nil)
+    req.Header.Set("Authorization", "Bearer "+viewer)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusOK { t.Fatalf("viewer get %d", w.Code) }
+
+    // viewer cannot create/update/delete
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodPost, "/api/projects/"+itoa(p.ID)+"/datasets", bytes.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+viewer)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusForbidden { t.Fatalf("viewer create expected 403 got %d", w.Code) }
+
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodPut, "/api/projects/"+itoa(p.ID)+"/datasets/1", bytes.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+viewer)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusForbidden { t.Fatalf("viewer update expected 403 got %d", w.Code) }
+
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodDelete, "/api/projects/"+itoa(p.ID)+"/datasets/1", nil)
+    req.Header.Set("Authorization", "Bearer "+viewer)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusForbidden { t.Fatalf("viewer delete expected 403 got %d", w.Code) }
+
+    // editor can create/update but not delete
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodPost, "/api/projects/"+itoa(p.ID)+"/datasets", bytes.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+editor)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusCreated { t.Fatalf("editor create %d", w.Code) }
+
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodPut, "/api/projects/"+itoa(p.ID)+"/datasets/1", bytes.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+editor)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusOK { t.Fatalf("editor update %d", w.Code) }
+
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodDelete, "/api/projects/"+itoa(p.ID)+"/datasets/1", nil)
+    req.Header.Set("Authorization", "Bearer "+editor)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusForbidden { t.Fatalf("editor delete expected 403 got %d", w.Code) }
+}
+
+func TestDatasetUpload(t *testing.T) {
+    gdb, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+    _ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.ProjectRole{}, &models.Dataset{})
+    dbpkg.Set(gdb)
+    r := SetupRouter()
+
+    owner := tokenFor(t, r, "u@test.local")
+    // create project
+    body, _ := json.Marshal(map[string]any{"name": "P1"})
+    w := httptest.NewRecorder()
+    req := httptest.NewRequest(http.MethodPost, "/api/projects", bytes.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+owner)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusCreated { t.Fatalf("create proj %d %s", w.Code, w.Body.String()) }
+    var p models.Project
+    _ = json.Unmarshal(w.Body.Bytes(), &p)
+
+    // create dataset
+    body, _ = json.Marshal(map[string]any{"name": "DS1"})
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodPost, "/api/projects/"+itoa(p.ID)+"/datasets", bytes.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+owner)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusCreated { t.Fatalf("create ds %d %s", w.Code, w.Body.String()) }
+    var ds models.Dataset
+    _ = json.Unmarshal(w.Body.Bytes(), &ds)
+
+    // upload a tiny file
+    var buf bytes.Buffer
+    mw := multipart.NewWriter(&buf)
+    fw, _ := mw.CreateFormFile("file", "sample.csv")
+    fw.Write([]byte("a,b\n1,2\n"))
+    mw.Close()
+
+    w = httptest.NewRecorder()
+    req = httptest.NewRequest(http.MethodPost, "/api/projects/"+itoa(p.ID)+"/datasets/"+itoa(ds.ID)+"/upload", &buf)
+    req.Header.Set("Content-Type", mw.FormDataContentType())
+    req.Header.Set("Authorization", "Bearer "+owner)
+    r.ServeHTTP(w, req)
+    if w.Code != http.StatusCreated { t.Fatalf("upload %d %s", w.Code, w.Body.String()) }
 }
 
 // Small helper to convert uint to string without importing strconv everywhere

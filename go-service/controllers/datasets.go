@@ -2,6 +2,9 @@ package controllers
 
 import (
     "strconv"
+    "io"
+    "os"
+    "path/filepath"
 
     "github.com/gin-gonic/gin"
     dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
@@ -66,4 +69,31 @@ func DatasetsDelete(c *gin.Context) {
     if !HasProjectRole(c, uint(pid), "owner") { c.JSON(403, gin.H{"error":"forbidden"}); return }
     if err := gdb.Where("project_id = ?", pid).Delete(&models.Dataset{}, id).Error; err != nil { c.JSON(500, gin.H{"error":"db"}); return }
     c.Status(204)
+}
+
+// DatasetUpload streams a file to a temp folder for later processing (schema inference/append)
+func DatasetUpload(c *gin.Context) {
+    gdb := dbpkg.Get(); if gdb == nil { if _, err := dbpkg.Init(); err != nil { c.JSON(500, gin.H{"error":"db"}); return } ; gdb = dbpkg.Get() }
+    pid, _ := strconv.Atoi(c.Param("projectId"))
+    dsid, _ := strconv.Atoi(c.Param("datasetId"))
+    if !HasProjectRole(c, uint(pid), "owner", "editor") { c.JSON(403, gin.H{"error":"forbidden"}); return }
+    // Ensure dataset exists
+    var ds models.Dataset
+    if err := gdb.Where("project_id = ?", pid).First(&ds, dsid).Error; err != nil { c.JSON(404, gin.H{"error":"not_found"}); return }
+
+    // Accept multipart/form-data file field "file"
+    file, header, err := c.Request.FormFile("file")
+    if err != nil { c.JSON(400, gin.H{"error":"missing_file"}); return }
+    defer file.Close()
+
+    // Save to temp dir (could be replaced by S3, disk, etc.)
+    base := os.TempDir()
+    _ = os.MkdirAll(filepath.Join(base, "oreo_uploads"), 0o755)
+    dstPath := filepath.Join(base, "oreo_uploads", filepath.Base(header.Filename))
+    dst, err := os.Create(dstPath)
+    if err != nil { c.JSON(500, gin.H{"error":"store"}); return }
+    defer dst.Close()
+    if _, err := io.Copy(dst, file); err != nil { c.JSON(500, gin.H{"error":"write"}); return }
+
+    c.JSON(201, gin.H{"stored": true, "path": dstPath, "dataset_id": ds.ID})
 }
