@@ -16,7 +16,7 @@ import (
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
 	if _, err := dbpkg.Init(); err == nil {
-		_ = dbpkg.Get().AutoMigrate(&models.User{}, &models.Project{}, &models.Dataset{})
+		_ = dbpkg.Get().AutoMigrate(&models.User{}, &models.Project{}, &models.Dataset{}, &models.ProjectRole{})
 	}
 	// Static UI for quick auth testing
 	r.Static("/ui", "./static")
