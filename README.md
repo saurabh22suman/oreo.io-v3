@@ -23,6 +23,8 @@ Requirements: Docker and Docker Compose.
     - POST http://localhost:8081/api/data/validate → forwards to Python `/validate`
   - Auth test UI:
   - http://localhost:8081/ui/auth.html (register, login, refresh token, call /api/auth/me)
+  - Projects UI (quick test):
+    - http://localhost:8081/ui/projects.html (paste token, CRUD projects)
 
 ## Testing
 - Python (in container): `docker compose -f docker-compose.dev.yml exec -T python-service pytest -q`

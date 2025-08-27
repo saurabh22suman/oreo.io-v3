@@ -67,6 +67,11 @@ func AuthMiddleware() gin.HandlerFunc {
         if secret == "" { secret = "dev-secret" }
         token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) { return []byte(secret), nil })
         if err != nil || !token.Valid { c.AbortWithStatusJSON(401, gin.H{"error":"invalid_token"}); return }
+        if claims, ok := token.Claims.(jwt.MapClaims); ok {
+            c.Set("user_id", claims["sub"])
+            c.Set("user_email", claims["email"])
+            c.Set("user_role", claims["role"])
+        }
         c.Next()
     }
 }

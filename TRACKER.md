@@ -18,7 +18,7 @@ This file tracks tasks, issues, decisions, and work logs across the project.
 - [ ] JWT refresh endpoint. (Status: DONE)
   - Auth: Added register/login, JWT middleware, and static UI (/auth.html) to test flows.
   - DB: Added GORM with Postgres (docker-compose) and AutoMigrate for User.
-- [ ] Projects CRUD `/api/projects`. (Status: TODO)
+- [ ] Projects CRUD `/api/projects`. (Status: DOING)
 - [ ] Users/roles CRUD `/api/users`. (Status: TODO)
 - [ ] File upload `/api/files/upload`. (Status: TODO)
 - [ ] Reverse proxy to Python under `/api/data/*`. (Status: TODO)
@@ -63,6 +63,7 @@ This file tracks tasks, issues, decisions, and work logs across the project.
   - Auth: Implemented register/login/JWT middleware; served UI at `/ui/auth.html`.
   - Auth: Added /api/auth/refresh route, updated UI with Refresh button, added unit test for refresh.
   - DB: Added Postgres service to compose; Go auto-migrates User.
+  - Projects: Added Project model, CRUD handlers, routes (protected), unit tests, and a minimal UI at `/ui/projects.html`.
 
 ## Next Up
 - Add tests: Go (testify) and Python (pytest + httpx).

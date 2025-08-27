@@ -16,7 +16,7 @@ import (
 func SetupRouter() *gin.Engine {
     r := gin.Default()
     if _, err := dbpkg.Init(); err == nil {
-        _ = dbpkg.Get().AutoMigrate(&models.User{})
+        _ = dbpkg.Get().AutoMigrate(&models.User{}, &models.Project{})
     }
     // Static UI for quick auth testing
     r.Static("/ui", "./static")
@@ -38,6 +38,16 @@ func SetupRouter() *gin.Engine {
             c.JSON(http.StatusOK, gin.H{"ok": true})
         })
     api.POST("/auth/refresh", controllers.AuthMiddleware(), controllers.Refresh)
+
+        // Projects (protected)
+        proj := api.Group("/projects", controllers.AuthMiddleware())
+        {
+            proj.GET("", controllers.ProjectsList)
+            proj.POST("", controllers.ProjectsCreate)
+            proj.GET("/:id", controllers.ProjectsGet)
+            proj.PUT("/:id", controllers.ProjectsUpdate)
+            proj.DELETE("/:id", controllers.ProjectsDelete)
+        }
 
         // Reverse proxy to Python service for data validation
         api.POST("/data/validate", func(c *gin.Context) {
