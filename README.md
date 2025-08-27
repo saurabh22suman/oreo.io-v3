@@ -25,6 +25,9 @@ Requirements: Docker and Docker Compose.
   - http://localhost:8081/ui/auth.html (register, login, refresh token, call /api/auth/me)
   - Projects UI (quick test):
     - http://localhost:8081/ui/projects.html (paste token, CRUD projects)
+  - Datasets (API only for now):
+    - Nested under projects: /api/projects/:projectId/datasets [GET, POST]
+    - Single dataset: /api/projects/:projectId/datasets/:datasetId [GET, PUT, DELETE]
 
 ## Testing
 - Python (in container): `docker compose -f docker-compose.dev.yml exec -T python-service pytest -q`
