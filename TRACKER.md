@@ -12,13 +12,27 @@ This file tracks tasks, issues, decisions, and work logs across the project.
 
 ## Tasks Backlog
 
+### Feature → Tech Alignment
+- Auth & RBAC (Go) – Status: DOING
+- Projects/Datasets CRUD (Go) – Status: DOING
+- Workflow approval engine (Go) – Status: TODO
+- File uploads/storage (Go) – Status: TODO
+- Schema inference (Python) – Status: TODO
+- Schema mismatch detection (Python) – Status: TODO
+- Business rules (Python) – Status: TODO
+- Data statistics (Python) – Status: TODO
+- SQL query API (Go) – Status: TODO
+- Live editing validation (Python) – Status: TODO
+- Dashboard (React + Go API) – Status: TODO
+
 ### Backend (Go)
 - [ ] Setup Gin API server with health route. (Status: DONE)
 - [ ] JWT auth middleware and login endpoint. (Status: DONE)
 - [ ] JWT refresh endpoint. (Status: DONE)
   - Auth: Added register/login, JWT middleware, and static UI (/auth.html) to test flows.
   - DB: Added GORM with Postgres (docker-compose) and AutoMigrate for User.
-- [ ] Projects CRUD `/api/projects`. (Status: DOING)
+- [ ] Projects CRUD `/api/projects`. (Status: DONE)
+- [ ] Datasets CRUD `/api/projects/:projectId/datasets`. (Status: DOING)
 - [ ] Users/roles CRUD `/api/users`. (Status: TODO)
 - [ ] File upload `/api/files/upload`. (Status: TODO)
 - [ ] Reverse proxy to Python under `/api/data/*`. (Status: TODO)

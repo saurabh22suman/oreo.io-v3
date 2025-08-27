@@ -142,3 +142,23 @@ Use this as the product-alignment north star. All features and changes should ma
 
 Always reference this section when planning sprint scope, writing tests, or prioritizing backlog items.
 
+---
+
+## 🧭 Tech Stack Alignment (Feature → Language)
+
+| Feature                    | Language   | Notes                     |
+| -------------------------- | ---------- | ------------------------- |
+| Auth & RBAC                | Go         | Security-critical, fast   |
+| Projects/Datasets CRUD     | Go         | Core API                  |
+| Workflow approval engine   | Go         | State management          |
+| File uploads/storage       | Go         | Stream handling           |
+| Schema inference           | Python     | Pandas/pyarrow            |
+| Schema mismatch detection  | Python     | Compare schema JSONs      |
+| Business rules             | Python     | Pandas checks             |
+| Data statistics            | Python     | Profiling                 |
+| SQL query API              | Go         | Backed by DuckDB/Postgres |
+| Live editing validation    | Python     | Cell-level rule check     |
+| Dashboard (React frontend) | Go + React | API in Go, UI in React    |
+
+Use this matrix to route new features to the correct service, tests, and code owners.
+
