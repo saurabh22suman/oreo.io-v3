@@ -46,9 +46,14 @@
         list.innerHTML = '';
         (Array.isArray(data) ? data : []).forEach(p => {
           const li = document.createElement('li');
-          li.innerHTML = `<code>#${p.id}</code> ${p.name} — <small>${p.description||''}</small> ` +
+          li.innerHTML = `<div><code>#${p.id}</code> ${p.name} — <small>${p.description||''}</small> ` +
             `<button data-id="${p.id}" class="edit">Edit</button> ` +
-            `<button data-id="${p.id}" class="del">Delete</button>`;
+            `<button data-id="${p.id}" class="del">Delete</button> ` +
+            `<button data-id="${p.id}" class="datasets">Datasets</button></div>` +
+            `<div class="datasets-panel" id="ds-${p.id}" style="margin: .5rem 0 1rem 1rem; display:none;">
+               <div><input placeholder="New dataset name" id="ds-name-${p.id}" style="width:260px"/> <button class="create-ds" data-id="${p.id}">Create Dataset</button></div>
+               <ul class="ds-list"></ul>
+             </div>`;
           list.appendChild(li);
         });
       }
@@ -76,8 +81,58 @@
             show(r);
             await refreshList();
           }
+        } else if (e.target.className === 'datasets') {
+          // Toggle dataset panel and load datasets
+          const panel = document.getElementById(`ds-${id}`);
+          const isHidden = panel.style.display === 'none';
+          panel.style.display = isHidden ? 'block' : 'none';
+          if (isHidden) {
+            await loadDatasets(id);
+          }
+        } else if (e.target.className === 'create-ds') {
+          const name = document.getElementById(`ds-name-${id}`).value.trim();
+          if (!name) return;
+          const r = await authed('POST', `${base}/${id}/datasets`, { name });
+          show(r);
+          await loadDatasets(id);
         }
       });
+
+      async function loadDatasets(projectId) {
+        const panel = document.getElementById(`ds-${projectId}`);
+        const list = panel.querySelector('.ds-list');
+        list.innerHTML = 'Loading...';
+        const r = await authed('GET', `${base}/${projectId}/datasets`);
+        if (r.status !== 200 || !Array.isArray(r.data)) {
+          list.innerHTML = `<li>Failed to load datasets (${r.status})</li>`;
+          return;
+        }
+        list.innerHTML = '';
+        r.data.forEach(ds => {
+          const li = document.createElement('li');
+          li.innerHTML = `<div><code>#${ds.id}</code> ${ds.name}</div>
+            <div>
+              <input type="file" id="file-${projectId}-${ds.id}" style="width: 360px" />
+              <button class="upload" data-pid="${projectId}" data-did="${ds.id}">Upload</button>
+            </div>`;
+          list.appendChild(li);
+        });
+
+        list.addEventListener('click', async (ev) => {
+          if (ev.target.className === 'upload') {
+            const pid = ev.target.getAttribute('data-pid');
+            const did = ev.target.getAttribute('data-did');
+            const fileInput = document.getElementById(`file-${pid}-${did}`);
+            if (!fileInput.files || fileInput.files.length === 0) { alert('Choose a file first.'); return; }
+            const fd = new FormData();
+            fd.append('file', fileInput.files[0]);
+            const t = document.getElementById('token').value.trim();
+            const resp = await fetch(`${base}/${pid}/datasets/${did}/upload`, { method: 'POST', headers: t ? { 'Authorization': 'Bearer ' + t } : {}, body: fd });
+            let data; try { data = await resp.json(); } catch { data = await resp.text(); }
+            show({ status: resp.status, data });
+          }
+        }, { once: true });
+      }
     </script>
   </body>
   </html>
