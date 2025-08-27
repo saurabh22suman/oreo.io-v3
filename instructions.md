@@ -97,3 +97,48 @@ Pipeline stages:
 4. **Deploy to VPS** → staging auto-deploy, prod manual approval.  
 
 ---
+
+## 🎯 MVP Requirements (Alignment Guide)
+
+Use this as the product-alignment north star. All features and changes should map to one or more of these items.
+
+1) User Authentication & Dashboard
+- Secure signup/login (JWT).
+- Dashboard shows recent projects.
+- Settings tab (account, profile, preferences).
+
+2) Projects
+- A project is a container (like a repository).
+- Creator is the owner (owns datasets, workflows, rules in the project).
+- RBAC roles per project:
+  - Owner: full access.
+  - Editor: append/edit datasets, define schema, apply business rules.
+  - Approver: approve/reject workflow changes.
+  - Viewer: read-only.
+
+3) Datasets
+- Each project contains multiple datasets.
+- Dataset properties include schema.
+- Initialize schema in two ways:
+  - Manual schema definition (user-defined fields/types).
+  - Schema inference (from uploaded file).
+
+4) Data Append & Validation Flow
+- Append new data triggers checks:
+  - Schema validation (detect mismatches, report errors).
+  - Business rules validation (ranges, uniqueness, constraints, etc.).
+- Live editing to fix errors inline before submission.
+- If all checks pass → move to workflow approval stage.
+- If checks fail → show clear errors with suggested fixes.
+
+5) Workflow & Approval
+- Pending changes appear in a workflow section.
+- Members with approval rights can approve/reject.
+- Approved data is committed to the dataset.
+
+6) Analytics & Live Query
+- Statistics view: record counts, schema overview, errors history, rule violations.
+- Live SQL connect: users can query datasets with SQL, see tabular results, and export (CSV/Excel).
+
+Always reference this section when planning sprint scope, writing tests, or prioritizing backlog items.
+
