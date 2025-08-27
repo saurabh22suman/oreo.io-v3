@@ -87,6 +87,11 @@ We follow **TDD (Test-Driven Development)** and deploy via Docker (dev → stagi
 - `docker-compose.prod.yml` → optimized, stable release.  
 - All services must include healthcheck endpoints.  
 
+### Database policy
+- Primary DB: Postgres for dev, staging, and prod. Use DATABASE_URL.
+- Tests: SQLite (in-memory) for fast unit tests in Go; use a pure-Go driver to avoid CGO.
+- Integration tests: run against Postgres in CI via docker-compose.
+
 ---
 
 ## 🧪 CI/CD (GitHub Actions)

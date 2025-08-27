@@ -6,11 +6,12 @@ import (
     "mime/multipart"
     "net/http"
     "net/http/httptest"
+    "os"
     "testing"
 
     dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
     "github.com/oreo-io/oreo.io-v2/go-service/models"
-    "gorm.io/driver/sqlite"
+    sqlite "github.com/glebarez/sqlite"
     "gorm.io/gorm"
 )
 
@@ -103,14 +104,18 @@ func TestDatasetsRBAC(t *testing.T) {
     var p models.Project
     _ = json.Unmarshal(w.Body.Bytes(), &p)
 
-    // add roles for viewer and editor
+    // add roles for viewer and editor (ensure users exist)
     var uView, uEdit models.User
-    _ = gdb.Where("email = ?", "viewer@test.local").First(&uView).Error
-    _ = gdb.Where("email = ?", "editor@test.local").First(&uEdit).Error
+    if err := gdb.Where("email = ?", "viewer@test.local").First(&uView).Error; err != nil {
+        t.Fatalf("viewer user not found: %v", err)
+    }
+    if err := gdb.Where("email = ?", "editor@test.local").First(&uEdit).Error; err != nil {
+        t.Fatalf("editor user not found: %v", err)
+    }
     _ = gdb.Create(&models.ProjectRole{ProjectID: p.ID, UserID: uView.ID, Role: "viewer"}).Error
     _ = gdb.Create(&models.ProjectRole{ProjectID: p.ID, UserID: uEdit.ID, Role: "editor"}).Error
 
-    // owner creates dataset
+    // owner creates dataset DS1
     body, _ = json.Marshal(map[string]any{"name": "DS1"})
     w = httptest.NewRecorder()
     req = httptest.NewRequest(http.MethodPost, "/api/projects/"+itoa(p.ID)+"/datasets", bytes.NewReader(body))
@@ -140,6 +145,8 @@ func TestDatasetsRBAC(t *testing.T) {
     r.ServeHTTP(w, req)
     if w.Code != http.StatusForbidden { t.Fatalf("viewer create expected 403 got %d", w.Code) }
 
+    // editor updates dataset 1 to a new unique name
+    body, _ = json.Marshal(map[string]any{"name": "DS1-edited"})
     w = httptest.NewRecorder()
     req = httptest.NewRequest(http.MethodPut, "/api/projects/"+itoa(p.ID)+"/datasets/1", bytes.NewReader(body))
     req.Header.Set("Content-Type", "application/json")
@@ -154,19 +161,23 @@ func TestDatasetsRBAC(t *testing.T) {
     if w.Code != http.StatusForbidden { t.Fatalf("viewer delete expected 403 got %d", w.Code) }
 
     // editor can create/update but not delete
+    // editor creates DS2 (distinct name to avoid uniqueness conflict with DS1)
+    body, _ = json.Marshal(map[string]any{"name": "DS2"})
     w = httptest.NewRecorder()
     req = httptest.NewRequest(http.MethodPost, "/api/projects/"+itoa(p.ID)+"/datasets", bytes.NewReader(body))
     req.Header.Set("Content-Type", "application/json")
     req.Header.Set("Authorization", "Bearer "+editor)
     r.ServeHTTP(w, req)
-    if w.Code != http.StatusCreated { t.Fatalf("editor create %d", w.Code) }
+    if w.Code != http.StatusCreated { t.Fatalf("editor create %d %s", w.Code, w.Body.String()) }
 
+    // update dataset 1 to a unique name (avoid DS2 which already exists)
+    body, _ = json.Marshal(map[string]any{"name": "DS1-edited-by-editor"})
     w = httptest.NewRecorder()
     req = httptest.NewRequest(http.MethodPut, "/api/projects/"+itoa(p.ID)+"/datasets/1", bytes.NewReader(body))
     req.Header.Set("Content-Type", "application/json")
     req.Header.Set("Authorization", "Bearer "+editor)
     r.ServeHTTP(w, req)
-    if w.Code != http.StatusOK { t.Fatalf("editor update %d", w.Code) }
+    if w.Code != http.StatusOK { t.Fatalf("editor update %d %s", w.Code, w.Body.String()) }
 
     w = httptest.NewRecorder()
     req = httptest.NewRequest(http.MethodDelete, "/api/projects/"+itoa(p.ID)+"/datasets/1", nil)
@@ -176,6 +187,19 @@ func TestDatasetsRBAC(t *testing.T) {
 }
 
 func TestDatasetUpload(t *testing.T) {
+    // Fake Python /infer-schema server
+    fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if r.URL.Path != "/infer-schema" || r.Method != http.MethodPost {
+            t.Fatalf("unexpected call: %s %s", r.Method, r.URL.Path)
+        }
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusOK)
+        w.Write([]byte(`{"schema": {"type": "object", "properties": {"a": {"type": "integer"}, "b": {"type": "integer"}}}}`))
+    }))
+    defer fake.Close()
+    os.Setenv("PYTHON_SERVICE_URL", fake.URL)
+    defer os.Unsetenv("PYTHON_SERVICE_URL")
+
     gdb, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
     _ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.ProjectRole{}, &models.Dataset{})
     dbpkg.Set(gdb)

@@ -82,11 +82,7 @@ func ProjectsGet(c *gin.Context) {
 	idStr := c.Param("id")
 	id, _ := strconv.Atoi(idStr)
 	var p models.Project
-	q := gdb
-	if uid, ok := c.Get("user_id"); ok {
-		q = q.Where("owner_id = ?", uid)
-	}
-	if err := q.First(&p, id).Error; err != nil {
+	if err := gdb.First(&p, id).Error; err != nil {
 		c.JSON(404, gin.H{"error": "not_found"})
 		return
 	}
@@ -107,11 +103,7 @@ func ProjectsUpdate(c *gin.Context) {
 	idStr := c.Param("id")
 	id, _ := strconv.Atoi(idStr)
 	var p models.Project
-	q := gdb
-	if uid, ok := c.Get("user_id"); ok {
-		q = q.Where("owner_id = ?", uid)
-	}
-	if err := q.First(&p, id).Error; err != nil {
+	if err := gdb.First(&p, id).Error; err != nil {
 		c.JSON(404, gin.H{"error": "not_found"})
 		return
 	}

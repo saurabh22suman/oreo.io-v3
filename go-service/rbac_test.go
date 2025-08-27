@@ -9,7 +9,7 @@ import (
 
     dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
     "github.com/oreo-io/oreo.io-v2/go-service/models"
-    "gorm.io/driver/sqlite"
+    sqlite "github.com/glebarez/sqlite"
     "gorm.io/gorm"
 )
 

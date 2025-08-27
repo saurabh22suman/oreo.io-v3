@@ -5,7 +5,8 @@ import (
 	"os"
 
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
+	// Use pure-Go SQLite driver to avoid CGO requirement in local/tests
+	sqlite "github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 

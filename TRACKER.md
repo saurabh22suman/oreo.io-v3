@@ -62,7 +62,7 @@ This file tracks tasks, issues, decisions, and work logs across the project.
 
 ## Decisions
 - Web framework: Gin for Go; FastAPI for Python.
-- DB: Postgres (to be added in compose later).
+- DB: Postgres for app runtime (dev/stg/prod). SQLite (pure-Go) only for unit tests.
 - Service comms: REST. Reverse proxy from Go to Python planned.
 
 ## Work Log

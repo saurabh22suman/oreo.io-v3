@@ -1,0 +1,88 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "frontend-npm-install",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"install"
+			],
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		},
+		{
+			"label": "frontend-npm-install",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"cd frontend && npm install"
+			],
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		},
+		{
+			"label": "docker-compose-build-up",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"docker compose -f docker-compose.dev.yml up -d --build"
+			],
+			"problemMatcher": [
+				"$gcc"
+			]
+		},
+		{
+			"label": "docker-compose-build-up",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"docker compose -f docker-compose.dev.yml config --quiet && docker compose -f docker-compose.dev.yml up -d --build"
+			],
+			"problemMatcher": [
+				"$gcc"
+			]
+		},
+		{
+			"label": "docker-compose-validate",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"docker compose -f docker-compose.dev.yml config"
+			],
+			"problemMatcher": [
+				"$gcc"
+			]
+		},
+		{
+			"label": "docker-compose-up",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"docker compose -f docker-compose.dev.yml up -d --build"
+			],
+			"problemMatcher": [
+				"$gcc"
+			]
+		},
+		{
+			"label": "docker-compose-up-build-again",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"docker compose -f docker-compose.dev.yml up -d --build"
+			],
+			"problemMatcher": [
+				"$gcc"
+			]
+		}
+	]
+}
