@@ -1,0 +1,27 @@
+# General
+.DS_Store
+Thumbs.db
+.env
+.env.*
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+dist/
+build/
+
+# Go
+go-service/bin/
+go-service/build/
+
+# Python
+python-service/.pytest_cache/
+python-service/.mypy_cache/
+python-service/.ruff_cache/
+
+# Docker
+*.local.yml

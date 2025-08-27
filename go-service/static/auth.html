@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Auth Test</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; }
+      input, button { padding: 0.5rem; margin: 0.25rem 0; width: 320px; }
+      pre { background: #f5f5f5; padding: 1rem; }
+    </style>
+  </head>
+  <body>
+    <h1>JWT Auth Tester</h1>
+    <label>Email</label><br />
+    <input id="email" placeholder="you@example.com" /><br />
+    <label>Password</label><br />
+    <input id="password" type="password" placeholder="password" /><br />
+    <button id="register">Register</button>
+    <button id="login">Login</button>
+    <button id="me">/auth/me</button>
+  <button id="refresh">Refresh token</button>
+    <h2>Output</h2>
+    <pre id="out"></pre>
+    <script>
+      const out = document.getElementById('out');
+      let token = '';
+      function show(obj){ out.textContent = JSON.stringify(obj, null, 2); }
+      const base = location.origin + '/api/auth';
+      document.getElementById('register').onclick = async () => {
+        const resp = await fetch(base + '/register', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: email.value, password: password.value }) });
+        show({status: resp.status, body: await resp.json()});
+      };
+      document.getElementById('login').onclick = async () => {
+        const resp = await fetch(base + '/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: email.value, password: password.value }) });
+        const body = await resp.json(); token = body.token || ''; show({status: resp.status, body});
+      };
+      document.getElementById('me').onclick = async () => {
+        const resp = await fetch(base + '/me', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        show({status: resp.status, body: await resp.json()});
+      };
+      document.getElementById('refresh').onclick = async () => {
+        const resp = await fetch(base + '/refresh', { method:'POST', headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const body = await resp.json(); token = body.token || token; show({status: resp.status, body});
+      };
+    </script>
+  </body>
+  </html>

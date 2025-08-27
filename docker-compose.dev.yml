@@ -1,0 +1,67 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: oreo
+      POSTGRES_PASSWORD: oreo
+      POSTGRES_DB: oreo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oreo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  go-service:
+    build:
+      context: ./go-service
+    ports:
+      - "8081:8080"
+    environment:
+      - PYTHON_SERVICE_URL=http://python-service:8000
+      - DATABASE_URL=postgres://oreo:oreo@db:5432/oreo?sslmode=disable
+      - JWT_SECRET=dev-secret
+    depends_on:
+      - python-service
+      - db
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    develop:
+      watch:
+        - action: sync
+          path: ./go-service
+          target: /app
+          ignore:
+            - vendor/
+        - action: rebuild
+          path: ./go-service/go.mod
+
+  python-service:
+    build:
+      context: ./python-service
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    develop:
+      watch:
+        - action: sync
+          path: ./python-service
+          target: /app
+          ignore:
+            - __pycache__/
+        - action: rebuild
+          path: ./python-service/requirements.txt
+
+  go-dev:
+    image: golang:1.22
+    working_dir: /workspace
+    volumes:
+      - ./go-service:/workspace
+    command: ["sleep", "infinity"]
