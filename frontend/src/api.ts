@@ -70,7 +70,18 @@ export async function uploadDatasetFile(projectId: number, datasetId: number, fi
 }
 export async function getDatasetSample(projectId: number, datasetId: number){
   const r = await fetch(`${API_BASE}/projects/${projectId}/datasets/${datasetId}/sample`, {headers:{...authHeaders()}})
-  if(!r.ok) throw new Error(await r.text()); return r.json()
+  if(!r.ok){
+    // try to read structured error
+    let msg = 'Failed to load preview'
+    try {
+      const body = await r.json()
+      msg = body?.message || body?.error || msg
+    } catch {
+      try { msg = await r.text() } catch {}
+    }
+    throw new Error(msg)
+  }
+  return r.json()
 }
 export async function appendUpload(projectId: number, datasetId: number, file: File){
   const form = new FormData(); form.append('file', file)

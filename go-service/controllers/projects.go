@@ -87,7 +87,10 @@ func ProjectsGet(c *gin.Context) {
 		return
 	}
 	// Role: any role can view
-	if !HasProjectRole(c, p.ID, "owner", "editor", "approver", "viewer") { c.JSON(403, gin.H{"error":"forbidden"}); return }
+	if !HasProjectRole(c, p.ID, "owner", "editor", "approver", "viewer") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
 	c.JSON(200, p)
 }
 
@@ -108,7 +111,10 @@ func ProjectsUpdate(c *gin.Context) {
 		return
 	}
 	// Role: owner/editor can update
-	if !HasProjectRole(c, p.ID, "owner", "editor") { c.JSON(403, gin.H{"error":"forbidden"}); return }
+	if !HasProjectRole(c, p.ID, "owner", "editor") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
 	var in ProjectIn
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(400, gin.H{"error": "invalid_payload"})
@@ -135,9 +141,15 @@ func ProjectsDelete(c *gin.Context) {
 	idStr := c.Param("id")
 	id, _ := strconv.Atoi(idStr)
 	var p models.Project
-	if err := gdb.First(&p, id).Error; err != nil { c.JSON(404, gin.H{"error":"not_found"}); return }
+	if err := gdb.First(&p, id).Error; err != nil {
+		c.JSON(404, gin.H{"error": "not_found"})
+		return
+	}
 	// Role: owner can delete
-	if !HasProjectRole(c, p.ID, "owner") { c.JSON(403, gin.H{"error":"forbidden"}); return }
+	if !HasProjectRole(c, p.ID, "owner") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
 	if err := gdb.Where("id = ?", id).Delete(&models.Project{}).Error; err != nil {
 		c.JSON(500, gin.H{"error": "db"})
 		return

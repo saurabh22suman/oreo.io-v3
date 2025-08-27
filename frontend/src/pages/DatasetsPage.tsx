@@ -232,7 +232,11 @@ export default function DatasetsPage(){
                     const sample = await getDatasetSample(projectId, d.id)
                     setPreviews(prev => ({...prev, [d.id]: { data: sample.data || [], columns: sample.columns || [] }}))
                     setPreviewOpen(prev => ({...prev, [d.id]: true}))
-                  }catch(e:any){ setError(e.message || 'Preview failed') }
+                    setToast('Loaded preview')
+                  }catch(e:any){
+                    // Show a concise, readable message from backend or fallback
+                    setError(e?.message || 'Could not load preview. Please re-upload the dataset file or try again later.')
+                  }
                 }}>Preview data</button>
                 <button className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={async()=>{
                   if(!confirm('Delete this dataset? This cannot be undone.')) return

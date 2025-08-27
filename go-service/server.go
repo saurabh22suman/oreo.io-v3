@@ -16,11 +16,14 @@ import (
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
 	// Simple CORS for dev
-	r.Use(func(c *gin.Context){
+	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		if c.Request.Method == http.MethodOptions { c.AbortWithStatus(200); return }
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(200)
+			return
+		}
 		c.Next()
 	})
 	gdb := dbpkg.Get()
@@ -30,7 +33,7 @@ func SetupRouter() *gin.Engine {
 		}
 	}
 	if gdb != nil {
-			_ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.Dataset{}, &models.ProjectRole{}, &models.ChangeRequest{})
+		_ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.Dataset{}, &models.ProjectRole{}, &models.ChangeRequest{})
 	}
 	// Static UI for quick auth testing
 	r.Static("/ui", "./static")
@@ -127,14 +130,18 @@ func SetupRouter() *gin.Engine {
 		// Proxy: /data/transform -> python /transform
 		api.POST("/data/transform", func(c *gin.Context) {
 			base := os.Getenv("PYTHON_SERVICE_URL")
-			if strings.TrimSpace(base) == "" { base = "http://python-service:8000" }
+			if strings.TrimSpace(base) == "" {
+				base = "http://python-service:8000"
+			}
 			forwardJSON(c, base+"/transform")
 		})
 
 		// Proxy: /data/export -> python /export
 		api.POST("/data/export", func(c *gin.Context) {
 			base := os.Getenv("PYTHON_SERVICE_URL")
-			if strings.TrimSpace(base) == "" { base = "http://python-service:8000" }
+			if strings.TrimSpace(base) == "" {
+				base = "http://python-service:8000"
+			}
 			forwardJSON(c, base+"/export")
 		})
 	}
@@ -144,15 +151,24 @@ func SetupRouter() *gin.Engine {
 
 // forwardJSON sends the incoming JSON body to target and streams back the JSON response
 func forwardJSON(c *gin.Context, target string) {
-    body, err := io.ReadAll(c.Request.Body)
-    if err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":"invalid body"}); return }
-    req, err := http.NewRequest(http.MethodPost, target, strings.NewReader(string(body)))
-    if err != nil { c.JSON(http.StatusInternalServerError, gin.H{"error":"request build failed"}); return }
-    req.Header.Set("Content-Type", "application/json")
-    client := &http.Client{}
-    resp, err := client.Do(req)
-    if err != nil { c.JSON(http.StatusBadGateway, gin.H{"error":"python service unreachable"}); return }
-    defer resp.Body.Close()
-    respBody, _ := io.ReadAll(resp.Body)
-    c.Data(resp.StatusCode, "application/json", respBody)
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	req, err := http.NewRequest(http.MethodPost, target, strings.NewReader(string(body)))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "request build failed"})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "python service unreachable"})
+		return
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	c.Data(resp.StatusCode, "application/json", respBody)
 }
