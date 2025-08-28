@@ -54,7 +54,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     environment:
-      - VITE_API_BASE=http://go-service:8080/api
+      - VITE_API_BASE=https://api.oreo.soloengine.in
       - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     depends_on:
       - go-service
