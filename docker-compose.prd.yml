@@ -12,6 +12,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - dokploy-network
 
   go-service:
     build:
@@ -30,6 +32,15 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.oreo-api.rule=Host(`api.oreo.soloengine.in`)
+      - traefik.http.routers.oreo-api.entrypoints=websecure
+      - traefik.http.routers.oreo-api.tls.certresolver=letsencrypt
+      - traefik.http.services.oreo-api.loadbalancer.server.port=8080
+    networks:
+      - dokploy-network
 
   python-service:
     build:
@@ -42,6 +53,15 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.oreo-py.rule=Host(`py.oreo.soloengine.in`)
+      - traefik.http.routers.oreo-py.entrypoints=websecure
+      - traefik.http.routers.oreo-py.tls.certresolver=letsencrypt
+      - traefik.http.services.oreo-py.loadbalancer.server.port=8000
+    networks:
+      - dokploy-network
 
   frontend:
     build:
@@ -62,6 +82,9 @@ services:
     networks:
       - dokploy-network
 
-
 volumes:
   postgres_data:
+
+networks:
+  dokploy-network:
+    external: true
