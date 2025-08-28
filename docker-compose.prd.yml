@@ -7,13 +7,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - dokploy-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - dokploy-network
 
   go-service:
     build:
@@ -27,20 +27,13 @@ services:
     depends_on:
       - python-service
       - db
+    networks:
+      - dokploy-network
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 30s
       timeout: 3s
       retries: 3
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=dokploy-network
-      - traefik.http.routers.oreo-api.rule=Host(`api.oreo.soloengine.in`)
-      - traefik.http.routers.oreo-api.entrypoints=websecure
-      - traefik.http.routers.oreo-api.tls.certresolver=letsencrypt
-      - traefik.http.services.oreo-api.loadbalancer.server.port=8080
-    networks:
-      - dokploy-network
 
   python-service:
     build:
@@ -48,20 +41,13 @@ services:
       dockerfile: Dockerfile
     environment:
       - DATABASE_URL=${DATABASE_URL}
+    networks:
+      - dokploy-network
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 3s
       retries: 3
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=dokploy-network
-      - traefik.http.routers.oreo-py.rule=Host(`py.oreo.soloengine.in`)
-      - traefik.http.routers.oreo-py.entrypoints=websecure
-      - traefik.http.routers.oreo-py.tls.certresolver=letsencrypt
-      - traefik.http.services.oreo-py.loadbalancer.server.port=8000
-    networks:
-      - dokploy-network
 
   frontend:
     build:
@@ -72,19 +58,19 @@ services:
       - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     depends_on:
       - go-service
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=dokploy-network
-      - traefik.http.routers.oreoio.rule=Host(`oreo.soloengine.in`)
-      - traefik.http.routers.oreoio.entrypoints=websecure
-      - traefik.http.routers.oreoio.tls.certresolver=letsencrypt
-      - traefik.http.services.oreoio.loadbalancer.server.port=5173
     networks:
       - dokploy-network
-
-volumes:
-  postgres_data:
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.oreoio.rule=Host(`oreo.soloengine.in`)"
+        - "traefik.http.routers.oreoio.entrypoints=websecure"
+        - "traefik.http.routers.oreoio.tls.certresolver=letsencrypt"
+        - "traefik.http.services.oreoio.loadbalancer.server.port=5173"
 
 networks:
   dokploy-network:
     external: true
+
+volumes:
+  postgres_data:
