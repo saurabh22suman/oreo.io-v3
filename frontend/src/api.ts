@@ -34,6 +34,10 @@ export async function getProject(id: number){
   const r = await fetch(`${API_BASE}/projects/${id}`, {headers:{...authHeaders()}})
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
+export async function getDataset(projectId: number, datasetId: number){
+  const r = await fetch(`${API_BASE}/projects/${projectId}/datasets/${datasetId}`, {headers:{...authHeaders()}})
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
 // Members (RBAC)
 export async function listMembers(projectId: number){
   const r = await fetch(`${API_BASE}/projects/${projectId}/members`, {headers:{...authHeaders()}})
@@ -103,5 +107,19 @@ export async function transformData(data: any[], ops: any[]){
 
 export async function exportData(data: any[], format: 'json'|'csv' = 'json'){
   const r = await fetch(`${API_BASE}/data/export`, {method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify({ data, format })})
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+
+// Change Requests (workflow)
+export async function listChanges(projectId: number){
+  const r = await fetch(`${API_BASE}/projects/${projectId}/changes`, {headers:{...authHeaders()}})
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+export async function approveChange(projectId: number, changeId: number){
+  const r = await fetch(`${API_BASE}/projects/${projectId}/changes/${changeId}/approve`, {method:'POST', headers:{...authHeaders()}})
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+export async function rejectChange(projectId: number, changeId: number){
+  const r = await fetch(`${API_BASE}/projects/${projectId}/changes/${changeId}/reject`, {method:'POST', headers:{...authHeaders()}})
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }

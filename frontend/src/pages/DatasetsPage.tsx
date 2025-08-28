@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { NavLink, useParams } from 'react-router-dom'
+import { NavLink, useParams, Link } from 'react-router-dom'
 import { createDataset, deleteDataset, getProject, listDatasets, updateDataset, uploadDatasetFile, validateData, transformData, exportData, getDatasetSample, appendUpload } from '../api'
 
 type Dataset = { id:number; name:string; schema?: string; rules?: string }
@@ -218,6 +218,7 @@ export default function DatasetsPage(){
                 }}
               />
               <div className="flex items-center gap-2">
+                <Link className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" to={`/projects/${projectId}/datasets/${d.id}`}>Open</Link>
                 <input id={`file-d-${d.id}`} className="hidden" type="file" accept=".csv,.xlsx,.xls,.json" onChange={async(e)=>{
                   const file = e.target.files?.[0]; if(!file) return
                   try{ setUploadingId(d.id); const res = await uploadDatasetFile(projectId, d.id, file); setSchema(JSON.stringify(res.schema||res, null, 2)); setToast('File uploaded and schema inferred.') }catch(err:any){ setError(err.message) } finally { setUploadingId(null) }
