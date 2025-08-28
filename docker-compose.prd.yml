@@ -52,6 +52,16 @@ services:
       - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     depends_on:
       - go-service
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.oreoio.rule=Host(`oreo.soloengine.in`)
+      - traefik.http.routers.oreoio.entrypoints=websecure
+      - traefik.http.routers.oreoio.tls.certresolver=letsencrypt
+      - traefik.http.services.oreoio.loadbalancer.server.port=5173
+    networks:
+      - dokploy-network
+
 
 volumes:
   postgres_data:
