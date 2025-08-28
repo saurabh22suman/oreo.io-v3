@@ -66,7 +66,7 @@ services:
         - "traefik.http.routers.oreoio.rule=Host(`oreo.soloengine.in`)"
         - "traefik.http.routers.oreoio.entrypoints=websecure"
         - "traefik.http.routers.oreoio.tls.certresolver=letsencrypt"
-        - "traefik.http.services.oreoio.loadbalancer.server.port=88"
+        - "traefik.http.services.oreoio.loadbalancer.server.port=80"
 
 networks:
   dokploy-network:
