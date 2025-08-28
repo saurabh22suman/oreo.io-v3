@@ -14,7 +14,7 @@ services:
       retries: 5
 
   go-service:
-    image: ghcr.io/<your-username>/<your-repo>-go:main
+    image: ghcr.io/saurabh22suman/oreo.io-v3-go:main
     environment:
       - PYTHON_SERVICE_URL=http://python-service:8000
       - DATABASE_URL=${DATABASE_URL}
@@ -30,7 +30,7 @@ services:
       retries: 3
 
   python-service:
-    image: ghcr.io/<your-username>/<your-repo>-py:main
+    image: ghcr.io/saurabh22suman/oreo.io-v3-py:main
     environment:
       - DATABASE_URL=${DATABASE_URL}
     healthcheck:
@@ -40,7 +40,7 @@ services:
       retries: 3
 
   frontend:
-    image: ghcr.io/<your-username>/<your-repo>-frontend:main
+    image: ghcr.io/saurabh22suman/oreo.io-v3-frontend:main
     environment:
       - VITE_API_BASE=http://go-service:8080/api
       - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
