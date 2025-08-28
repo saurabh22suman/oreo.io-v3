@@ -20,6 +20,7 @@ services:
       - PYTHON_SERVICE_URL=http://python-service:8000
       - DATABASE_URL=postgres://oreo:oreo@db:5432/oreo?sslmode=disable
       - JWT_SECRET=dev-secret
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     depends_on:
       - python-service
       - db
@@ -65,6 +66,7 @@ services:
       - "5173:80"
     environment:
       - VITE_API_BASE=http://go-service:8080/api
+      - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     depends_on:
       - go-service
 

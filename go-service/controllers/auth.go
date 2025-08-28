@@ -1,7 +1,9 @@
 package controllers
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -147,6 +149,104 @@ func Refresh(c *gin.Context) {
 		"exp":   time.Now().Add(24 * time.Hour).Unix(),
 	})
 	s, err := newTok.SignedString([]byte(secret))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "token"})
+		return
+	}
+	c.JSON(200, gin.H{"token": s})
+}
+
+// GoogleLoginRequest represents the payload from Google Identity Services callback
+type GoogleLoginRequest struct {
+	IDToken string `json:"id_token" binding:"required"`
+}
+
+// GoogleLogin verifies the Google ID token and issues a JWT for our app.
+// Requires env GOOGLE_CLIENT_ID to match the audience of the token.
+func GoogleLogin(c *gin.Context) {
+	var req GoogleLoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_payload"})
+		return
+	}
+
+	clientID := os.Getenv("GOOGLE_CLIENT_ID")
+	if clientID == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_not_configured"})
+		return
+	}
+
+	// Validate the ID token using Google's tokeninfo endpoint
+	resp, err := http.Get("https://oauth2.googleapis.com/tokeninfo?id_token=" + url.QueryEscape(req.IDToken))
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "google_unreachable"})
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_google_token"})
+		return
+	}
+	var ti struct {
+		Aud           string `json:"aud"`
+		Email         string `json:"email"`
+		EmailVerified string `json:"email_verified"`
+		Iss           string `json:"iss"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&ti); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_google_token"})
+		return
+	}
+	if ti.Aud != clientID {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "aud_mismatch"})
+		return
+	}
+	if ti.Email == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "email_not_present"})
+		return
+	}
+	if ti.EmailVerified != "true" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "email_not_verified"})
+		return
+	}
+	claims := struct{ Email string }{Email: ti.Email}
+
+	// Ensure DB
+	if getDB() == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+	}
+
+	var u models.User
+	err = getDB().Where("email = ?", claims.Email).First(&u).Error
+	if err != nil {
+		// If not found, create a user record
+		if err == gorm.ErrRecordNotFound {
+			u = models.User{Email: claims.Email, Role: "user"}
+			if err := getDB().Create(&u).Error; err != nil {
+				c.JSON(500, gin.H{"error": "user_create_failed"})
+				return
+			}
+		} else {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+	}
+
+	// Issue our JWT
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "dev-secret"
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":   u.ID,
+		"email": u.Email,
+		"role":  u.Role,
+		"exp":   time.Now().Add(24 * time.Hour).Unix(),
+	})
+	s, err := token.SignedString([]byte(secret))
 	if err != nil {
 		c.JSON(500, gin.H{"error": "token"})
 		return

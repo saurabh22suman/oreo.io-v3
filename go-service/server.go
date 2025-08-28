@@ -15,12 +15,17 @@ import (
 // SetupRouter configures the Gin engine. Exposed for tests.
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
+	// Allow multipart parsing up to ~110 MiB (slightly above our 100 MB limit) before spilling to disk
+	r.MaxMultipartMemory = 110 << 20
 	// Simple CORS for dev
-	r.Use(func(c *gin.Context){
+	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		if c.Request.Method == http.MethodOptions { c.AbortWithStatus(200); return }
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(200)
+			return
+		}
 		c.Next()
 	})
 	gdb := dbpkg.Get()
@@ -30,7 +35,11 @@ func SetupRouter() *gin.Engine {
 		}
 	}
 	if gdb != nil {
-			_ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.Dataset{}, &models.ProjectRole{}, &models.ChangeRequest{})
+		// Detect Postgres by DATABASE_URL env
+		if strings.HasPrefix(strings.ToLower(os.Getenv("DATABASE_URL")), "postgres://") || strings.HasPrefix(strings.ToLower(os.Getenv("DATABASE_URL")), "postgresql://") {
+			_ = gdb.Exec("CREATE SCHEMA IF NOT EXISTS sys").Error
+		}
+		_ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.Dataset{}, &models.ProjectRole{}, &models.ChangeRequest{}, &models.ChangeComment{}, &models.DatasetUpload{}, &models.DatasetMeta{})
 	}
 	// Static UI for quick auth testing
 	r.Static("/ui", "./static")
@@ -48,10 +57,23 @@ func SetupRouter() *gin.Engine {
 		// Auth
 		api.POST("/auth/register", controllers.Register)
 		api.POST("/auth/login", controllers.Login)
+		api.POST("/auth/google", controllers.GoogleLogin)
 		api.GET("/auth/me", controllers.AuthMiddleware(), func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"ok": true})
+			uid, _ := c.Get("user_id")
+			email, _ := c.Get("user_email")
+			role, _ := c.Get("user_role")
+			c.JSON(http.StatusOK, gin.H{"ok": true, "id": uid, "email": email, "role": role})
 		})
 		api.POST("/auth/refresh", controllers.AuthMiddleware(), controllers.Refresh)
+
+		// Admin (static password header)
+		admin := api.Group("/admin", controllers.AdminMiddleware())
+		{
+			admin.GET("/users", controllers.AdminUsersList)
+			admin.POST("/users", controllers.AdminUsersCreate)
+			admin.PUT("/users/:userId", controllers.AdminUsersUpdate)
+			admin.DELETE("/users/:userId", controllers.AdminUsersDelete)
+		}
 
 		// Projects (protected)
 		proj := api.Group("/projects", controllers.AuthMiddleware())
@@ -66,6 +88,7 @@ func SetupRouter() *gin.Engine {
 			mem := proj.Group("/:id/members")
 			{
 				mem.GET("", controllers.MembersList)
+				mem.GET("/me", controllers.MemberMyRole)
 				mem.POST("", controllers.MembersUpsert)
 				mem.DELETE("/:userId", controllers.MembersDelete)
 			}
@@ -82,6 +105,9 @@ func SetupRouter() *gin.Engine {
 				// File uploads for append or schema inference
 				ds.POST("/:datasetId/upload", controllers.DatasetUpload)
 				ds.POST("/:datasetId/append", controllers.AppendUpload)
+				// Live preview of file being appended (without storing), and JSON-based append for edited rows
+				ds.POST("/:datasetId/append/preview", controllers.AppendPreview)
+				ds.POST("/:datasetId/append/json", controllers.AppendJSON)
 				// Preview sample from last upload
 				ds.GET("/:datasetId/sample", controllers.DatasetSample)
 				// Change Requests (approvals workflow)
@@ -90,8 +116,28 @@ func SetupRouter() *gin.Engine {
 					chg.GET("", controllers.ChangesList)
 					chg.POST("/:changeId/approve", controllers.ChangeApprove)
 					chg.POST("/:changeId/reject", controllers.ChangeReject)
+					chg.GET("/:changeId", controllers.ChangeGet)
+					chg.GET("/:changeId/preview", controllers.ChangePreview)
+					chg.GET("/:changeId/comments", controllers.ChangeCommentsList)
+					chg.POST("/:changeId/comments", controllers.ChangeCommentsCreate)
 				}
 			}
+		}
+
+		// Note: Datasets APIs are currently nested under projects routes.
+
+		// Top-level dataset endpoints
+		dsTop := api.Group("/datasets", controllers.AuthMiddleware())
+		{
+			dsTop.POST("", controllers.DatasetsCreateTop)
+			dsTop.GET(":id/schema", controllers.DatasetSchemaGet)
+			dsTop.POST(":id/schema", controllers.DatasetSchemaSet)
+			dsTop.POST(":id/rules", controllers.DatasetRulesSet)
+			dsTop.POST(":id/data/append", controllers.DatasetAppendTop)
+			dsTop.GET(":id/data", controllers.DatasetDataGet)
+			dsTop.GET(":id/stats", controllers.DatasetStats)
+			dsTop.POST(":id/query", controllers.DatasetQuery)
+			// Top-level JSON append and preview can be added later if needed
 		}
 
 		// Reverse proxy to Python service for data validation
@@ -127,14 +173,18 @@ func SetupRouter() *gin.Engine {
 		// Proxy: /data/transform -> python /transform
 		api.POST("/data/transform", func(c *gin.Context) {
 			base := os.Getenv("PYTHON_SERVICE_URL")
-			if strings.TrimSpace(base) == "" { base = "http://python-service:8000" }
+			if strings.TrimSpace(base) == "" {
+				base = "http://python-service:8000"
+			}
 			forwardJSON(c, base+"/transform")
 		})
 
 		// Proxy: /data/export -> python /export
 		api.POST("/data/export", func(c *gin.Context) {
 			base := os.Getenv("PYTHON_SERVICE_URL")
-			if strings.TrimSpace(base) == "" { base = "http://python-service:8000" }
+			if strings.TrimSpace(base) == "" {
+				base = "http://python-service:8000"
+			}
 			forwardJSON(c, base+"/export")
 		})
 	}
@@ -144,15 +194,24 @@ func SetupRouter() *gin.Engine {
 
 // forwardJSON sends the incoming JSON body to target and streams back the JSON response
 func forwardJSON(c *gin.Context, target string) {
-    body, err := io.ReadAll(c.Request.Body)
-    if err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":"invalid body"}); return }
-    req, err := http.NewRequest(http.MethodPost, target, strings.NewReader(string(body)))
-    if err != nil { c.JSON(http.StatusInternalServerError, gin.H{"error":"request build failed"}); return }
-    req.Header.Set("Content-Type", "application/json")
-    client := &http.Client{}
-    resp, err := client.Do(req)
-    if err != nil { c.JSON(http.StatusBadGateway, gin.H{"error":"python service unreachable"}); return }
-    defer resp.Body.Close()
-    respBody, _ := io.ReadAll(resp.Body)
-    c.Data(resp.StatusCode, "application/json", respBody)
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	req, err := http.NewRequest(http.MethodPost, target, strings.NewReader(string(body)))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "request build failed"})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "python service unreachable"})
+		return
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	c.Data(resp.StatusCode, "application/json", respBody)
 }
