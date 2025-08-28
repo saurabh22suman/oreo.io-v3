@@ -2,7 +2,9 @@ package db
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"time"
 
 	"gorm.io/driver/postgres"
 	// Use pure-Go SQLite driver to avoid CGO requirement in local/tests
@@ -17,7 +19,18 @@ func Init() (*gorm.DB, error) {
 	var gdb *gorm.DB
 	var err error
 	if dsn != "" {
-		gdb, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		// Retry connect to Postgres to handle container startup races
+		const maxAttempts = 30
+		for i := 1; i <= maxAttempts; i++ {
+			gdb, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+			if err == nil {
+				break
+			}
+			if i == 1 {
+				log.Printf("[db] waiting for Postgres: %v", err)
+			}
+			time.Sleep(1 * time.Second)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("postgres connect: %w", err)
 		}

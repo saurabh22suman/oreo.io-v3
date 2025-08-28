@@ -3,6 +3,7 @@ module github.com/oreo-io/oreo.io-v2/go-service
 go 1.23.0
 
 require (
+	github.com/coreos/go-oidc/v3 v3.11.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/golang-jwt/jwt/v5 v5.2.1

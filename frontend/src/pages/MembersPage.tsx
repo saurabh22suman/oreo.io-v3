@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
-import { getProject, listMembers, removeMember, upsertMember } from '../api'
+import { getProject, listMembers, removeMember, upsertMember, myProjectRole } from '../api'
 
-type Member = { id: number; email: string; role: 'owner'|'editor'|'approver'|'viewer' }
+type Member = { id: number; email: string; role: 'owner'|'contributor'|'approver'|'viewer' }
 
 export default function MembersPage(){
   const { id } = useParams()
@@ -11,11 +11,20 @@ export default function MembersPage(){
   const [items, setItems] = useState<Member[]>([])
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Member['role']>('viewer')
+  const [isOwner, setIsOwner] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(()=>{ (async()=>{
-    try{ setProject(await getProject(projectId)); setItems(await listMembers(projectId)) } catch(e:any){ setError(e.message) }
+    try{
+      const [p, ms, me] = await Promise.all([
+        getProject(projectId),
+        listMembers(projectId),
+        myProjectRole(projectId).catch(()=>({role:null as any}))
+      ])
+      setProject(p); setItems(ms)
+      setIsOwner(me?.role === 'owner')
+    } catch(e:any){ setError(e.message) }
   })() }, [projectId])
 
   return (
@@ -30,12 +39,13 @@ export default function MembersPage(){
         </nav>
       </div>
 
-      <div className="border border-gray-200 bg-white rounded-md p-3 mb-3">
+  {isOwner && (
+  <div className="border border-gray-200 bg-white rounded-md p-3 mb-3">
         <div className="grid gap-2 sm:grid-cols-3">
           <input className="border border-gray-300 rounded-md px-3 py-2" placeholder="Member email" value={email} onChange={e=>setEmail(e.target.value)} />
           <select className="border border-gray-300 rounded-md px-3 py-2" value={role} onChange={e=>setRole(e.target.value as Member['role'])}>
             <option value="owner">Owner</option>
-            <option value="editor">Editor</option>
+    <option value="contributor">Contributor</option>
             <option value="approver">Approver</option>
             <option value="viewer">Viewer</option>
           </select>
@@ -48,6 +58,7 @@ export default function MembersPage(){
         </div>
         {error && <div className="text-sm text-red-600 mt-2">{error}</div>}
       </div>
+  )}
 
       <ul className="space-y-2">
         {items.map(m => (
@@ -56,9 +67,11 @@ export default function MembersPage(){
               <div className="text-sm font-medium text-gray-800">{m.email}</div>
               <div className="text-xs text-gray-500">{m.role}</div>
             </div>
+            {isOwner && (
             <button className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={async()=>{
               try{ await removeMember(projectId, m.id); setItems(items.filter(x=>x.id!==m.id)) } catch(e:any){ setError(e.message) }
             }}>Remove</button>
+            )}
           </li>
         ))}
       </ul>

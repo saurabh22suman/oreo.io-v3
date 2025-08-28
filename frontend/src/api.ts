@@ -17,6 +17,13 @@ export async function login(email: string, password: string){
   const data = await r.json(); localStorage.setItem('token', data.token); return data
 }
 
+// Google login: send ID token from Google Identity Services to backend and receive app JWT
+export async function loginWithGoogleIdToken(idToken: string){
+  const r = await fetch(`${API_BASE}/auth/google`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id_token: idToken })})
+  if(!r.ok) throw new Error(await r.text())
+  const data = await r.json(); localStorage.setItem('token', data.token); return data
+}
+
 export async function me(){
   const r = await fetch(`${API_BASE}/auth/me`, {headers:{...authHeaders()}})
   return r.ok
@@ -43,9 +50,12 @@ export async function listMembers(projectId: number){
   const r = await fetch(`${API_BASE}/projects/${projectId}/members`, {headers:{...authHeaders()}})
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
-export async function upsertMember(projectId: number, email: string, role: 'owner'|'editor'|'approver'|'viewer'){
+export async function upsertMember(projectId: number, email: string, role: 'owner'|'contributor'|'approver'|'viewer'|'editor'){
   const r = await fetch(`${API_BASE}/projects/${projectId}/members`, {method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify({email, role})})
   if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+export async function myProjectRole(projectId: number): Promise<{ role: 'owner'|'contributor'|'approver'|'viewer'|null }>{
+  const r = await fetch(`${API_BASE}/projects/${projectId}/members/me`, {headers: authHeaders()}); if(!r.ok) throw new Error(await r.text()); return r.json()
 }
 export async function removeMember(projectId: number, userId: number){
   const r = await fetch(`${API_BASE}/projects/${projectId}/members/${userId}`, {method:'DELETE', headers:{...authHeaders()}})
@@ -70,7 +80,16 @@ export async function deleteDataset(projectId: number, datasetId: number){
 export async function uploadDatasetFile(projectId: number, datasetId: number, file: File){
   const form = new FormData(); form.append('file', file)
   const r = await fetch(`${API_BASE}/projects/${projectId}/datasets/${datasetId}/upload`, {method:'POST', headers:{...authHeaders()}, body: form})
-  if(!r.ok) throw new Error(await r.text()); return r.json()
+  if(!r.ok){
+    try{
+      const body = await r.json()
+      const msg = body?.message || body?.error || (await r.text())
+      throw new Error(r.status === 413 ? (body?.message || 'File too large. Max allowed size is 100 MB.') : msg)
+    }catch{
+      throw new Error(r.status === 413 ? 'File too large. Max allowed size is 100 MB.' : 'Upload failed')
+    }
+  }
+  return r.json()
 }
 export async function getDatasetSample(projectId: number, datasetId: number){
   const r = await fetch(`${API_BASE}/projects/${projectId}/datasets/${datasetId}/sample`, {headers:{...authHeaders()}})
@@ -90,6 +109,22 @@ export async function getDatasetSample(projectId: number, datasetId: number){
 export async function appendUpload(projectId: number, datasetId: number, file: File){
   const form = new FormData(); form.append('file', file)
   const r = await fetch(`${API_BASE}/projects/${projectId}/datasets/${datasetId}/append`, {method:'POST', headers:{...authHeaders()}, body: form})
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+
+// New: preview the file about to be appended with pagination (without storing permanently)
+export async function previewAppend(projectId: number, datasetId: number, file: File, limit = 500, offset = 0){
+  const form = new FormData(); form.append('file', file)
+  const r = await fetch(`${API_BASE}/projects/${projectId}/datasets/${datasetId}/append/preview?limit=${limit}&offset=${offset}`,{ method:'POST', headers:{...authHeaders()}, body: form })
+  if(!r.ok){
+    try{ const b = await r.json(); throw new Error(b?.message || b?.error || 'Preview failed') }catch(e:any){ throw new Error(e?.message || 'Preview failed') }
+  }
+  return r.json()
+}
+
+// New: submit edited rows (JSON) as an append change
+export async function appendEditedJSON(projectId: number, datasetId: number, rows: any[], filename = 'edited.json'){
+  const r = await fetch(`${API_BASE}/projects/${projectId}/datasets/${datasetId}/append/json`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify({ rows, filename }) })
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
 
@@ -121,5 +156,51 @@ export async function approveChange(projectId: number, changeId: number){
 }
 export async function rejectChange(projectId: number, changeId: number){
   const r = await fetch(`${API_BASE}/projects/${projectId}/changes/${changeId}/reject`, {method:'POST', headers:{...authHeaders()}})
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+
+// ---- Top-level dataset endpoints ----
+export async function createDatasetTop(projectId: number, payload: { name: string; source?: string; target?: { type?: string; dsn?: string } }){
+  const r = await fetch(`${API_BASE}/datasets`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify({ project_id: projectId, ...payload }) })
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+export async function getDatasetSchemaTop(datasetId: number){
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/schema`, { headers:{...authHeaders()} })
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+export async function setDatasetSchemaTop(datasetId: number, schema: any){
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/schema`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify({ schema }) })
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+export async function setDatasetRulesTop(datasetId: number, rules: any){
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/rules`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify({ rules: typeof rules === 'string' ? rules : JSON.stringify(rules) }) })
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+export async function appendDatasetDataTop(datasetId: number, file: File){
+  const form = new FormData(); form.append('file', file)
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/data/append`, { method:'POST', headers:{...authHeaders()}, body: form })
+  if(!r.ok){
+    try{
+      const body = await r.json()
+      const msg = body?.message || body?.error || (await r.text())
+      throw new Error(r.status === 413 ? (body?.message || 'File too large. Max allowed size is 100 MB.') : msg)
+    }catch{
+      throw new Error(r.status === 413 ? 'File too large. Max allowed size is 100 MB.' : 'Append failed')
+    }
+  }
+  return r.json()
+}
+export async function getDatasetDataTop(datasetId: number, limit = 50, offset = 0){
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/data?limit=${limit}&offset=${offset}`, { headers:{...authHeaders()} })
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+export async function getDatasetStatsTop(datasetId: number){
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/stats`, { headers:{...authHeaders()} })
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+export async function queryDatasetTop(datasetId: number, sqlOrWhere: string | Record<string, any>, limit = 100, offset = 0){
+  // Backend currently accepts a simple JSON filter in body.where or returns all.
+  const body = typeof sqlOrWhere === 'string' ? { where: {}, limit, offset } : { where: sqlOrWhere, limit, offset }
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/query`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) })
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }

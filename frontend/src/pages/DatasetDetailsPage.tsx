@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
-import { appendUpload, approveChange, getDataset, getDatasetSample, getProject, listChanges, rejectChange } from '../api'
+import { appendUpload, approveChange, getDataset, getDatasetSample, getDatasetStatsTop, getProject, listChanges, rejectChange } from '../api'
 
 type Dataset = { id:number; name:string; schema?: string; rules?: string; last_upload_path?: string; last_upload_at?: string }
 
@@ -13,7 +13,7 @@ export default function DatasetDetailsPage(){
   const nav = useNavigate()
   const [project, setProject] = useState<any>(null)
   const [dataset, setDataset] = useState<Dataset|null>(null)
-  const [stats, setStats] = useState<{rows:number; columns:string[]} | null>(null)
+  const [stats, setStats] = useState<{row_count?:number; column_count?:number; owner_name?:string} | null>(null)
   const [sample, setSample] = useState<{data:any[]; columns:string[]} | null>(null)
   const [appendFile, setAppendFile] = useState<File|null>(null)
   const [changes, setChanges] = useState<Change[]>([])
@@ -24,15 +24,13 @@ export default function DatasetDetailsPage(){
     try{
       setProject(await getProject(projectId))
       const ds = await getDataset(projectId, dsId); setDataset(ds)
-      try{
-        const s = await getDatasetSample(projectId, dsId)
-        setSample({ data: s.data||[], columns: s.columns||[] }); setStats({ rows: s.rows|| (s.data?.length||0), columns: s.columns||[]})
-      }catch(e:any){ setError(e.message) }
+      // Load metadata stats (owner, rows, columns). Do not auto-load preview.
+      try{ setStats(await getDatasetStatsTop(dsId)) }catch{}
       setChanges(await listChanges(projectId))
     }catch(e:any){ setError(e.message) }
   })() }, [projectId, dsId])
 
-  const owner = useMemo(()=> project?.owner_email || project?.owner || '', [project])
+  const owner = useMemo(()=> stats?.owner_name || project?.owner_email || project?.owner || '', [stats, project])
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -69,25 +67,29 @@ export default function DatasetDetailsPage(){
             </div>
             <div className="border border-gray-100 rounded-md p-3">
               <div className="text-gray-600">Rows</div>
-              <div className="font-medium">{stats?.rows ?? (sample?.data?.length || 0)}</div>
+              <div className="font-medium">{stats?.row_count ?? (sample?.data?.length || 0)}</div>
             </div>
             <div className="border border-gray-100 rounded-md p-3">
               <div className="text-gray-600">Columns</div>
-              <div className="font-medium">{stats?.columns?.length ?? (sample?.columns?.length || 0)}</div>
+              <div className="font-medium">{stats?.column_count ?? (sample?.columns?.length || 0)}</div>
             </div>
           </div>
 
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <div className="text-sm font-medium">Preview</div>
-              <button className="text-xs text-primary hover:underline" onClick={async()=>{
-                try{
-                  const s = await getDatasetSample(projectId, dsId)
-                  setSample({ data: s.data||[], columns: s.columns||[] })
-                  setStats({ rows: s.rows|| (s.data?.length||0), columns: s.columns||[]})
-                  setToast('Refreshed preview')
-                }catch(e:any){ setError(e.message) }
-              }}>Refresh</button>
+              <div className="flex gap-3">
+                <button className="text-xs text-primary hover:underline" onClick={async()=>{
+                  try{ setStats(await getDatasetStatsTop(dsId)) }catch{}
+                }}>Refresh stats</button>
+                <button className="text-xs text-primary hover:underline" onClick={async()=>{
+                  try{
+                    const s = await getDatasetSample(projectId, dsId)
+                    setSample({ data: s.data||[], columns: s.columns||[] })
+                    setToast('Loaded preview')
+                  }catch(e:any){ setError(e.message) }
+                }}>Load preview</button>
+              </div>
             </div>
             {sample ? (
               <div className="overflow-auto border border-gray-200 rounded-md">
@@ -142,7 +144,8 @@ export default function DatasetDetailsPage(){
                       <div className="font-medium">{ch.title || ch.type} <span className="text-xs text-gray-500">#{ch.id}</span></div>
                       <div className="text-xs text-gray-600">{ch.status}</div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
+                      <Link to={`/projects/${projectId}/datasets/${dsId}/changes/${ch.id}`} className="text-xs text-primary hover:underline">Open</Link>
                       {ch.status === 'pending' && (
                         <>
                           <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{ try{ await approveChange(projectId, ch.id); setChanges(await listChanges(projectId)); setToast('Change approved'); }catch(e:any){ setError(e.message) } }}>Approve</button>

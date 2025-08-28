@@ -25,7 +25,8 @@ func ProjectsList(c *gin.Context) {
 	var items []models.Project
 	// Optionally filter by owner
 	if uid, ok := c.Get("user_id"); ok {
-		gdb = gdb.Where("owner_id = ?", uid)
+		// Show projects owned by the user OR where the user is a member in project_roles
+		gdb = gdb.Where("owner_id = ? OR id IN (SELECT project_id FROM project_roles WHERE user_id = ?)", uid, uid)
 	}
 	if err := gdb.Order("id desc").Find(&items).Error; err != nil {
 		c.JSON(500, gin.H{"error": "db"})
@@ -87,7 +88,7 @@ func ProjectsGet(c *gin.Context) {
 		return
 	}
 	// Role: any role can view
-	if !HasProjectRole(c, p.ID, "owner", "editor", "approver", "viewer") {
+	if !HasProjectRole(c, p.ID, "owner", "contributor", "approver", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -110,8 +111,8 @@ func ProjectsUpdate(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "not_found"})
 		return
 	}
-	// Role: owner/editor can update
-	if !HasProjectRole(c, p.ID, "owner", "editor") {
+	// Role: owner/contributor can update
+	if !HasProjectRole(c, p.ID, "owner", "contributor") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}

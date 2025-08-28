@@ -11,7 +11,8 @@ import (
 
 type MemberIn struct {
 	Email string `json:"email" binding:"required,email"`
-	Role  string `json:"role" binding:"required,oneof=owner editor approver viewer"`
+	// Accept 'contributor' (new) and 'editor' (legacy alias)
+	Role  string `json:"role" binding:"required,oneof=owner editor contributor approver viewer"`
 }
 
 // MembersList returns members for a project (any project role can view)
@@ -25,7 +26,7 @@ func MembersList(c *gin.Context) {
 		gdb = dbpkg.Get()
 	}
 	pid, _ := strconv.Atoi(c.Param("id"))
-	if !HasProjectRole(c, uint(pid), "owner", "editor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -43,7 +44,7 @@ func MembersList(c *gin.Context) {
 	for _, pr := range roles {
 		var u models.User
 		if err := gdb.First(&u, pr.UserID).Error; err == nil {
-			out = append(out, Member{ID: u.ID, Email: u.Email, Role: pr.Role})
+			out = append(out, Member{ID: u.ID, Email: u.Email, Role: normalizeRole(pr.Role)})
 		}
 	}
 	c.JSON(200, out)
@@ -79,16 +80,16 @@ func MembersUpsert(c *gin.Context) {
 			return
 		}
 	}
-	// upsert project role
+	// upsert project role (normalize role name)
 	var pr models.ProjectRole
 	if err := gdb.Where("project_id = ? AND user_id = ?", pid, u.ID).First(&pr).Error; err != nil {
-		pr = models.ProjectRole{ProjectID: uint(pid), UserID: u.ID, Role: in.Role}
+		pr = models.ProjectRole{ProjectID: uint(pid), UserID: u.ID, Role: normalizeRole(in.Role)}
 		if err := gdb.Create(&pr).Error; err != nil {
 			c.JSON(500, gin.H{"error": "db"})
 			return
 		}
 	} else {
-		pr.Role = in.Role
+		pr.Role = normalizeRole(in.Role)
 		if err := gdb.Save(&pr).Error; err != nil {
 			c.JSON(500, gin.H{"error": "db"})
 			return
@@ -118,4 +119,31 @@ func MembersDelete(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// MemberMyRole returns the current user's role for this project
+func MemberMyRole(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
+	pid, _ := strconv.Atoi(c.Param("id"))
+	// must be part of the project in any capacity to query role
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	uidVal, ok := c.Get("user_id"); if !ok { c.JSON(401, gin.H{"error":"unauthorized"}); return }
+	var uid uint
+	switch v := uidVal.(type) { case float64: uid=uint(v); case int: uid=uint(v); case uint: uid=v }
+	var pr models.ProjectRole
+	if err := gdb.Where("project_id = ? AND user_id = ?", pid, uid).First(&pr).Error; err != nil {
+		c.JSON(200, gin.H{"role": nil})
+		return
+	}
+	c.JSON(200, gin.H{"role": normalizeRole(pr.Role)})
 }

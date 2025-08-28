@@ -25,6 +25,18 @@ This file tracks tasks, issues, decisions, and work logs across the project.
 - Live editing validation (Python) – Status: TODO
 - Dashboard (React + Go API) – Status: TODO
 
+### Auth Enhancements
+- Google Sign-In integration
+  - [ ] Backend: finalize Google token verification and telemetry (Status: DONE→VERIFY)
+  - [ ] Frontend: handle GIS errors and multi-tenant client IDs (Status: TODO)
+  - [ ] E2E: Playwright e2e with real client ID (Status: TODO)
+
+### Dataset Flow
+- [ ] Top-level dataset endpoints (create, schema, rules, append, data, stats) (Status: TODO)
+- [ ] Frontend pages: Create, Schema & Rules, Upload & Append, Approvals, Viewer (Status: TODO)
+- [ ] Python rules: regex, allowed_values, not_null aliases, referential (basic) (Status: TODO)
+- [ ] TDD: Go httptest, Python pytest, React Vitest/RTL, E2E flow (Status: TODO)
+
 ### Backend (Go)
 - [ ] Setup Gin API server with health route. (Status: DONE)
 - [ ] JWT auth middleware and login endpoint. (Status: DONE)

@@ -213,7 +213,7 @@ def export_data(req: ExportRequest):
 
 
 @app.post("/sample")
-def sample(file: UploadFile = File(...), n: int = 50):
+def sample(file: UploadFile = File(...), n: int = 50, offset: int = 0):
     if pd is None:
         raise HTTPException(status_code=500, detail="pandas not available for sampling")
     content = file.file.read()
@@ -225,9 +225,15 @@ def sample(file: UploadFile = File(...), n: int = 50):
             df = pd.read_excel(io.BytesIO(content))
         except Exception:
             raise HTTPException(status_code=400, detail="Unsupported file format")
+    total_rows = len(df)
+    if offset and isinstance(offset, int):
+        try:
+            df = df.iloc[offset:]
+        except Exception:
+            pass
     if n and isinstance(n, int):
         df = df.head(n)
-    return {"data": df.to_dict(orient="records"), "columns": list(df.columns), "rows": len(df)}
+    return {"data": df.to_dict(orient="records"), "columns": list(df.columns), "rows": len(df), "total_rows": int(total_rows)}
 
 
 # --------- Business Rules Validation ---------
@@ -273,6 +279,15 @@ def validate_rules(payload: RulesPayload):
                     missing_idx = [i for i, row in enumerate(rows) if (col not in row) or (row[col] in (None, ""))]
                 if missing_idx:
                     errors.append({"rule": "required", "column": col, "rows": missing_idx, "message": f"Column '{col}' has missing values"})
+        elif rtype == "not_null":
+            cols = r.get("columns") or []
+            for col in cols:
+                if df is not None:
+                    missing_idx = df[df[col].isna()].index.tolist() if col in df.columns else list(range(len(rows)))
+                else:
+                    missing_idx = [i for i, row in enumerate(rows) if (col not in row) or (row[col] is None)]
+                if missing_idx:
+                    errors.append({"rule": "not_null", "column": col, "rows": missing_idx, "message": f"Column '{col}' has nulls"})
         elif rtype == "unique":
             col = r.get("column")
             if df is not None and col in df.columns:
@@ -306,6 +321,35 @@ def validate_rules(payload: RulesPayload):
                 if maxv is not None and f > float(maxv): bad.append(i)
             if bad:
                 errors.append({"rule": "range", "column": col, "rows": bad, "message": f"Column '{col}' out of range"})
+        elif rtype == "regex":
+            import re
+            col = r.get("column")
+            pattern = r.get("pattern")
+            if not col or not pattern:
+                continue
+            prog = re.compile(pattern)
+            bad = []
+            for i, row in enumerate(rows):
+                val = row.get(col)
+                if val is None:
+                    continue
+                if not prog.fullmatch(str(val)):
+                    bad.append(i)
+            if bad:
+                errors.append({"rule": "regex", "column": col, "rows": bad, "message": f"Column '{col}' fails regex"})
+        elif rtype in ("allowed_values", "ref_in"):
+            col = r.get("column")
+            values = r.get("values") or []
+            bad = []
+            allowed = set(values)
+            for i, row in enumerate(rows):
+                val = row.get(col)
+                if val is None:
+                    continue
+                if val not in allowed:
+                    bad.append(i)
+            if bad:
+                errors.append({"rule": rtype, "column": col, "rows": bad, "message": f"Column '{col}' has values outside allowed set"})
         else:
             # Unknown rule -> ignore for forward compat
             continue
