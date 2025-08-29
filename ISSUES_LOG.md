@@ -1,3 +1,51 @@
+## 2025-08-29 Fixes (approvals & comments)
+
+- Assigned reviewer cannot see Approve/Reject on change page
+	- Fix: Backend now allows assigned reviewers or approver role to approve/reject; frontend shows buttons when user is assigned OR approver.
+	- Files: go-service/controllers/changes.go; frontend/src/pages/ChangeDetailsPage.tsx; frontend/src/pages/DatasetApprovalsPage.tsx
+	- Status: Deployed to dev.
+
+- Comment should show commenter email
+	- Fix: Normalize user_id extraction in ChangeCommentsCreate and include user_email in response; list already included email.
+	- Files: go-service/controllers/change_details.go
+	- Status: Deployed to dev.
+
+- Edited numeric values validated as strings (e.g., Year '2026' flagged not integer)
+	- Root cause: Edits from the grid produced string values; validation used schema requiring integer.
+	- Fix: In `DatasetAppendFlowPage`, coerce edited values to schema types (integer/number/boolean) before validation and on save using dataset schema properties.
+	- Files: frontend/src/pages/DatasetAppendFlowPage.tsx
+	- Status: Deployed to dev.
+
+- Multi-reviewer approval: require all reviewers to approve before status moves to 'approved'
+	- Requirement: If a change request has multiple reviewers, status should only move to 'approved' and data appended when all assigned reviewers have approved.
+	- Fix: Backend now updates reviewer_states for the acting user, then checks if all reviewers have status 'approved'. Only then does it proceed to final approval and data append. Otherwise, status remains 'pending'.
+	- Files: go-service/controllers/changes.go
+	- Status: Deployed to dev.
+
+## 2025-08-29 UX improvements
+
+- Gate Approve/Reject buttons on Approvals list page to assigned reviewers only.
+	- Done: frontend conditionally renders based on current user id vs reviewer_id or reviewers_ids.
+
+- Reviewer selection dialog: switch to checkbox multi-select.
+	- Done: replaced <select multiple> with checkbox lists in DatasetsPage, DatasetDetailsPage, and DatasetUploadAppendPage.
+
+- Change page should show per-reviewer approval status (PR-like).
+	- Done (phase 1): backend added ChangeRequest.reviewer_states, initialized on change open; approve/reject update per-reviewer state; ChangeGet returns reviewer_states with emails. Frontend renders status badges.
+	- Next: consider quorum policy (e.g., require all reviewers to approve before auto-approving) and UI to reflect when overall status transitions.
+
+- Reshape append flow
+	1) Project page should not show "choose append file".
+		- Done: removed append UI from `DatasetsPage`.
+	2) Dataset page should show an option to append new data.
+		- Done: added "Open append flow" button linking to `/projects/:id/datasets/:datasetId/append` in `DatasetDetailsPage`.
+	3) New page to upload, live edit, preview, and submit change.
+		- Done: created `DatasetAppendFlowPage` with upload, live edit (AgGridDialog), preview edited, and submit dialog.
+	4) Submit dialog should include editable change name, comment box, multi-select approvers, and submit button.
+		- Done: submit dialog includes Title, Comment, checkbox list of members, and Submit.
+	5) On submit, validate; on failure return to edit page with "Validation failed"; on success create change request.
+		- Done: submit performs validate-first; shows "Validation failed" on this page if validation fails; on success calls open with title/comment and reviewers.
+
 # Issues Log
 
 Date: 2025-08-28

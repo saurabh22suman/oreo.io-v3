@@ -389,70 +389,7 @@ export default function DatasetsPage(){
                </div>
              )}
 
-             {/* Validation & Append */}
-            {(role === 'owner' || role === 'contributor') && (
-            <div className="mt-3 grid gap-2">
-               {/* Preview now opens exclusively in a dialog (no inline table) */}
-               <details className="rounded-md border border-gray-200 bg-white">
-                 <summary className="px-3 py-2 cursor-pointer text-sm font-medium">Business rules (JSON)</summary>
-                 <div className="p-3">
-                   <div className="flex items-center justify-between mb-2">
-                     <div className="text-xs text-gray-600">Rules are stored with the dataset.</div>
-                     <div className="flex gap-2">
-                       <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={()=>{
-                         // load
-                         try{
-                           const txt = (d as any).rules || ''
-                           setRulesEditor(txt || rulesEditor)
-                         }catch{}
-                       }}>Load</button>
-                       <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{
-                         // save
-                         try{
-                           // quick validate JSON
-                           const parsed = JSON.parse(rulesEditor || '[]')
-                           const resp = await updateDataset(projectId, d.id, { name: d.name, schema: d.schema, rules: JSON.stringify(parsed) })
-                           setItems(items.map(x=> x.id===d.id ? { ...x, rules: resp.rules } : x))
-                           setToast('Rules saved.')
-                         }catch(e:any){ setError(e.message || 'Invalid rules JSON') }
-                       }}>Save</button>
-                     </div>
-                   </div>
-                   <textarea className="w-full border border-gray-300 rounded-md px-3 py-2 font-mono text-xs" rows={8} value={rulesEditor} onChange={e=>setRulesEditor(e.target.value)} />
-                 </div>
-               </details>
-               <div className="flex items-center gap-2">
-                 <input id={`append-${d.id}`} type="file" className="hidden" accept=".csv,.xlsx,.xls,.json" onChange={e=> setAppendFiles(prev=> ({ ...prev, [d.id]: e.target.files?.[0] || null }))} />
-                 <label htmlFor={`append-${d.id}`} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 cursor-pointer">Choose append file</label>
-                 <span className="text-xs text-gray-600 max-w-[16rem] truncate">{appendFiles[d.id]? appendFiles[d.id]!.name : 'No file selected'}</span>
-                 <button disabled={!appendFiles[d.id]} className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600 disabled:opacity-60" onClick={async()=>{
-                   const file = appendFiles[d.id]; if(!file) return
-                   setError(''); setAppendResult(null)
-                   try{
-                     // Step 1: validate only (top-level endpoint)
-                     const vr = await appendDatasetDataTop(d.id, file)
-                     if(!vr?.ok){ setError('Validation failed. Check schema & rules.'); return }
-                     setPendingUploadIds(prev => ({ ...prev, [d.id]: vr.upload_id }))
-                     if(!approvers.length){ setError('No members available as reviewers. Add a member in Members.'); return }
-                     setSelectedDatasetId(d.id)
-                     setReviewerDialog(true)
-                   }catch(e:any){ setError(e.message) }
-                 }}>Validate & open change</button>
-               </div>
-               {appendResult && (
-                 <div className="border border-gray-200 rounded-md bg-white p-3">
-                   {appendResult.ok ? (
-                     <div className="text-green-700 text-sm">Ready for approval. Change Request ID: {appendResult?.change_request?.id}</div>
-                   ) : (
-                     <div>
-                       <div className="text-red-600 text-sm mb-2">Errors detected. Fix and retry.</div>
-                       <pre className="bg-gray-100 p-3 rounded-md text-xs overflow-auto">{JSON.stringify({schema: appendResult.schema, rules: appendResult.rules}, null, 2)}</pre>
-                     </div>
-                   )}
-                 </div>
-               )}
-             </div>
-            )}
+            {/* Append UI removed from project page per UX: use dataset page instead */}
            </li>
         ))}
         <AgGridDialog
@@ -481,11 +418,16 @@ export default function DatasetsPage(){
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white rounded-md p-4 w-[420px] shadow">
             <div className="text-sm font-medium mb-2">Select reviewer(s)</div>
-            <select multiple className="w-full border border-gray-300 rounded px-3 py-2 h-28" value={selectedReviewerIds.map(String)} onChange={e=>{
-              const opts = Array.from(e.target.selectedOptions).map(o=> Number(o.value)).filter(Boolean); setSelectedReviewerIds(opts)
-            }}>
-              {approvers.map(a=> <option key={a.id} value={a.id}>{a.email}</option>)}
-            </select>
+            <div className="border border-gray-300 rounded p-2 max-h-40 overflow-auto space-y-1">
+              {approvers.map(a => (
+                <label key={a.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="accent-primary" checked={selectedReviewerIds.includes(a.id)} onChange={(e)=>{
+                    setSelectedReviewerIds(prev => e.target.checked ? Array.from(new Set([...prev, a.id])) : prev.filter(x=>x!==a.id))
+                  }} />
+                  <span>{a.email}</span>
+                </label>
+              ))}
+            </div>
             <div className="flex gap-2 mt-3 justify-end">
               <button className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={()=>{ setReviewerDialog(false); setSelectedDatasetId(null) }}>Cancel</button>
               <button disabled={(selectedReviewerIds.length===0) || !pendingUploadIds[selectedDatasetId!]} className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600 disabled:opacity-60" onClick={async()=>{

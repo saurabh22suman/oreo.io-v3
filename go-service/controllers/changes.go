@@ -57,7 +57,8 @@ func ChangeApprove(c *gin.Context) {
 		pidStr = c.Param("projectId")
 	}
 	pid, _ := strconv.Atoi(pidStr)
-	if !HasProjectRole(c, uint(pid), "approver") {
+	// Basic access: must at least be a project member (viewer or above)
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -72,9 +73,9 @@ func ChangeApprove(c *gin.Context) {
 		c.JSON(409, gin.H{"error": "not_pending"})
 		return
 	}
-	// If reviewers are assigned, only one of them may approve
+	// Permission: allow if the acting user is an assigned reviewer OR has project role 'approver'
+	var uid uint
 	if uidVal, ok := c.Get("user_id"); ok {
-		var uid uint
 		switch v := uidVal.(type) {
 		case float64:
 			uid = uint(v)
@@ -83,24 +84,70 @@ func ChangeApprove(c *gin.Context) {
 		case uint:
 			uid = v
 		}
-		allowed := false
+	}
+	isAssigned := false
+	if uid != 0 {
 		if cr.ReviewerID != 0 && uid == cr.ReviewerID {
-			allowed = true
+			isAssigned = true
 		}
-		if !allowed && strings.TrimSpace(cr.Reviewers) != "" {
+		if !isAssigned && strings.TrimSpace(cr.Reviewers) != "" {
 			var ids []uint
 			_ = json.Unmarshal([]byte(cr.Reviewers), &ids)
 			for _, id := range ids {
 				if id == uid {
-					allowed = true
+					isAssigned = true
 					break
 				}
 			}
 		}
-		if !allowed {
-			c.JSON(http.StatusForbidden, gin.H{"error": "not_assigned_reviewer"})
-			return
+	}
+	if !isAssigned && !HasProjectRole(c, uint(pid), "approver") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
+	// Mark reviewer state for acting user, then check if all reviewers have approved
+	var actingUID uint
+	if uv, ok := c.Get("user_id"); ok {
+		switch v := uv.(type) {
+		case float64:
+			actingUID = uint(v)
+		case int:
+			actingUID = uint(v)
+		case uint:
+			actingUID = v
 		}
+	}
+	var allApproved = true
+	if strings.TrimSpace(cr.ReviewerStates) != "" && actingUID != 0 {
+		var states []map[string]any
+		_ = json.Unmarshal([]byte(cr.ReviewerStates), &states)
+		changed := false
+		for _, st := range states {
+			if st["id"] == actingUID || (st["id"] != nil && (fmt.Sprintf("%v", st["id"]) == fmt.Sprintf("%v", actingUID))) {
+				st["status"] = "approved"
+				st["decided_at"] = time.Now().Format(time.RFC3339)
+				changed = true
+			}
+		}
+		// Check if all reviewers have status 'approved'
+		for _, st := range states {
+			if st["status"] != "approved" {
+				allApproved = false
+				break
+			}
+		}
+		if changed {
+			if b, err := json.Marshal(states); err == nil {
+				cr.ReviewerStates = string(b)
+				_ = gdb.Save(&cr).Error
+			}
+		}
+	}
+	// If not all reviewers have approved, do not proceed to final approval
+	if strings.TrimSpace(cr.ReviewerStates) != "" && !allApproved {
+		c.JSON(200, gin.H{"ok": true, "change_request": cr, "message": "Waiting for all reviewers to approve."})
+		return
 	}
 
 	// Apply according to type. For append, prefer DB staging -> main append; fallback to durable file update.
@@ -165,6 +212,31 @@ func ChangeApprove(c *gin.Context) {
 			// Refresh metadata as well (may not reflect row count if not in DB, but update owner/last update)
 			upsertDatasetMeta(gdb, &ds)
 		}
+
+		// Record a dataset version snapshot (table reference and row count) on approved change
+		// Compute row count from main table if available
+		var rowCount int64
+		_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", main)).Row().Scan(&rowCount)
+		verData := map[string]any{
+			"table":      main,
+			"row_count":  rowCount,
+			"change_id":  cr.ID,
+			"applied_at": time.Now().Format(time.RFC3339),
+		}
+		if b, err := json.Marshal(verData); err == nil {
+			approvers := cr.ReviewerStates
+			if strings.TrimSpace(approvers) == "" {
+				approvers = cr.Reviewers
+			}
+			_ = gdb.Create(&models.DatasetVersion{
+				DatasetID: ds.ID,
+				Data:      string(b),
+				EditedBy:  cr.UserID,
+				EditedAt:  time.Now(),
+				Status:    "approved",
+				Approvers: approvers,
+			}).Error
+		}
 		cr.Status = "approved"
 		cr.Summary = "Applied append at " + time.Now().Format(time.RFC3339)
 		if err := gdb.Save(&cr).Error; err != nil {
@@ -199,7 +271,8 @@ func ChangeReject(c *gin.Context) {
 		pidStr = c.Param("projectId")
 	}
 	pid, _ := strconv.Atoi(pidStr)
-	if !HasProjectRole(c, uint(pid), "approver") {
+	// Basic access: must at least be a project member (viewer or above)
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -213,9 +286,9 @@ func ChangeReject(c *gin.Context) {
 		c.JSON(409, gin.H{"error": "not_pending"})
 		return
 	}
-	// If reviewers are assigned, only one of them may reject
+	// Permission: allow if the acting user is an assigned reviewer OR has project role 'approver'
+	var uid uint
 	if uidVal, ok := c.Get("user_id"); ok {
-		var uid uint
 		switch v := uidVal.(type) {
 		case float64:
 			uid = uint(v)
@@ -224,23 +297,62 @@ func ChangeReject(c *gin.Context) {
 		case uint:
 			uid = v
 		}
-		allowed := false
+	}
+	isAssigned := false
+	if uid != 0 {
 		if cr.ReviewerID != 0 && uid == cr.ReviewerID {
-			allowed = true
+			isAssigned = true
 		}
-		if !allowed && strings.TrimSpace(cr.Reviewers) != "" {
+		if !isAssigned && strings.TrimSpace(cr.Reviewers) != "" {
 			var ids []uint
 			_ = json.Unmarshal([]byte(cr.Reviewers), &ids)
 			for _, id := range ids {
 				if id == uid {
-					allowed = true
+					isAssigned = true
 					break
 				}
 			}
 		}
-		if !allowed {
-			c.JSON(http.StatusForbidden, gin.H{"error": "not_assigned_reviewer"})
-			return
+	}
+	if !isAssigned && !HasProjectRole(c, uint(pid), "approver") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+	// Mark reviewer state if present
+	var actingUID uint
+	if uv, ok := c.Get("user_id"); ok {
+		switch v := uv.(type) {
+		case float64:
+			actingUID = uint(v)
+		case int:
+			actingUID = uint(v)
+		case uint:
+			actingUID = v
+		}
+	}
+	if strings.TrimSpace(cr.ReviewerStates) != "" && actingUID != 0 {
+		var states []map[string]any
+		_ = json.Unmarshal([]byte(cr.ReviewerStates), &states)
+		changed := false
+		for _, st := range states {
+			if idv, ok := st["id"].(float64); ok && uint(idv) == actingUID {
+				st["status"] = "rejected"
+				st["decided_at"] = time.Now().Format(time.RFC3339)
+				changed = true
+				break
+			}
+			if idu, ok := st["id"].(uint); ok && idu == actingUID {
+				st["status"] = "rejected"
+				st["decided_at"] = time.Now().Format(time.RFC3339)
+				changed = true
+				break
+			}
+		}
+		if changed {
+			if b, err := json.Marshal(states); err == nil {
+				cr.ReviewerStates = string(b)
+				_ = gdb.Save(&cr).Error
+			}
 		}
 	}
 	cr.Status = "rejected"

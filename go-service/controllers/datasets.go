@@ -1139,7 +1139,13 @@ func AppendUpload(c *gin.Context) {
 	// Store payload as a small JSON with reference to upload id and filename
 	payloadObj := map[string]any{"upload_id": up.ID, "filename": up.Filename}
 	pb, _ := json.Marshal(payloadObj)
-	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data", Payload: string(pb), ReviewerID: reviewerID}
+	// Initialize reviewer state for single reviewer path
+	rs := []map[string]any{}
+	if reviewerID != 0 {
+		rs = append(rs, map[string]any{"id": reviewerID, "status": "pending", "decided_at": nil})
+	}
+	rsJSON, _ := json.Marshal(rs)
+	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data", Payload: string(pb), ReviewerID: reviewerID, ReviewerStates: string(rsJSON)}
 	if uid, exists := c.Get("user_id"); exists {
 		if u, ok := uid.(uint); ok {
 			cr.UserID = u
@@ -1379,6 +1385,8 @@ func AppendOpen(c *gin.Context) {
 		UploadID    uint   `json:"upload_id"`
 		ReviewerID  uint   `json:"reviewer_id"`
 		ReviewerIDs []uint `json:"reviewer_ids"`
+		Title       string `json:"title"`
+		Comment     string `json:"comment"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(400, gin.H{"error": "invalid_payload"})
@@ -1429,11 +1437,25 @@ func AppendOpen(c *gin.Context) {
 	payloadObj := map[string]any{"upload_id": up.ID, "filename": up.Filename}
 	pb, _ := json.Marshal(payloadObj)
 	reviewersJSON, _ := json.Marshal(cleaned)
+	// Initialize reviewer states (pending)
+	reviewerStates := make([]map[string]any, 0, len(cleaned))
+	for _, rid := range cleaned {
+		reviewerStates = append(reviewerStates, map[string]any{
+			"id":         rid,
+			"status":     "pending",
+			"decided_at": nil,
+		})
+	}
+	reviewerStatesJSON, _ := json.Marshal(reviewerStates)
 	firstReviewer := uint(0)
 	if len(cleaned) > 0 {
 		firstReviewer = cleaned[0]
 	}
-	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data", Payload: string(pb), ReviewerID: firstReviewer, Reviewers: string(reviewersJSON)}
+	title := strings.TrimSpace(body.Title)
+	if title == "" {
+		title = "Append data"
+	}
+	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: title, Payload: string(pb), ReviewerID: firstReviewer, Reviewers: string(reviewersJSON), ReviewerStates: string(reviewerStatesJSON)}
 	if uid, exists := c.Get("user_id"); exists {
 		if u, ok := uid.(uint); ok {
 			cr.UserID = u
@@ -1445,6 +1467,16 @@ func AppendOpen(c *gin.Context) {
 	}
 	_ = ensureStagingTable(gdb, ds.ID, cr.ID)
 	_ = ingestBytesToTable(gdb, up.Content, up.Filename, dsStagingTable(ds.ID, cr.ID))
+	// Optional: initial comment
+	if strings.TrimSpace(body.Comment) != "" {
+		cc := models.ChangeComment{ProjectID: uint(pid), ChangeRequestID: cr.ID, Body: strings.TrimSpace(body.Comment)}
+		if uid, exists := c.Get("user_id"); exists {
+			if u, ok := uid.(uint); ok {
+				cc.UserID = u
+			}
+		}
+		_ = gdb.Create(&cc).Error
+	}
 	c.JSON(201, gin.H{"ok": true, "change_request": cr})
 }
 
@@ -1630,7 +1662,17 @@ func AppendJSON(c *gin.Context) {
 	if len(reviewersAll) > 0 {
 		firstReviewer = reviewersAll[0]
 	}
-	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data (edited)", Payload: string(pb), ReviewerID: firstReviewer, Reviewers: string(reviewersJSON)}
+	// Initialize reviewer states for edited-rows path
+	reviewerStates2 := make([]map[string]any, 0, len(reviewersAll))
+	for _, rid := range reviewersAll {
+		reviewerStates2 = append(reviewerStates2, map[string]any{
+			"id":         rid,
+			"status":     "pending",
+			"decided_at": nil,
+		})
+	}
+	reviewerStatesJSON2, _ := json.Marshal(reviewerStates2)
+	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data (edited)", Payload: string(pb), ReviewerID: firstReviewer, Reviewers: string(reviewersJSON), ReviewerStates: string(reviewerStatesJSON2)}
 	if uid, exists := c.Get("user_id"); exists {
 		if u, ok := uid.(uint); ok {
 			cr.UserID = u

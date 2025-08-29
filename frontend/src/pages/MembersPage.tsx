@@ -51,6 +51,7 @@ export default function MembersPage(){
           <select className="border border-gray-300 rounded-md px-3 py-2" value={role} onChange={e=>setRole(e.target.value as Member['role'])}>
             <option value="owner">Owner</option>
             <option value="contributor">Contributor</option>
+            <option value="approver">Approver</option>
             <option value="viewer">Viewer</option>
           </select>
           <button disabled={!email || saving} className="rounded-md bg-primary text-white px-3 py-2 text-sm hover:bg-indigo-600 disabled:opacity-60" onClick={async()=>{

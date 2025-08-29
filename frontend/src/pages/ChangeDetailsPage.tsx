@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getProject, currentUser, approveChange, rejectChange } from '../api'
+import { getProject, currentUser, approveChange, rejectChange, myProjectRole } from '../api'
 import AgGridDialog from '../components/AgGridDialog'
 import Alert from '../components/Alert'
 
@@ -18,20 +18,24 @@ export default function ChangeDetailsPage(){
   const dsId = Number(datasetId)
   const [project, setProject] = useState<any>(null)
   const [change, setChange] = useState<any>(null)
+  const [reviewerStates, setReviewerStates] = useState<any[]|null>(null)
   const [preview, setPreview] = useState<{data:any[]; columns:string[]}|null>(null)
   const [open, setOpen] = useState(false)
   const [comments, setComments] = useState<any[]>([])
   const [comment, setComment] = useState('')
   const [error, setError] = useState('')
   const [me, setMe] = useState<{id:number; email:string}|null>(null)
+  const [isApprover, setIsApprover] = useState(false)
 
   useEffect(()=>{ (async()=>{
     try{
       setProject(await getProject(projectId))
   const meInfo = await currentUser().catch(()=>null as any)
   if(meInfo?.id) setMe({ id: meInfo.id, email: meInfo.email })
+  try{ const role = await myProjectRole(projectId); setIsApprover(role.role === 'approver') }catch{}
   const ch = await fetchJSON(`${API_BASE}/projects/${projectId}/changes/${chId}`)
   setChange(ch?.change || ch)
+  if(ch?.reviewer_states) setReviewerStates(ch.reviewer_states as any[])
   // Attach reviewer email(s) if present
       try{ const pv = await fetchJSON(`${API_BASE}/projects/${projectId}/changes/${chId}/preview`); setPreview({ data: pv.data||[], columns: pv.columns||[] }) }catch{}
       try{ const cs = await fetchJSON(`${API_BASE}/projects/${projectId}/changes/${chId}/comments`); setComments(cs) }catch{}
@@ -55,6 +59,18 @@ export default function ChangeDetailsPage(){
             {change.title && <div><span className="text-gray-600">Title:</span> <span className="font-medium">{change.title}</span></div>}
             {change.reviewer_email && <div><span className="text-gray-600">Pending with:</span> <span className="font-medium">{change.reviewer_email}</span></div>}
             {Array.isArray(change.reviewer_emails) && change.reviewer_emails.length>0 && <div><span className="text-gray-600">Reviewers:</span> <span className="font-medium">{change.reviewer_emails.join(', ')}</span></div>}
+            {Array.isArray(reviewerStates) && reviewerStates.length>0 && (
+              <div className="w-full">
+                <div className="text-gray-600">Reviewer status</div>
+                <ul className="mt-1 flex flex-wrap gap-2">
+                  {reviewerStates.map((st:any, idx:number)=> (
+                    <li key={idx} className={`text-xs px-2 py-1 rounded-md border ${st.status==='approved'?'bg-green-50 border-green-200 text-green-800': st.status==='rejected'?'bg-red-50 border-red-200 text-red-800':'bg-gray-50 border-gray-200 text-gray-800'}`}>
+                      {(st.email || `User #${st.id}`)}: {st.status || 'pending'} {st.decided_at ? `• ${new Date(st.decided_at).toLocaleString()}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -96,13 +112,13 @@ export default function ChangeDetailsPage(){
   allowEdit
   compact={false}
       />
-      {change && me && (
+  {change && me && (
         <div className="mt-3 flex gap-2">
-          {/* Show approve/reject if user is assigned reviewer (single or in list) */}
+      {/* Show approve/reject if user is assigned reviewer (single or in list) or has approver role */}
           {(() => {
-            const ids: number[] = Array.isArray(change.reviewer_emails) ? (change.reviewers_ids || []) : []
-            const isAssigned = (change.reviewer_id && me.id === change.reviewer_id) || (Array.isArray(change.reviewer_emails) && change.reviewer_emails.length && (change.reviewers_ids||[]).includes(me.id))
-            return change.status === 'pending' && isAssigned
+    const idsFromStates: number[] = Array.isArray(reviewerStates) ? reviewerStates.map((s:any)=> Number(s.id)).filter(Boolean) : []
+    const isAssigned = (change.reviewer_id && me.id === change.reviewer_id) || idsFromStates.includes(me.id)
+    return change.status === 'pending' && (isAssigned || isApprover)
           })() && (
             <>
               <button className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={async()=>{ try{ await approveChange(projectId, chId); location.reload() }catch(e:any){ setError(e.message) } }}>Approve</button>

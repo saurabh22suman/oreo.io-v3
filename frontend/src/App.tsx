@@ -7,7 +7,7 @@ import Layout from './components/Layout'
 import MembersPage from './pages/MembersPage'
 import DatasetCreatePage from './pages/DatasetCreatePage'
 import DatasetSchemaRulesPage from './pages/DatasetSchemaRulesPage'
-import DatasetUploadAppendPage from './pages/DatasetUploadAppendPage'
+import DatasetAppendFlowPage from './pages/DatasetAppendFlowPage'
 import DatasetApprovalsPage from './pages/DatasetApprovalsPage'
 import DatasetViewerPage from './pages/DatasetViewerPage'
 import ChangeDetailsPage from './pages/ChangeDetailsPage'
@@ -25,7 +25,8 @@ export default function App(){
   <Route path="/projects/:id/members" element={<MembersPage/>}/>
   <Route path="/projects/:id/datasets/new" element={<DatasetCreatePage/>}/>
   <Route path="/projects/:id/datasets/:datasetId/schema" element={<DatasetSchemaRulesPage/>}/>
-  <Route path="/projects/:id/datasets/:datasetId/upload" element={<DatasetUploadAppendPage/>}/>
+  {/* Legacy Upload & Append page removed in favor of new append flow */}
+  <Route path="/projects/:id/datasets/:datasetId/append" element={<DatasetAppendFlowPage/>}/>
   <Route path="/projects/:id/datasets/:datasetId/approvals" element={<DatasetApprovalsPage/>}/>
   <Route path="/projects/:id/datasets/:datasetId/view" element={<DatasetViewerPage/>}/>
   <Route path="/projects/:id/datasets/:datasetId/changes/:changeId" element={<ChangeDetailsPage/>}/>

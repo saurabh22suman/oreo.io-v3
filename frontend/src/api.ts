@@ -199,7 +199,7 @@ export async function getDatasetSchemaTop(datasetId: number){
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
 export async function setDatasetSchemaTop(datasetId: number, schema: any){
-  const r = await fetch(`${API_BASE}/datasets/${datasetId}/schema`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify({ schema }) })
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/schema`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify({ schema: typeof schema === 'string' ? schema : JSON.stringify(schema) }) })
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
 export async function setDatasetRulesTop(datasetId: number, rules: any){

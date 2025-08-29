@@ -19,15 +19,29 @@ type Props = {
   onFetchMore?: () => Promise<any[] | { data: any[] }>
   // Compact toolbarless preview: no pagination, no exports, show only Close
   compact?: boolean
+  // Optional highlighting of invalid cells/rows. Row indices are 0-based.
+  invalidCells?: Array<{ row: number; column: string }>
+  invalidRows?: number[]
 }
 
-export default function AgGridDialog({ open, title = 'Preview', rows, columns, pageSize = 50, onOpenChange, allowEdit = true, onSave, onFetchMore, compact = false }: Props){
+export default function AgGridDialog({ open, title = 'Preview', rows, columns, pageSize = 50, onOpenChange, allowEdit = true, onSave, onFetchMore, compact = false, invalidCells = [], invalidRows = [] }: Props){
   const gridRef = useRef<AgGridReact>(null)
   const [api, setApi] = useState<GridApi|null>(null)
   const [colApi, setColApi] = useState<any>(null)
   const [localRows, setLocalRows] = useState<any[]>(rows || [])
   // keep an original snapshot for Undo
   const originalRowsRef = useRef<any[]>(Array.isArray(rows) ? JSON.parse(JSON.stringify(rows)) : [])
+  // compute invalid sets for quick lookup
+  const invalidCellSet = useMemo(()=>{
+    const s = new Set<string>()
+    for(const cell of invalidCells || []){
+      if(cell && typeof cell.row === 'number' && typeof cell.column === 'string'){
+        s.add(`${cell.row}|${cell.column}`)
+      }
+    }
+    return s
+  }, [invalidCells])
+  const invalidRowSet = useMemo(()=> new Set<number>((invalidRows||[]).filter((n)=> typeof n === 'number')), [invalidRows])
 
   // keep local rows in sync when prop changes (open/reopen)
   if (open && localRows !== rows) {
@@ -53,6 +67,14 @@ export default function AgGridDialog({ open, title = 'Preview', rows, columns, p
       editable: !!allowEdit,
       resizable: true,
       suppressSizeToFit: false,
+      cellStyle: (p: any) => {
+        const ri = p?.rowIndex
+        const key = `${typeof ri === 'number' ? ri : -1}|${c}`
+        if((typeof ri === 'number' && invalidRowSet.has(ri)) || invalidCellSet.has(key)){
+          return { backgroundColor: '#FEF2F2' /* red-50 */, color: '#991B1B' /* red-800 */ }
+        }
+        return undefined
+      },
     }))
   }, [columns, allowEdit])
 
@@ -134,7 +156,7 @@ export default function AgGridDialog({ open, title = 'Preview', rows, columns, p
                 {onSave && (
                   <>
                     <button className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={handleUndo}>Undo edits</button>
-                    <button className="rounded bg-green-600 text-white px-2 py-1 text-xs hover:bg-green-700" onClick={handleSave}>Save as change</button>
+                    <button className="rounded bg-green-600 text-white px-2 py-1 text-xs hover:bg-green-700" onClick={handleSave}>Save edits</button>
                   </>
                 )}
               </>
@@ -142,7 +164,7 @@ export default function AgGridDialog({ open, title = 'Preview', rows, columns, p
             {compact && onSave && (
               <>
                 <button className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={handleUndo}>Undo edits</button>
-                <button className="rounded bg-green-600 text-white px-2 py-1 text-xs hover:bg-green-700" onClick={handleSave}>Save as change</button>
+                <button className="rounded bg-green-600 text-white px-2 py-1 text-xs hover:bg-green-700" onClick={handleSave}>Save edits</button>
               </>
             )}
             <DialogClose asChild>

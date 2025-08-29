@@ -27,7 +27,7 @@ export default function DatasetSchemaRulesPage(){
         <h2 className="text-xl font-semibold">Schema & Rules</h2>
         <div className="flex gap-2 text-sm">
           <Link to={`/projects/${projectId}`} className="text-primary hover:underline">Back</Link>
-          <Link to={`/projects/${projectId}/datasets/${dsId}/upload`} className="text-primary hover:underline">Next: Upload & Append</Link>
+          <Link to={`/projects/${projectId}/datasets/${dsId}`} className="text-primary hover:underline">Next: Dataset</Link>
         </div>
       </div>
   {error && <Alert type="error" message={error} onClose={()=>setError('')} />}

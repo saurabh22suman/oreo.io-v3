@@ -40,6 +40,8 @@ func ChangeGet(c *gin.Context) {
 	// Add reviewer email(s) for display
 	var reviewerEmail string
 	var reviewerEmails []string
+	// Enriched reviewer states if available
+	var reviewerStates any
 	if cr.ReviewerID != 0 {
 		var u models.User
 		if err := gdb.First(&u, cr.ReviewerID).Error; err == nil {
@@ -59,7 +61,39 @@ func ChangeGet(c *gin.Context) {
 			}
 		}
 	}
-	c.JSON(200, gin.H{"change": cr, "reviewer_email": reviewerEmail, "reviewer_emails": reviewerEmails})
+	if strings.TrimSpace(cr.ReviewerStates) != "" {
+		var states []map[string]any
+		_ = json.Unmarshal([]byte(cr.ReviewerStates), &states)
+		// attach emails for each id
+		if len(states) > 0 {
+			idSet := []uint{}
+			for _, st := range states {
+				if idv, ok := st["id"].(float64); ok {
+					idSet = append(idSet, uint(idv))
+				} else if idu, ok := st["id"].(uint); ok {
+					idSet = append(idSet, idu)
+				}
+			}
+			if len(idSet) > 0 {
+				var users []models.User
+				if err := gdb.Where("id IN ?", idSet).Find(&users).Error; err == nil {
+					emailMap := map[uint]string{}
+					for _, u := range users {
+						emailMap[u.ID] = u.Email
+					}
+					for _, st := range states {
+						if idv, ok := st["id"].(float64); ok {
+							st["email"] = emailMap[uint(idv)]
+						} else if idu, ok := st["id"].(uint); ok {
+							st["email"] = emailMap[idu]
+						}
+					}
+				}
+			}
+		}
+		reviewerStates = states
+	}
+	c.JSON(200, gin.H{"change": cr, "reviewer_email": reviewerEmail, "reviewer_emails": reviewerEmails, "reviewer_states": reviewerStates})
 }
 
 // ChangePreview streams a JSON preview for append-type change using stored payload path
@@ -106,7 +140,36 @@ func ChangePreview(c *gin.Context) {
 	if filename == "" {
 		filename = "upload.csv"
 	}
-	// call python /sample with the stored bytes
+	// If upload is JSON, parse locally for preview (python /sample handles CSV/XLSX only)
+	lower := strings.ToLower(filepath.Ext(filename))
+	if lower == ".json" || (len(up.Content) > 0 && (up.Content[0] == '{' || up.Content[0] == '[')) {
+		// Try to unmarshal into array of objects
+		var arr []map[string]any
+		if err := json.Unmarshal(up.Content, &arr); err == nil {
+			// Build columns set
+			colsSet := map[string]struct{}{}
+			for _, obj := range arr {
+				for k := range obj {
+					colsSet[k] = struct{}{}
+				}
+			}
+			cols := make([]string, 0, len(colsSet))
+			for k := range colsSet {
+				cols = append(cols, k)
+			}
+			// Limit rows for preview
+			max := 500
+			if len(arr) > max {
+				arr = arr[:max]
+			}
+			c.JSON(200, gin.H{"data": arr, "columns": cols, "rows": len(arr), "total_rows": len(arr)})
+			return
+		}
+		// Fallback to empty preview on JSON parse failure
+		c.JSON(200, gin.H{"data": []any{}, "columns": []string{}, "rows": 0, "total_rows": 0})
+		return
+	}
+	// Otherwise, forward to python /sample for CSV/XLSX
 	base := os.Getenv("PYTHON_SERVICE_URL")
 	if base == "" {
 		base = "http://python-service:8000"
@@ -207,8 +270,13 @@ func ChangeCommentsCreate(c *gin.Context) {
 	}
 	cc := models.ChangeComment{ProjectID: uint(pid), ChangeRequestID: uint(changeID), Body: body.Body}
 	if uid, ok := c.Get("user_id"); ok {
-		if u, ok2 := uid.(uint); ok2 {
-			cc.UserID = u
+		switch v := uid.(type) {
+		case float64:
+			cc.UserID = uint(v)
+		case int:
+			cc.UserID = uint(v)
+		case uint:
+			cc.UserID = v
 		}
 	}
 	if err := gdb.Create(&cc).Error; err != nil {

@@ -40,7 +40,7 @@ func SetupRouter() *gin.Engine {
 		if strings.HasPrefix(strings.ToLower(os.Getenv("DATABASE_URL")), "postgres://") || strings.HasPrefix(strings.ToLower(os.Getenv("DATABASE_URL")), "postgresql://") {
 			_ = gdb.Exec("CREATE SCHEMA IF NOT EXISTS sys").Error
 		}
-		_ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.Dataset{}, &models.ProjectRole{}, &models.ChangeRequest{}, &models.ChangeComment{}, &models.DatasetUpload{}, &models.DatasetMeta{})
+		_ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.Dataset{}, &models.ProjectRole{}, &models.ChangeRequest{}, &models.ChangeComment{}, &models.DatasetUpload{}, &models.DatasetMeta{}, &models.DatasetVersion{})
 	}
 	// Static UI for quick auth testing
 	r.Static("/ui", "./static")

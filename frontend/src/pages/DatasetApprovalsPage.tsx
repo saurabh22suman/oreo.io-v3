@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { approveChange, getProject, listChanges, rejectChange } from '../api'
+import { approveChange, getProject, listChanges, rejectChange, currentUser, myProjectRole } from '../api'
 import Alert from '../components/Alert'
 
 export default function DatasetApprovalsPage(){
@@ -11,9 +11,16 @@ export default function DatasetApprovalsPage(){
   const [changes, setChanges] = useState<any[]>([])
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
+  const [me, setMe] = useState<{id:number; email:string}|null>(null)
+  const [isApprover, setIsApprover] = useState(false)
 
   useEffect(()=>{ (async()=>{
-    try{ setProject(await getProject(projectId)); setChanges(await listChanges(projectId)) }catch(e:any){ setError(e.message) }
+    try{
+      setProject(await getProject(projectId)); setChanges(await listChanges(projectId))
+      const meInfo = await currentUser().catch(()=>null as any)
+      if(meInfo?.id) setMe({ id: meInfo.id, email: meInfo.email })
+      try{ const role = await myProjectRole(projectId); setIsApprover(role.role === 'approver') }catch{}
+    }catch(e:any){ setError(e.message) }
   })() }, [projectId])
 
   return (
@@ -21,7 +28,7 @@ export default function DatasetApprovalsPage(){
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xl font-semibold">Approvals</h2>
         <div className="flex gap-2 text-sm">
-          <Link to={`/projects/${projectId}/datasets/${dsId}/upload`} className="text-primary hover:underline">Back: Upload</Link>
+          <Link to={`/projects/${projectId}/datasets/${dsId}`} className="text-primary hover:underline">Back: Dataset</Link>
           <Link to={`/projects/${projectId}/datasets/${dsId}/view`} className="text-primary hover:underline">Next: Viewer</Link>
         </div>
       </div>
@@ -38,7 +45,14 @@ export default function DatasetApprovalsPage(){
                 </div>
                 <div className="flex gap-2 items-center">
                   <Link to={`/projects/${projectId}/datasets/${dsId}/changes/${ch.id}`} className="text-xs text-primary hover:underline">Open</Link>
-                  {ch.status === 'pending' && (
+                  {ch.status === 'pending' && me && (()=>{
+                    // Only show if me is assigned reviewer; prefer reviewer_states if available in detail view.
+                    // Since list API doesn’t embed states, rely on reviewers array and fallback to reviewer_id.
+                    let ids: number[] = []
+                    try{ if(typeof (ch as any).reviewers === 'string' && (ch as any).reviewers.trim().startsWith('[')) ids = JSON.parse((ch as any).reviewers) }catch{}
+                    const isAssigned = (ch.reviewer_id && me.id === ch.reviewer_id) || ids.includes(me.id)
+                    return isAssigned || isApprover
+                  })() && (
                     <>
                       <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{ try{ await approveChange(projectId, ch.id); setChanges(await listChanges(projectId)); setToast('Change approved') }catch(e:any){ setError(e.message) } }}>Approve</button>
                       <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{ try{ await rejectChange(projectId, ch.id); setChanges(await listChanges(projectId)); setToast('Change rejected') }catch(e:any){ setError(e.message) } }}>Reject</button>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
-import { appendUpload, approveChange, getDataset, getDatasetSample, getDatasetStatsTop, getProject, listChanges, rejectChange, listMembers, myProjectRole, currentUser, withdrawChange, appendDatasetDataTop, openAppendChangeTop } from '../api'
+import { approveChange, getDataset, getDatasetSample, getDatasetStatsTop, getProject, listChanges, rejectChange, myProjectRole, currentUser, withdrawChange } from '../api'
 import AgGridDialog from '../components/AgGridDialog'
 import Alert from '../components/Alert'
 import { orderColumnsBySchema } from '../utils/columnOrder'
@@ -20,17 +20,13 @@ export default function DatasetDetailsPage(){
   const [stats, setStats] = useState<{row_count?:number; column_count?:number; owner_name?:string; table_location?:string} | null>(null)
   const [sample, setSample] = useState<{data:any[]; columns:string[]} | null>(null)
   const [openPreview, setOpenPreview] = useState(false)
-  const [appendFile, setAppendFile] = useState<File|null>(null)
+  // Append moved to dedicated flow page
   const [changes, setChanges] = useState<Change[]>([])
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
   const [isApprover, setIsApprover] = useState(false)
   const [meId, setMeId] = useState<number|undefined>(undefined)
-  const [approvers, setApprovers] = useState<Member[]>([])
-  const [reviewerDialog, setReviewerDialog] = useState(false)
-  const [selectedReviewer, setSelectedReviewer] = useState<number|undefined>(undefined)
-  const [selectedReviewerIds, setSelectedReviewerIds] = useState<number[]>([])
-  const [pendingUploadId, setPendingUploadId] = useState<number|undefined>(undefined)
+  
 
   useEffect(()=>{ (async()=>{
     try{
@@ -43,9 +39,7 @@ export default function DatasetDetailsPage(){
   setIsApprover(role?.role === 'approver')
   const me = await currentUser().catch(()=>null as any)
   if(me?.id) setMeId(Number(me.id))
-  const members = await listMembers(projectId).catch(()=>[])
-  // Allow any project member to be selected as reviewer
-  setApprovers(members)
+  
     }catch(e:any){ setError(e.message) }
   })() }, [projectId, dsId])
 
@@ -128,22 +122,9 @@ export default function DatasetDetailsPage(){
         <div className="border border-gray-200 bg-white rounded-md p-3">
           <div className="text-sm font-medium mb-2">Append new data</div>
           <div className="flex items-center gap-2 mb-2">
-            <input id="append-ds" type="file" className="hidden" accept=".csv,.xlsx,.xls,.json" onChange={e=> setAppendFile(e.target.files?.[0]||null)} />
-            <label htmlFor="append-ds" className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 cursor-pointer">Choose file</label>
-            <span className="text-xs text-gray-600 max-w-[16rem] truncate">{appendFile? appendFile.name : 'No file selected'}</span>
+            <Link to={`/projects/${projectId}/datasets/${dsId}/append`} className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600">Open append flow</Link>
+            <span className="text-xs text-gray-600">Upload, edit, preview, and submit for approval</span>
           </div>
-          <button disabled={!appendFile} className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600 disabled:opacity-60" onClick={async()=>{
-            if(!appendFile) return
-            setError('')
-            try{
-              // Step 1: validate only
-              const vr = await appendDatasetDataTop(dsId, appendFile)
-              if(!vr?.ok){ setError('Validation found issues. Fix and retry.'); return }
-              setPendingUploadId(vr.upload_id)
-              if(!approvers.length){ setError('No members available as reviewers. Add a member in Members.'); return }
-              setReviewerDialog(true)
-            }catch(e:any){ setError(e.message) }
-          }}>Validate & open change</button>
 
           <div className="mt-4">
             <div className="text-sm font-medium mb-2">Change workflow</div>
@@ -159,7 +140,12 @@ export default function DatasetDetailsPage(){
                       <Link to={`/projects/${projectId}/datasets/${dsId}/changes/${ch.id}`} className="text-xs text-primary hover:underline">Open</Link>
                       {ch.status === 'pending' && (
                         <>
-                          {isApprover && (!ch.reviewer_id || ch.reviewer_id === meId) && (
+                          {isApprover && (()=>{
+                            let ids: number[] = []
+                            try{ if(typeof (ch as any).reviewers === 'string') ids = JSON.parse((ch as any).reviewers) }catch{}
+                            const assigned = (!ch.reviewer_id || ch.reviewer_id === meId) || (meId && ids.includes(meId))
+                            return assigned
+                          })() && (
                             <>
                               <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{ try{ await approveChange(projectId, ch.id); setChanges(await listChanges(projectId)); setToast('Change approved'); }catch(e:any){ setError(e.message) } }}>Approve</button>
                               <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{ try{ await rejectChange(projectId, ch.id); setChanges(await listChanges(projectId)); setToast('Change rejected'); }catch(e:any){ setError(e.message) } }}>Reject</button>
@@ -194,30 +180,7 @@ export default function DatasetDetailsPage(){
         compact
       />
 
-      {/* Reviewer selection dialog */}
-      {reviewerDialog && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-md p-4 w-[420px] shadow">
-            <div className="text-sm font-medium mb-2">Select reviewer(s)</div>
-            <select multiple className="w-full border border-gray-300 rounded px-3 py-2 h-28" value={selectedReviewerIds.map(String)} onChange={e=> setSelectedReviewerIds(Array.from(e.target.selectedOptions).map(o=> Number(o.value)).filter(Boolean))}>
-              {approvers.map(a=> <option key={a.id} value={a.id}>{a.email}</option>)}
-            </select>
-            <div className="flex gap-2 mt-3 justify-end">
-              <button className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={()=> setReviewerDialog(false)}>Cancel</button>
-              <button disabled={selectedReviewerIds.length===0 || !pendingUploadId} className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600 disabled:opacity-60" onClick={async()=>{
-                if(selectedReviewerIds.length===0 || !pendingUploadId) return
-                setReviewerDialog(false)
-                setError('')
-                try{
-                  const res = await openAppendChangeTop(dsId, pendingUploadId, selectedReviewerIds)
-                  if(res?.ok){ setToast('Change Request opened.'); setAppendFile(null); setSelectedReviewer(undefined); setSelectedReviewerIds([]); setPendingUploadId(undefined); setChanges(await listChanges(projectId)) }
-                  else { setError('Failed to open change.') }
-                }catch(e:any){ setError(e.message) }
-              }}>Confirm</button>
-            </div>
-          </div>
-        </div>
-      )}
+  {/* Append reviewer selection moved to append flow page */}
     </div>
   )
 }
