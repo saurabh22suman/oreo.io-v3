@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { createProject, listProjects } from '../api'
+import Alert from '../components/Alert'
 
 type Project = { id:number; name:string }
 
@@ -16,7 +17,7 @@ export default function ProjectsPage(){
         <input className="border border-gray-300 rounded-md px-3 py-2 flex-1" placeholder="New project name" value={name} onChange={e=>setName(e.target.value)} />
         <button className="rounded-md bg-primary text-white px-3 py-2 text-sm hover:bg-indigo-600" onClick={async()=>{ try{ const p = await createProject(name); setItems([p, ...items]); setName('') }catch(e:any){ setError(e.message) } }}>Create</button>
       </div>
-      {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
+  {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
       <ul className="space-y-2">
         {items.map(p => (
           <li key={p.id} className="border border-gray-200 bg-white rounded-md px-3 py-2 hover:bg-gray-50">

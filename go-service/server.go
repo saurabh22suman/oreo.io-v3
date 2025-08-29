@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"strings"
@@ -103,11 +104,16 @@ func SetupRouter() *gin.Engine {
 				ds.DELETE("/:datasetId", controllers.DatasetsDelete)
 
 				// File uploads for append or schema inference
-				ds.POST("/:datasetId/upload", controllers.DatasetUpload)
-				ds.POST("/:datasetId/append", controllers.AppendUpload)
+				ds.POST(":datasetId/upload", controllers.DatasetUpload)
+				ds.POST(":datasetId/append", controllers.AppendUpload)
+				// New: validate first, then open change with reviewer
+				ds.POST(":datasetId/append/validate", controllers.AppendValidate)
+				ds.POST(":datasetId/append/open", controllers.AppendOpen)
 				// Live preview of file being appended (without storing), and JSON-based append for edited rows
 				ds.POST("/:datasetId/append/preview", controllers.AppendPreview)
 				ds.POST("/:datasetId/append/json", controllers.AppendJSON)
+				// New: validate edited JSON first, returns upload_id
+				ds.POST("/:datasetId/append/json/validate", controllers.AppendJSONValidate)
 				// Preview sample from last upload
 				ds.GET("/:datasetId/sample", controllers.DatasetSample)
 				// Change Requests (approvals workflow)
@@ -116,6 +122,7 @@ func SetupRouter() *gin.Engine {
 					chg.GET("", controllers.ChangesList)
 					chg.POST("/:changeId/approve", controllers.ChangeApprove)
 					chg.POST("/:changeId/reject", controllers.ChangeReject)
+					chg.POST("/:changeId/withdraw", controllers.ChangeWithdraw)
 					chg.GET("/:changeId", controllers.ChangeGet)
 					chg.GET("/:changeId/preview", controllers.ChangePreview)
 					chg.GET("/:changeId/comments", controllers.ChangeCommentsList)
@@ -134,10 +141,14 @@ func SetupRouter() *gin.Engine {
 			dsTop.POST(":id/schema", controllers.DatasetSchemaSet)
 			dsTop.POST(":id/rules", controllers.DatasetRulesSet)
 			dsTop.POST(":id/data/append", controllers.DatasetAppendTop)
+			// New top-level mappings for validate/open
+			dsTop.POST(":id/data/append/validate", controllers.DatasetAppendValidateTop)
+			dsTop.POST(":id/data/append/open", controllers.DatasetAppendOpenTop)
 			dsTop.GET(":id/data", controllers.DatasetDataGet)
 			dsTop.GET(":id/stats", controllers.DatasetStats)
 			dsTop.POST(":id/query", controllers.DatasetQuery)
-			// Top-level JSON append and preview can be added later if needed
+			// Validate edited JSON (validate-first) and return upload_id
+			dsTop.POST(":id/data/append/json/validate", controllers.DatasetAppendJSONValidateTop)
 		}
 
 		// Reverse proxy to Python service for data validation
@@ -187,6 +198,23 @@ func SetupRouter() *gin.Engine {
 			}
 			forwardJSON(c, base+"/export")
 		})
+
+		// Proxy: /data/infer-schema -> python /infer-schema (multipart expected)
+		api.POST("/data/infer-schema", func(c *gin.Context) {
+			base := os.Getenv("PYTHON_SERVICE_URL")
+			if strings.TrimSpace(base) == "" {
+				base = "http://python-service:8000"
+			}
+			proxyMultipart(c, base+"/infer-schema")
+		})
+		// Proxy: /data/rules/validate -> python /rules/validate
+		api.POST("/data/rules/validate", func(c *gin.Context) {
+			base := os.Getenv("PYTHON_SERVICE_URL")
+			if strings.TrimSpace(base) == "" {
+				base = "http://python-service:8000"
+			}
+			forwardJSON(c, base+"/rules/validate")
+		})
 	}
 
 	return r
@@ -205,6 +233,59 @@ func forwardJSON(c *gin.Context, target string) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "python service unreachable"})
+		return
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+// proxyMultipart forwards a multipart/form-data request body to target and streams the JSON response back
+func proxyMultipart(c *gin.Context, target string) {
+	// gin already parsed multipart in memory/disk as needed; we need to rebuild the body for forwarding
+	// Simpler: read the raw request body as-is and forward with same content type
+	// However, Gin may have consumed it; use c.Request.Body directly (it still contains the form stream for single pass)
+	// To be safe, we reparse the uploaded file(s) and rebuild the multipart body.
+	mr, err := c.Request.MultipartReader()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid multipart"})
+		return
+	}
+	// Rebuild multipart
+	pr, pw := io.Pipe()
+	mw := multipart.NewWriter(pw)
+	go func() {
+		defer pw.Close()
+		for {
+			part, perr := mr.NextPart()
+			if perr == io.EOF {
+				break
+			}
+			if perr != nil {
+				_ = mw.Close()
+				return
+			}
+			if part.FileName() != "" {
+				fw, _ := mw.CreateFormFile(part.FormName(), part.FileName())
+				io.Copy(fw, part)
+			} else {
+				fw, _ := mw.CreateFormField(part.FormName())
+				io.Copy(fw, part)
+			}
+			part.Close()
+		}
+		_ = mw.Close()
+	}()
+	req, err := http.NewRequest(http.MethodPost, target, pr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "request build failed"})
+		return
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getDatasetDataTop, getDatasetStatsTop, getProject, queryDatasetTop } from '../api'
+import Alert from '../components/Alert'
+import AgGridDialog from '../components/AgGridDialog'
 
 export default function DatasetViewerPage(){
   const { id, datasetId } = useParams()
@@ -14,6 +16,7 @@ export default function DatasetViewerPage(){
   const [limit, setLimit] = useState(50)
   const [filter, setFilter] = useState('')
   const [error, setError] = useState('')
+  const [open, setOpen] = useState(false)
 
   useEffect(()=>{ (async()=>{
     try{
@@ -30,9 +33,9 @@ export default function DatasetViewerPage(){
         let where: any = {}
         try{ where = JSON.parse(filter) }catch{ where = {} }
         const r = await queryDatasetTop(dsId, where, limit, offset)
-        setRows(r.data||[]); setColumns(r.columns||[])
+  setRows(r.data||[]); setColumns(r.columns||[]); setOpen(true)
       } else {
-        const s = await getDatasetDataTop(dsId, limit, offset); setRows(s.data||[]); setColumns(s.columns||[])
+  const s = await getDatasetDataTop(dsId, limit, offset); setRows(s.data||[]); setColumns(s.columns||[]); setOpen(true)
       }
     }catch(e:any){ setError(e.message) }
   }
@@ -45,7 +48,7 @@ export default function DatasetViewerPage(){
           <Link to={`/projects/${projectId}/datasets/${dsId}/approvals`} className="text-primary hover:underline">Back: Approvals</Link>
         </div>
       </div>
-      {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
+  {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
       <div className="grid gap-3 md:grid-cols-3">
         <div className="md:col-span-2 border border-gray-200 bg-white rounded-md p-3">
           <div className="flex items-center justify-between mb-2">
@@ -58,20 +61,7 @@ export default function DatasetViewerPage(){
               <button className="rounded-md border border-gray-300 px-2 py-1 hover:bg-gray-50" onClick={()=> loadData()}>Load data</button>
             </div>
           </div>
-          <div className="overflow-auto">
-            <table className="min-w-full text-xs">
-              <thead>
-                <tr className="bg-gray-50">{columns.map(c=> <th key={c} className="text-left px-3 py-2 border-b border-gray-200">{c}</th>)}</tr>
-              </thead>
-              <tbody>
-                {rows.map((r,i)=> (
-                  <tr key={i} className={i%2? 'bg-white':'bg-gray-50'}>
-                    {columns.map(c=> <td key={c} className="px-3 py-2 border-b border-gray-100">{String(r[c] ?? '')}</td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <div className="text-xs text-gray-600">Use Load data to open a popup preview.</div>
         </div>
         <div className="border border-gray-200 bg-white rounded-md p-3">
           <div className="text-sm font-medium mb-2">Filter (JSON)</div>
@@ -82,6 +72,16 @@ export default function DatasetViewerPage(){
           </div>
         </div>
       </div>
+      <AgGridDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Dataset ${dsId} preview (${rows.length} rows)`}
+        rows={rows}
+        columns={columns}
+        pageSize={50}
+  allowEdit={false}
+  compact
+      />
     </div>
   )
 }

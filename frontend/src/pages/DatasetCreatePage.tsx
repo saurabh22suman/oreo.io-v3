@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { createDatasetTop, getProject } from '../api'
+import Alert from '../components/Alert'
 
 function slugifyDbName(name: string){
   return (name || 'project').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 63) || 'project'
@@ -40,7 +41,7 @@ export default function DatasetCreatePage(){
         <h2 className="text-xl font-semibold">New dataset in {project?.name || `Project #${projectId}`}</h2>
         <Link to={`/projects/${projectId}`} className="text-sm text-primary hover:underline">Back</Link>
       </div>
-      {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
+  {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
       <div className="border border-gray-200 bg-white rounded-md p-4 grid gap-3">
         <div>
           <label className="text-sm text-gray-700">Dataset name</label>

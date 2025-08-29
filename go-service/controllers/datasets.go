@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"database/sql"
 
 	"github.com/gin-gonic/gin"
 	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
@@ -43,10 +43,15 @@ type DatasetIn struct {
 }
 
 // --- DB storage helpers ---
-func dsMainTable(id uint) string { return fmt.Sprintf("ds_%d", id) }
+func dsMainTable(id uint) string            { return fmt.Sprintf("ds_%d", id) }
 func dsStagingTable(dsID, crID uint) string { return fmt.Sprintf("ds_%d_stg_%d", dsID, crID) }
 
-func dialect(gdb *gorm.DB) string { if gdb == nil { return "" }; return gdb.Dialector.Name() }
+func dialect(gdb *gorm.DB) string {
+	if gdb == nil {
+		return ""
+	}
+	return gdb.Dialector.Name()
+}
 
 // ensureMainTable creates the main table to store JSON rows
 func ensureMainTable(gdb *gorm.DB, dsID uint) error {
@@ -82,7 +87,9 @@ func tableExists(gdb *gorm.DB, name string) bool {
 
 // upsertDatasetMeta updates or creates sys.metadata for a dataset based on current main table
 func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
-	if gdb == nil || ds == nil { return }
+	if gdb == nil || ds == nil {
+		return
+	}
 	// Count rows
 	var rows int64
 	if tableExists(gdb, dsMainTable(ds.ID)) {
@@ -93,8 +100,19 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 	if rows > 0 {
 		if r1, err := gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT 1", dsMainTable(ds.ID))).Rows(); err == nil {
 			defer r1.Close()
-			if r1.Next(){ var raw any; _ = r1.Scan(&raw); var obj map[string]any
-				switch v := raw.(type) { case []byte: _ = json.Unmarshal(v, &obj); case string: _ = json.Unmarshal([]byte(v), &obj); default: b,_ := json.Marshal(v); _ = json.Unmarshal(b, &obj) }
+			if r1.Next() {
+				var raw any
+				_ = r1.Scan(&raw)
+				var obj map[string]any
+				switch v := raw.(type) {
+				case []byte:
+					_ = json.Unmarshal(v, &obj)
+				case string:
+					_ = json.Unmarshal([]byte(v), &obj)
+				default:
+					b, _ := json.Marshal(v)
+					_ = json.Unmarshal(b, &obj)
+				}
 				cols = len(obj)
 			}
 		}
@@ -104,53 +122,88 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 	var proj models.Project
 	if err := gdb.First(&proj, ds.ProjectID).Error; err == nil {
 		var user models.User
-		if err2 := gdb.First(&user, proj.OwnerID).Error; err2 == nil { ownerName = user.Email }
+		if err2 := gdb.First(&user, proj.OwnerID).Error; err2 == nil {
+			ownerName = user.Email
+		}
 	}
 	now := time.Now()
+	// Compose table location string as <project_name>.upload.<dataset_name>
+	// Fallback to ds_<id> if names are unavailable.
+	projName := fmt.Sprintf("p_%d", ds.ProjectID)
+	if err := gdb.First(&proj, ds.ProjectID).Error; err == nil && strings.TrimSpace(proj.Name) != "" {
+		projName = proj.Name
+	}
+	tableLoc := fmt.Sprintf("%s.upload.%s", projName, ds.Name)
 	var meta models.DatasetMeta
 	if err := gdb.Where("dataset_id = ?", ds.ID).First(&meta).Error; err != nil {
-		meta = models.DatasetMeta{ ProjectID: ds.ProjectID, DatasetID: ds.ID, OwnerName: ownerName, RowCount: rows, ColumnCount: cols, LastUpdateAt: now }
+		meta = models.DatasetMeta{ProjectID: ds.ProjectID, DatasetID: ds.ID, OwnerName: ownerName, RowCount: rows, ColumnCount: cols, LastUpdateAt: now, TableLocation: tableLoc}
 		_ = gdb.Create(&meta).Error
 	} else {
 		meta.OwnerName = ownerName
 		meta.RowCount = rows
 		meta.ColumnCount = cols
 		meta.LastUpdateAt = now
+		meta.TableLocation = tableLoc
 		_ = gdb.Save(&meta).Error
 	}
 }
 
 func ingestCSVToTable(gdb *gorm.DB, filePath, table string) error {
-	f, err := os.Open(filePath); if err != nil { return err }
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
 	defer f.Close()
 	r := csv.NewReader(f)
-	headers, err := r.Read(); if err != nil { return err }
+	headers, err := r.Read()
+	if err != nil {
+		return err
+	}
 	for {
 		rec, err := r.Read()
-		if err == io.EOF { break }
-		if err != nil { return err }
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
 		row := map[string]any{}
-		for i:=0; i<len(headers) && i<len(rec); i++ { row[headers[i]] = rec[i] }
+		for i := 0; i < len(headers) && i < len(rec); i++ {
+			row[headers[i]] = rec[i]
+		}
 		jb, _ := json.Marshal(row)
 		if dialect(gdb) == "postgres" {
-			if ex := gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) VALUES (?::jsonb)", table), string(jb)); ex.Error != nil { return ex.Error }
+			if ex := gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) VALUES (?::jsonb)", table), string(jb)); ex.Error != nil {
+				return ex.Error
+			}
 		} else {
-			if ex := gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) VALUES (?)", table), string(jb)); ex.Error != nil { return ex.Error }
+			if ex := gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) VALUES (?)", table), string(jb)); ex.Error != nil {
+				return ex.Error
+			}
 		}
 	}
 	return nil
 }
 
 func ingestJSONToTable(gdb *gorm.DB, filePath, table string) error {
-	b, err := os.ReadFile(filePath); if err != nil { return err }
+	b, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
 	var arr []map[string]any
-	if err := json.Unmarshal(b, &arr); err != nil { return err }
+	if err := json.Unmarshal(b, &arr); err != nil {
+		return err
+	}
 	for _, obj := range arr {
 		jb, _ := json.Marshal(obj)
 		if dialect(gdb) == "postgres" {
-			if ex := gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) VALUES (?::jsonb)", table), string(jb)); ex.Error != nil { return ex.Error }
+			if ex := gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) VALUES (?::jsonb)", table), string(jb)); ex.Error != nil {
+				return ex.Error
+			}
 		} else {
-			if ex := gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) VALUES (?)", table), string(jb)); ex.Error != nil { return ex.Error }
+			if ex := gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) VALUES (?)", table), string(jb)); ex.Error != nil {
+				return ex.Error
+			}
 		}
 	}
 	return nil
@@ -159,7 +212,9 @@ func ingestJSONToTable(gdb *gorm.DB, filePath, table string) error {
 func ingestBytesToTable(gdb *gorm.DB, content []byte, filename, table string) error {
 	ext := strings.ToLower(filepath.Ext(filename))
 	tmp := filepath.Join(os.TempDir(), fmt.Sprintf("ing_%d%s", time.Now().UnixNano(), ext))
-	if err := os.WriteFile(tmp, content, 0o644); err != nil { return err }
+	if err := os.WriteFile(tmp, content, 0o644); err != nil {
+		return err
+	}
 	defer os.Remove(tmp)
 	switch ext {
 	case ".json":
@@ -235,86 +290,181 @@ func DatasetsCreate(c *gin.Context) {
 func DatasetsCreateTop(c *gin.Context) {
 	gdb := dbpkg.Get()
 	if gdb == nil {
-		if _, err := dbpkg.Init(); err != nil { c.JSON(500, gin.H{"error":"db"}); return }
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
 		gdb = dbpkg.Get()
 	}
-	var body struct{
-		ProjectID uint      `json:"project_id" binding:"required"`
-		Name      string    `json:"name" binding:"required"`
-		Source    string    `json:"source"`
-		Target    struct{ Type string `json:"type"`; DSN string `json:"dsn"` } `json:"target"`
+	var body struct {
+		ProjectID uint   `json:"project_id" binding:"required"`
+		Name      string `json:"name" binding:"required"`
+		Source    string `json:"source"`
+		Target    struct {
+			Type string `json:"type"`
+			DSN  string `json:"dsn"`
+		} `json:"target"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil { c.JSON(400, gin.H{"error":"invalid_payload"}); return }
-	if !HasProjectRole(c, body.ProjectID, "owner", "contributor") { c.JSON(403, gin.H{"error":"forbidden"}); return }
-	ds := models.Dataset{ ProjectID: body.ProjectID, Name: body.Name, Source: body.Source, TargetType: body.Target.Type, TargetDSN: body.Target.DSN }
-	if err := gdb.Create(&ds).Error; err != nil { c.JSON(409, gin.H{"error":"name_conflict"}); return }
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": "invalid_payload"})
+		return
+	}
+	if !HasProjectRole(c, body.ProjectID, "owner", "contributor") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	ds := models.Dataset{ProjectID: body.ProjectID, Name: body.Name, Source: body.Source, TargetType: body.Target.Type, TargetDSN: body.Target.DSN}
+	if err := gdb.Create(&ds).Error; err != nil {
+		c.JSON(409, gin.H{"error": "name_conflict"})
+		return
+	}
 	c.JSON(201, ds)
 }
 
 // Helper to load dataset and check project-scoped permission
 func datasetWithAccess(c *gin.Context, id uint, roles ...string) (*models.Dataset, bool) {
-	gdb := dbpkg.Get(); if gdb == nil { if _, err := dbpkg.Init(); err != nil { return nil, false }; gdb = dbpkg.Get() }
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			return nil, false
+		}
+		gdb = dbpkg.Get()
+	}
 	var ds models.Dataset
-	if err := gdb.First(&ds, id).Error; err != nil { return nil, false }
-	if !HasProjectRole(c, ds.ProjectID, roles...) { return nil, false }
+	if err := gdb.First(&ds, id).Error; err != nil {
+		return nil, false
+	}
+	if !HasProjectRole(c, ds.ProjectID, roles...) {
+		return nil, false
+	}
 	return &ds, true
 }
 
-func DatasetSchemaGet(c *gin.Context){
+func DatasetSchemaGet(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	ds, ok := datasetWithAccess(c, uint(id), "owner","contributor","viewer"); if !ok { c.JSON(403, gin.H{"error":"forbidden"}); return }
+	ds, ok := datasetWithAccess(c, uint(id), "owner", "contributor", "viewer")
+	if !ok {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
 	c.JSON(200, gin.H{"schema": ds.Schema})
 }
-func DatasetSchemaSet(c *gin.Context){
-	gdb := dbpkg.Get(); if gdb == nil { if _, err := dbpkg.Init(); err != nil { c.JSON(500, gin.H{"error":"db"}); return }; gdb = dbpkg.Get() }
+func DatasetSchemaSet(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
 	id, _ := strconv.Atoi(c.Param("id"))
-	ds, ok := datasetWithAccess(c, uint(id), "owner","contributor"); if !ok { c.JSON(403, gin.H{"error":"forbidden"}); return }
-	var body struct{ Schema string `json:"schema"` }
-	if err := c.ShouldBindJSON(&body); err != nil { c.JSON(400, gin.H{"error":"invalid_payload"}); return }
+	ds, ok := datasetWithAccess(c, uint(id), "owner", "contributor")
+	if !ok {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	var body struct {
+		Schema string `json:"schema"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": "invalid_payload"})
+		return
+	}
 	ds.Schema = body.Schema
-	if err := gdb.Save(ds).Error; err != nil { c.JSON(500, gin.H{"error":"db"}); return }
+	if err := gdb.Save(ds).Error; err != nil {
+		c.JSON(500, gin.H{"error": "db"})
+		return
+	}
 	c.JSON(200, gin.H{"ok": true})
 }
-func DatasetRulesSet(c *gin.Context){
-	gdb := dbpkg.Get(); if gdb == nil { if _, err := dbpkg.Init(); err != nil { c.JSON(500, gin.H{"error":"db"}); return }; gdb = dbpkg.Get() }
+func DatasetRulesSet(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
 	id, _ := strconv.Atoi(c.Param("id"))
-	ds, ok := datasetWithAccess(c, uint(id), "owner","contributor"); if !ok { c.JSON(403, gin.H{"error":"forbidden"}); return }
-	var body struct{ Rules string `json:"rules"` }
-	if err := c.ShouldBindJSON(&body); err != nil { c.JSON(400, gin.H{"error":"invalid_payload"}); return }
+	ds, ok := datasetWithAccess(c, uint(id), "owner", "contributor")
+	if !ok {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	var body struct {
+		Rules string `json:"rules"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": "invalid_payload"})
+		return
+	}
 	ds.Rules = body.Rules
-	if err := gdb.Save(ds).Error; err != nil { c.JSON(500, gin.H{"error":"db"}); return }
+	if err := gdb.Save(ds).Error; err != nil {
+		c.JSON(500, gin.H{"error": "db"})
+		return
+	}
 	c.JSON(200, gin.H{"ok": true})
 }
-func DatasetAppendTop(c *gin.Context){
+func DatasetAppendTop(c *gin.Context) {
 	// Reuse AppendUpload by mapping to project route context
-	c.Params = append(c.Params, gin.Param{Key:"id", Value: ""}, gin.Param{Key:"datasetId", Value: c.Param("id")})
+	c.Params = append(c.Params, gin.Param{Key: "id", Value: ""}, gin.Param{Key: "datasetId", Value: c.Param("id")})
 	// To set project id, we need to look up dataset
 	id, _ := strconv.Atoi(c.Param("id"))
-	ds, ok := datasetWithAccess(c, uint(id), "owner","contributor"); if !ok { c.JSON(403, gin.H{"error":"forbidden"}); return }
+	ds, ok := datasetWithAccess(c, uint(id), "owner", "contributor")
+	if !ok {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
 	// inject project id
 	c.Params = replaceParam(c.Params, "id", strconv.Itoa(int(ds.ProjectID)))
 	AppendUpload(c)
 }
 func replaceParam(params gin.Params, key, val string) gin.Params {
-	for i:=range params { if params[i].Key==key { params[i].Value=val; return params } }
-	return append(params, gin.Param{Key:key, Value:val})
+	for i := range params {
+		if params[i].Key == key {
+			params[i].Value = val
+			return params
+		}
+	}
+	return append(params, gin.Param{Key: key, Value: val})
 }
-func DatasetDataGet(c *gin.Context){
+func DatasetDataGet(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	ds, ok := datasetWithAccess(c, uint(id), "owner","contributor","viewer"); if !ok { c.JSON(403, gin.H{"error":"forbidden"}); return }
-	gdb := dbpkg.Get(); if gdb == nil { if _, err := dbpkg.Init(); err == nil { gdb = dbpkg.Get() } }
+	ds, ok := datasetWithAccess(c, uint(id), "owner", "contributor", "viewer")
+	if !ok {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err == nil {
+			gdb = dbpkg.Get()
+		}
+	}
 	if gdb != nil && tableExists(gdb, dsMainTable(ds.ID)) {
-		nStr := c.Query("limit"); if nStr=="" { nStr = "50" }
-		offStr := c.Query("offset"); if offStr=="" { offStr = "0" }
-		n, _ := strconv.Atoi(nStr); off, _ := strconv.Atoi(offStr)
+		nStr := c.Query("limit")
+		if nStr == "" {
+			nStr = "50"
+		}
+		offStr := c.Query("offset")
+		if offStr == "" {
+			offStr = "0"
+		}
+		n, _ := strconv.Atoi(nStr)
+		off, _ := strconv.Atoi(offStr)
 		rows, err := gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT ? OFFSET ?", dsMainTable(ds.ID)), n, off).Rows()
 		if err == nil {
 			defer rows.Close()
-			out := struct{ Data []map[string]any `json:"data"`; Columns []string `json:"columns"` }{Data: []map[string]any{}, Columns: []string{}}
+			out := struct {
+				Data    []map[string]any `json:"data"`
+				Columns []string         `json:"columns"`
+			}{Data: []map[string]any{}, Columns: []string{}}
 			colsSet := map[string]struct{}{}
-			for rows.Next(){
+			for rows.Next() {
 				var raw any
-				if err := rows.Scan(&raw); err==nil {
+				if err := rows.Scan(&raw); err == nil {
 					var obj map[string]any
 					switch v := raw.(type) {
 					case []byte:
@@ -325,40 +475,85 @@ func DatasetDataGet(c *gin.Context){
 						b, _ := json.Marshal(v)
 						_ = json.Unmarshal(b, &obj)
 					}
-					if obj != nil { out.Data = append(out.Data, obj); for k:= range obj { colsSet[k]=struct{}{} } }
+					if obj != nil {
+						out.Data = append(out.Data, obj)
+						for k := range obj {
+							colsSet[k] = struct{}{}
+						}
+					}
 				}
 			}
-			for k := range colsSet { out.Columns = append(out.Columns, k) }
-			c.JSON(200, out); return
+			for k := range colsSet {
+				out.Columns = append(out.Columns, k)
+			}
+			c.JSON(200, out)
+			return
 		}
 	}
-	if ds.LastUploadPath == "" { c.JSON(200, gin.H{"data": []any{}, "rows": 0, "total_rows": 0, "columns": []string{}}); return }
-	nStr := c.Query("limit"); if nStr=="" { nStr = "50" }
-	offStr := c.Query("offset"); if offStr=="" { offStr = "0" }
-	n, _ := strconv.Atoi(nStr); off, _ := strconv.Atoi(offStr)
-	pyBase := os.Getenv("PYTHON_SERVICE_URL"); if pyBase=="" { pyBase = "http://python-service:8000" }
-	var buf bytes.Buffer; mw:=multipart.NewWriter(&buf)
+	if ds.LastUploadPath == "" {
+		c.JSON(200, gin.H{"data": []any{}, "rows": 0, "total_rows": 0, "columns": []string{}})
+		return
+	}
+	nStr := c.Query("limit")
+	if nStr == "" {
+		nStr = "50"
+	}
+	offStr := c.Query("offset")
+	if offStr == "" {
+		offStr = "0"
+	}
+	n, _ := strconv.Atoi(nStr)
+	off, _ := strconv.Atoi(offStr)
+	pyBase := os.Getenv("PYTHON_SERVICE_URL")
+	if pyBase == "" {
+		pyBase = "http://python-service:8000"
+	}
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
 	fw, _ := mw.CreateFormFile("file", filepath.Base(ds.LastUploadPath))
-	f, err := os.Open(ds.LastUploadPath); if err != nil { c.JSON(404, gin.H{"error":"file_missing"}); return }
-	io.Copy(fw, f); f.Close(); mw.Close()
+	f, err := os.Open(ds.LastUploadPath)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "file_missing"})
+		return
+	}
+	io.Copy(fw, f)
+	f.Close()
+	mw.Close()
 	req, _ := http.NewRequest(http.MethodPost, pyBase+"/sample?n="+strconv.Itoa(n)+"&offset="+strconv.Itoa(off), &buf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
-	resp, err := http.DefaultClient.Do(req); if err != nil || resp == nil { c.JSON(502, gin.H{"error":"python_unreachable"}); return }
-	defer resp.Body.Close(); b,_ := io.ReadAll(resp.Body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp == nil {
+		c.JSON(502, gin.H{"error": "python_unreachable"})
+		return
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
 	c.Data(resp.StatusCode, "application/json", b)
 }
-func DatasetStats(c *gin.Context){
-	gdb := dbpkg.Get(); if gdb == nil { if _, err := dbpkg.Init(); err != nil { c.JSON(500, gin.H{"error":"db"}); return }; gdb = dbpkg.Get() }
+func DatasetStats(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
 	id, _ := strconv.Atoi(c.Param("id"))
-	ds, ok := datasetWithAccess(c, uint(id), "owner","contributor","viewer"); if !ok { c.JSON(403, gin.H{"error":"forbidden"}); return }
+	ds, ok := datasetWithAccess(c, uint(id), "owner", "contributor", "viewer")
+	if !ok {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
 	var meta models.DatasetMeta
 	_ = gdb.Where("dataset_id = ?", ds.ID).First(&meta).Error
 	stats := gin.H{
 		"last_upload_at": ds.LastUploadAt,
-		"owner_name": meta.OwnerName,
-		"row_count": meta.RowCount,
-		"column_count": meta.ColumnCount,
+		"owner_name":     meta.OwnerName,
+		"row_count":      meta.RowCount,
+		"column_count":   meta.ColumnCount,
 		"last_update_at": meta.LastUpdateAt,
+		"table_location": meta.TableLocation,
 	}
 	if stats["row_count"] == nil || stats["row_count"] == int64(0) {
 		if tableExists(gdb, dsMainTable(ds.ID)) {
@@ -375,15 +570,37 @@ func DatasetStats(c *gin.Context){
 
 // DatasetQuery executes a simple query over the dataset table.
 // Body: { where?: object (JSON contains filter), limit?: number, offset?: number }
-func DatasetQuery(c *gin.Context){
-	gdb := dbpkg.Get(); if gdb == nil { if _, err := dbpkg.Init(); err != nil { c.JSON(500, gin.H{"error":"db"}); return }; gdb = dbpkg.Get() }
+func DatasetQuery(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
 	id, _ := strconv.Atoi(c.Param("id"))
-	ds, ok := datasetWithAccess(c, uint(id), "owner","contributor","viewer"); if !ok { c.JSON(403, gin.H{"error":"forbidden"}); return }
-	if !tableExists(gdb, dsMainTable(ds.ID)) { c.JSON(404, gin.H{"error":"no_data"}); return }
-	var body struct{ Where map[string]any `json:"where"`; Limit int `json:"limit"`; Offset int `json:"offset"` }
+	ds, ok := datasetWithAccess(c, uint(id), "owner", "contributor", "viewer")
+	if !ok {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	if !tableExists(gdb, dsMainTable(ds.ID)) {
+		c.JSON(404, gin.H{"error": "no_data"})
+		return
+	}
+	var body struct {
+		Where  map[string]any `json:"where"`
+		Limit  int            `json:"limit"`
+		Offset int            `json:"offset"`
+	}
 	_ = c.ShouldBindJSON(&body)
-	if body.Limit <= 0 || body.Limit > 1000 { body.Limit = 100 }
-	if body.Offset < 0 { body.Offset = 0 }
+	if body.Limit <= 0 || body.Limit > 1000 {
+		body.Limit = 100
+	}
+	if body.Offset < 0 {
+		body.Offset = 0
+	}
 	// Build simple JSON contains filter when provided
 	var rows *sql.Rows
 	var err error
@@ -398,13 +615,19 @@ func DatasetQuery(c *gin.Context){
 	} else {
 		rows, err = gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT ? OFFSET ?", dsMainTable(ds.ID)), body.Limit, body.Offset).Rows()
 	}
-	if err != nil { c.JSON(500, gin.H{"error":"db"}); return }
+	if err != nil {
+		c.JSON(500, gin.H{"error": "db"})
+		return
+	}
 	defer rows.Close()
-	out := struct{ Data []map[string]any `json:"data"`; Columns []string `json:"columns"` }{Data: []map[string]any{}, Columns: []string{}}
+	out := struct {
+		Data    []map[string]any `json:"data"`
+		Columns []string         `json:"columns"`
+	}{Data: []map[string]any{}, Columns: []string{}}
 	colsSet := map[string]struct{}{}
-	for rows.Next(){
+	for rows.Next() {
 		var raw any
-		if err := rows.Scan(&raw); err==nil {
+		if err := rows.Scan(&raw); err == nil {
 			var obj map[string]any
 			switch v := raw.(type) {
 			case []byte:
@@ -415,10 +638,17 @@ func DatasetQuery(c *gin.Context){
 				b, _ := json.Marshal(v)
 				_ = json.Unmarshal(b, &obj)
 			}
-			if obj != nil { out.Data = append(out.Data, obj); for k:= range obj { colsSet[k]=struct{}{} } }
+			if obj != nil {
+				out.Data = append(out.Data, obj)
+				for k := range obj {
+					colsSet[k] = struct{}{}
+				}
+			}
 		}
 	}
-	for k := range colsSet { out.Columns = append(out.Columns, k) }
+	for k := range colsSet {
+		out.Columns = append(out.Columns, k)
+	}
 	c.JSON(200, out)
 }
 
@@ -553,7 +783,10 @@ func DatasetUpload(c *gin.Context) {
 	defer file.Close()
 
 	// Enforce size limit using header size if provided
-	if header != nil && header.Size > maxUploadBytes { respondTooLarge(c); return }
+	if header != nil && header.Size > maxUploadBytes {
+		respondTooLarge(c)
+		return
+	}
 
 	// Save to temp dir (could be replaced by S3, disk, etc.)
 	base := os.TempDir()
@@ -574,11 +807,24 @@ func DatasetUpload(c *gin.Context) {
 		n, rerr := file.Read(chunkBuf)
 		if n > 0 {
 			limited += int64(n)
-			if limited > maxUploadBytes { _ = dst.Close(); _ = os.Remove(dstPath); respondTooLarge(c); return }
-			if _, werr := dst.Write(chunkBuf[:n]); werr != nil { c.JSON(500, gin.H{"error":"write"}); return }
+			if limited > maxUploadBytes {
+				_ = dst.Close()
+				_ = os.Remove(dstPath)
+				respondTooLarge(c)
+				return
+			}
+			if _, werr := dst.Write(chunkBuf[:n]); werr != nil {
+				c.JSON(500, gin.H{"error": "write"})
+				return
+			}
 		}
-		if rerr == io.EOF { break }
-		if rerr != nil { c.JSON(500, gin.H{"error":"write"}); return }
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			c.JSON(500, gin.H{"error": "write"})
+			return
+		}
 	}
 
 	// Record last upload info
@@ -665,15 +911,20 @@ func DatasetSample(c *gin.Context) {
 	if tableExists(gdb, dsMainTable(ds.ID)) {
 		nStr := c.DefaultQuery("n", "50")
 		n, _ := strconv.Atoi(nStr)
-		if n <= 0 { n = 50 }
+		if n <= 0 {
+			n = 50
+		}
 		rows, err := gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT ?", dsMainTable(ds.ID)), n).Rows()
 		if err == nil {
 			defer rows.Close()
-			out := struct{ Data []map[string]any `json:"data"`; Columns []string `json:"columns"` }{Data: []map[string]any{}, Columns: []string{}}
+			out := struct {
+				Data    []map[string]any `json:"data"`
+				Columns []string         `json:"columns"`
+			}{Data: []map[string]any{}, Columns: []string{}}
 			colsSet := map[string]struct{}{}
-			for rows.Next(){
+			for rows.Next() {
 				var raw any
-				if err := rows.Scan(&raw); err==nil {
+				if err := rows.Scan(&raw); err == nil {
 					var obj map[string]any
 					switch v := raw.(type) {
 					case []byte:
@@ -684,11 +935,19 @@ func DatasetSample(c *gin.Context) {
 						b, _ := json.Marshal(v)
 						_ = json.Unmarshal(b, &obj)
 					}
-					if obj != nil { out.Data = append(out.Data, obj); for k:= range obj { colsSet[k]=struct{}{} } }
+					if obj != nil {
+						out.Data = append(out.Data, obj)
+						for k := range obj {
+							colsSet[k] = struct{}{}
+						}
+					}
 				}
 			}
-			for k := range colsSet { out.Columns = append(out.Columns, k) }
-			c.JSON(200, out); return
+			for k := range colsSet {
+				out.Columns = append(out.Columns, k)
+			}
+			c.JSON(200, out)
+			return
 		}
 	}
 	if ds.LastUploadPath == "" {
@@ -758,15 +1017,48 @@ func AppendUpload(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "missing_file"})
 		return
 	}
+	// Reviewer selection (required): form field reviewer_id
+	var reviewerID uint
+	if rv := c.PostForm("reviewer_id"); strings.TrimSpace(rv) != "" {
+		if n, convErr := strconv.Atoi(rv); convErr == nil && n > 0 {
+			reviewerID = uint(n)
+		}
+	}
+	if reviewerID == 0 {
+		c.JSON(400, gin.H{"error": "reviewer_required"})
+		return
+	}
+	// Reviewer must be a project member with role 'approver'
+	var pr models.ProjectRole
+	if err := gdb.Where("project_id = ? AND user_id = ?", pid, reviewerID).First(&pr).Error; err != nil {
+		c.JSON(400, gin.H{"error": "reviewer_not_member"})
+		return
+	}
+	if normalizeRole(pr.Role) != "approver" {
+		c.JSON(400, gin.H{"error": "reviewer_not_approver"})
+		return
+	}
 	defer file.Close()
-	if header != nil && header.Size > maxUploadBytes { respondTooLarge(c); return }
+	if header != nil && header.Size > maxUploadBytes {
+		respondTooLarge(c)
+		return
+	}
 	// Read file into memory (small/medium files). For large files, stream to object store in future.
 	var fileBuf bytes.Buffer
-	if _, err := io.CopyN(&fileBuf, file, int64(maxUploadBytes)+1); err != nil && err != io.EOF { c.JSON(500, gin.H{"error":"read_file"}); return }
-	if fileBuf.Len() > maxUploadBytes { respondTooLarge(c); return }
+	if _, err := io.CopyN(&fileBuf, file, int64(maxUploadBytes)+1); err != nil && err != io.EOF {
+		c.JSON(500, gin.H{"error": "read_file"})
+		return
+	}
+	if fileBuf.Len() > maxUploadBytes {
+		respondTooLarge(c)
+		return
+	}
 	// Persist upload into DB as bytea/blob for audit and preview.
-	up := models.DatasetUpload{ ProjectID: uint(pid), DatasetID: ds.ID, Filename: header.Filename, Content: fileBuf.Bytes() }
-	if err := gdb.Create(&up).Error; err != nil { c.JSON(500, gin.H{"error":"db_store_upload"}); return }
+	up := models.DatasetUpload{ProjectID: uint(pid), DatasetID: ds.ID, Filename: header.Filename, Content: fileBuf.Bytes()}
+	if err := gdb.Create(&up).Error; err != nil {
+		c.JSON(500, gin.H{"error": "db_store_upload"})
+		return
+	}
 
 	// Prepare payload for python validate-rules endpoint
 	pyBase := os.Getenv("PYTHON_SERVICE_URL")
@@ -847,7 +1139,7 @@ func AppendUpload(c *gin.Context) {
 	// Store payload as a small JSON with reference to upload id and filename
 	payloadObj := map[string]any{"upload_id": up.ID, "filename": up.Filename}
 	pb, _ := json.Marshal(payloadObj)
-	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data", Payload: string(pb)}
+	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data", Payload: string(pb), ReviewerID: reviewerID}
 	if uid, exists := c.Get("user_id"); exists {
 		if u, ok := uid.(uint); ok {
 			cr.UserID = u
@@ -879,90 +1171,573 @@ func getBool(v any, key string, def bool) bool {
 // Query params: limit (n), offset.
 func AppendPreview(c *gin.Context) {
 	// RBAC check against dataset's project
-	gdb := dbpkg.Get(); if gdb == nil { if _, err := dbpkg.Init(); err != nil { c.JSON(500, gin.H{"error":"db"}); return }; gdb = dbpkg.Get() }
-	pidStr := c.Param("projectId"); if pidStr == "" { pidStr = c.Param("id") }
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
+	pidStr := c.Param("projectId")
+	if pidStr == "" {
+		pidStr = c.Param("id")
+	}
 	pid, _ := strconv.Atoi(pidStr)
 	dsid, _ := strconv.Atoi(c.Param("datasetId"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") { c.JSON(403, gin.H{"error":"forbidden"}); return }
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
 	var ds models.Dataset
-	if err := gdb.Where("project_id = ?", pid).First(&ds, dsid).Error; err != nil { c.JSON(404, gin.H{"error":"not_found"}); return }
+	if err := gdb.Where("project_id = ?", pid).First(&ds, dsid).Error; err != nil {
+		c.JSON(404, gin.H{"error": "not_found"})
+		return
+	}
 
 	file, header, err := c.Request.FormFile("file")
-	if err != nil { c.JSON(400, gin.H{"error":"missing_file"}); return }
+	if err != nil {
+		c.JSON(400, gin.H{"error": "missing_file"})
+		return
+	}
 	defer file.Close()
-	if header != nil && header.Size > maxUploadBytes { respondTooLarge(c); return }
+	if header != nil && header.Size > maxUploadBytes {
+		respondTooLarge(c)
+		return
+	}
 
 	// Build multipart to python /sample
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	fw, _ := mw.CreateFormFile("file", filepath.Base(header.Filename))
-	if _, err := io.CopyN(fw, file, int64(maxUploadBytes)+1); err != nil && err != io.EOF { c.JSON(500, gin.H{"error":"read_file"}); return }
-	if buf.Len() > int(maxUploadBytes) { respondTooLarge(c); return }
+	if _, err := io.CopyN(fw, file, int64(maxUploadBytes)+1); err != nil && err != io.EOF {
+		c.JSON(500, gin.H{"error": "read_file"})
+		return
+	}
+	if buf.Len() > int(maxUploadBytes) {
+		respondTooLarge(c)
+		return
+	}
 	mw.Close()
 	n := c.DefaultQuery("limit", "500")
 	off := c.DefaultQuery("offset", "0")
-	pyBase := os.Getenv("PYTHON_SERVICE_URL"); if pyBase == "" { pyBase = "http://python-service:8000" }
+	pyBase := os.Getenv("PYTHON_SERVICE_URL")
+	if pyBase == "" {
+		pyBase = "http://python-service:8000"
+	}
 	req, _ := http.NewRequest(http.MethodPost, pyBase+"/sample?n="+n+"&offset="+off, &buf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
-	resp, perr := http.DefaultClient.Do(req); if perr != nil || resp == nil { c.JSON(502, gin.H{"error":"python_unreachable"}); return }
-	defer resp.Body.Close(); b,_ := io.ReadAll(resp.Body)
+	resp, perr := http.DefaultClient.Do(req)
+	if perr != nil || resp == nil {
+		c.JSON(502, gin.H{"error": "python_unreachable"})
+		return
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
 	c.Data(resp.StatusCode, "application/json", b)
+}
+
+// AppendValidate stores the file as an upload and runs schema/rules validation only (no Change Request yet)
+func AppendValidate(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
+	pidStr := c.Param("projectId")
+	if pidStr == "" {
+		pidStr = c.Param("id")
+	}
+	pid, _ := strconv.Atoi(pidStr)
+	dsid, _ := strconv.Atoi(c.Param("datasetId"))
+	if !HasProjectRole(c, uint(pid), "owner", "contributor") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	var ds models.Dataset
+	if err := gdb.Where("project_id = ?", pid).First(&ds, dsid).Error; err != nil {
+		c.JSON(404, gin.H{"error": "not_found"})
+		return
+	}
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(400, gin.H{"error": "missing_file"})
+		return
+	}
+	defer file.Close()
+	if header != nil && header.Size > maxUploadBytes {
+		respondTooLarge(c)
+		return
+	}
+	var buf bytes.Buffer
+	if _, err := io.CopyN(&buf, file, int64(maxUploadBytes)+1); err != nil && err != io.EOF {
+		c.JSON(500, gin.H{"error": "read_file"})
+		return
+	}
+	if buf.Len() > maxUploadBytes {
+		respondTooLarge(c)
+		return
+	}
+	up := models.DatasetUpload{ProjectID: uint(pid), DatasetID: ds.ID, Filename: header.Filename, Content: buf.Bytes()}
+	if err := gdb.Create(&up).Error; err != nil {
+		c.JSON(500, gin.H{"error": "db_store_upload"})
+		return
+	}
+
+	pyBase := os.Getenv("PYTHON_SERVICE_URL")
+	if pyBase == "" {
+		pyBase = "http://python-service:8000"
+	}
+	// Sample rows for validation
+	var smBuf bytes.Buffer
+	smw := multipart.NewWriter(&smBuf)
+	sff, _ := smw.CreateFormFile("file", filepath.Base(header.Filename))
+	io.Copy(sff, bytes.NewReader(up.Content))
+	smw.Close()
+	sreq, _ := http.NewRequest(http.MethodPost, pyBase+"/sample", &smBuf)
+	sreq.Header.Set("Content-Type", smw.FormDataContentType())
+	sresp, sErr := http.DefaultClient.Do(sreq)
+	if sErr != nil || sresp == nil {
+		c.JSON(502, gin.H{"error": "python_unreachable"})
+		return
+	}
+	defer sresp.Body.Close()
+	var sampleResp struct {
+		Data []map[string]any `json:"data"`
+	}
+	sb, _ := io.ReadAll(sresp.Body)
+	_ = json.Unmarshal(sb, &sampleResp)
+
+	// Validate against schema and rules if present
+	var schemaObj any
+	if strings.TrimSpace(ds.Schema) != "" {
+		_ = json.Unmarshal([]byte(ds.Schema), &schemaObj)
+	}
+	var rulesObj any
+	if strings.TrimSpace(ds.Rules) != "" {
+		_ = json.Unmarshal([]byte(ds.Rules), &rulesObj)
+	}
+	var schemaErrors any
+	var rulesErrors any
+	if schemaObj != nil {
+		body, _ := json.Marshal(gin.H{"json_schema": schemaObj, "data": sampleResp.Data})
+		vreq, _ := http.NewRequest(http.MethodPost, pyBase+"/validate", bytes.NewReader(body))
+		vreq.Header.Set("Content-Type", "application/json")
+		if vresp, vErr := http.DefaultClient.Do(vreq); vErr == nil && vresp != nil {
+			defer vresp.Body.Close()
+			vb, _ := io.ReadAll(vresp.Body)
+			var vr any
+			_ = json.Unmarshal(vb, &vr)
+			schemaErrors = vr
+		}
+	}
+	if rulesObj != nil {
+		body, _ := json.Marshal(gin.H{"rules": rulesObj, "data": sampleResp.Data})
+		rreq, _ := http.NewRequest(http.MethodPost, pyBase+"/rules/validate", bytes.NewReader(body))
+		rreq.Header.Set("Content-Type", "application/json")
+		if rresp, rErr := http.DefaultClient.Do(rreq); rErr == nil && rresp != nil {
+			defer rresp.Body.Close()
+			rb, _ := io.ReadAll(rresp.Body)
+			var rr any
+			_ = json.Unmarshal(rb, &rr)
+			rulesErrors = rr
+		}
+	}
+	ok := (schemaErrors == nil || getBool(schemaErrors, "valid", true)) && (rulesErrors == nil || getBool(rulesErrors, "valid", true))
+	c.JSON(200, gin.H{"ok": ok, "upload_id": up.ID, "schema": schemaErrors, "rules": rulesErrors})
+}
+
+// AppendOpen creates a Change Request from a previously validated upload and selected reviewer
+func AppendOpen(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
+	pidStr := c.Param("projectId")
+	if pidStr == "" {
+		pidStr = c.Param("id")
+	}
+	pid, _ := strconv.Atoi(pidStr)
+	dsid, _ := strconv.Atoi(c.Param("datasetId"))
+	if !HasProjectRole(c, uint(pid), "owner", "contributor") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	var ds models.Dataset
+	if err := gdb.Where("project_id = ?", pid).First(&ds, dsid).Error; err != nil {
+		c.JSON(404, gin.H{"error": "not_found"})
+		return
+	}
+	var body struct {
+		UploadID    uint   `json:"upload_id"`
+		ReviewerID  uint   `json:"reviewer_id"`
+		ReviewerIDs []uint `json:"reviewer_ids"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": "invalid_payload"})
+		return
+	}
+	if body.UploadID == 0 {
+		c.JSON(400, gin.H{"error": "upload_required"})
+		return
+	}
+	if body.ReviewerID == 0 && len(body.ReviewerIDs) == 0 {
+		c.JSON(400, gin.H{"error": "reviewer_required"})
+		return
+	}
+	// Reviewer must be any project member (role agnostic)
+	var reviewerIDs []uint
+	if body.ReviewerID != 0 {
+		reviewerIDs = append(reviewerIDs, body.ReviewerID)
+	}
+	if len(body.ReviewerIDs) > 0 {
+		reviewerIDs = append(reviewerIDs, body.ReviewerIDs...)
+	}
+	// de-dup and validate all reviewers are members
+	uniq := map[uint]struct{}{}
+	cleaned := make([]uint, 0, len(reviewerIDs))
+	for _, rid := range reviewerIDs {
+		if rid != 0 {
+			if _, ok := uniq[rid]; !ok {
+				uniq[rid] = struct{}{}
+				cleaned = append(cleaned, rid)
+			}
+		}
+	}
+	if len(cleaned) == 0 {
+		c.JSON(400, gin.H{"error": "reviewer_required"})
+		return
+	}
+	var count int64
+	if err := gdb.Model(&models.ProjectRole{}).Where("project_id = ? AND user_id IN ?", pid, cleaned).Count(&count).Error; err != nil || count != int64(len(cleaned)) {
+		c.JSON(400, gin.H{"error": "reviewer_not_member"})
+		return
+	}
+	var up models.DatasetUpload
+	if err := gdb.Where("project_id = ? AND dataset_id = ?", pid, ds.ID).First(&up, body.UploadID).Error; err != nil {
+		c.JSON(404, gin.H{"error": "upload_not_found"})
+		return
+	}
+	// Create change request and staging ingest
+	payloadObj := map[string]any{"upload_id": up.ID, "filename": up.Filename}
+	pb, _ := json.Marshal(payloadObj)
+	reviewersJSON, _ := json.Marshal(cleaned)
+	firstReviewer := uint(0)
+	if len(cleaned) > 0 {
+		firstReviewer = cleaned[0]
+	}
+	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data", Payload: string(pb), ReviewerID: firstReviewer, Reviewers: string(reviewersJSON)}
+	if uid, exists := c.Get("user_id"); exists {
+		if u, ok := uid.(uint); ok {
+			cr.UserID = u
+		}
+	}
+	if err := gdb.Create(&cr).Error; err != nil {
+		c.JSON(500, gin.H{"error": "db"})
+		return
+	}
+	_ = ensureStagingTable(gdb, ds.ID, cr.ID)
+	_ = ingestBytesToTable(gdb, up.Content, up.Filename, dsStagingTable(ds.ID, cr.ID))
+	c.JSON(201, gin.H{"ok": true, "change_request": cr})
+}
+
+// Top-level mappings
+func DatasetAppendValidateTop(c *gin.Context) {
+	// map to project/dataset context
+	// find dataset to inject project id
+	id, _ := strconv.Atoi(c.Param("id"))
+	ds, ok := datasetWithAccess(c, uint(id), "owner", "contributor")
+	if !ok {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	c.Params = replaceParam(c.Params, "id", strconv.Itoa(int(ds.ProjectID)))
+	c.Params = append(c.Params, gin.Param{Key: "datasetId", Value: strconv.Itoa(int(ds.ID))})
+	AppendValidate(c)
+}
+func DatasetAppendOpenTop(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	ds, ok := datasetWithAccess(c, uint(id), "owner", "contributor")
+	if !ok {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	c.Params = replaceParam(c.Params, "id", strconv.Itoa(int(ds.ProjectID)))
+	c.Params = append(c.Params, gin.Param{Key: "datasetId", Value: strconv.Itoa(int(ds.ID))})
+	AppendOpen(c)
+}
+
+// Top-level mapping: validate edited JSON
+func DatasetAppendJSONValidateTop(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	ds, ok := datasetWithAccess(c, uint(id), "owner", "contributor")
+	if !ok {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	c.Params = replaceParam(c.Params, "id", strconv.Itoa(int(ds.ProjectID)))
+	c.Params = append(c.Params, gin.Param{Key: "datasetId", Value: strconv.Itoa(int(ds.ID))})
+	AppendJSONValidate(c)
 }
 
 // AppendJSON allows submitting edited rows (JSON) for append. Stores the JSON bytes as an upload for audit,
 // validates against schema & rules, and opens a change request on success.
-func AppendJSON(c *gin.Context){
-	gdb := dbpkg.Get(); if gdb == nil { if _, err := dbpkg.Init(); err != nil { c.JSON(500, gin.H{"error":"db"}); return }; gdb = dbpkg.Get() }
-	pidStr := c.Param("projectId"); if pidStr == "" { pidStr = c.Param("id") }
+func AppendJSON(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
+	pidStr := c.Param("projectId")
+	if pidStr == "" {
+		pidStr = c.Param("id")
+	}
 	pid, _ := strconv.Atoi(pidStr)
 	dsid, _ := strconv.Atoi(c.Param("datasetId"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor") { c.JSON(403, gin.H{"error":"forbidden"}); return }
-	var ds models.Dataset
-	if err := gdb.Where("project_id = ?", pid).First(&ds, dsid).Error; err != nil { c.JSON(404, gin.H{"error":"not_found"}); return }
-	var body struct{
-		Rows []map[string]any `json:"rows"`
-		Filename string        `json:"filename"`
+	if !HasProjectRole(c, uint(pid), "owner", "contributor") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
 	}
-	if err := c.ShouldBindJSON(&body); err != nil { c.JSON(400, gin.H{"error":"invalid_payload"}); return }
-	if len(body.Rows) == 0 { c.JSON(400, gin.H{"error":"empty_rows"}); return }
+	var ds models.Dataset
+	if err := gdb.Where("project_id = ?", pid).First(&ds, dsid).Error; err != nil {
+		c.JSON(404, gin.H{"error": "not_found"})
+		return
+	}
+	var body struct {
+		Rows        []map[string]any `json:"rows"`
+		Filename    string           `json:"filename"`
+		ReviewerID  uint             `json:"reviewer_id"`
+		ReviewerIDs []uint           `json:"reviewer_ids"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": "invalid_payload"})
+		return
+	}
+	// Reviewer(s) are selected on validate-first flow via AppendJSONValidate; keep legacy support when provided
+	var reviewersAll []uint
+	if body.ReviewerID != 0 {
+		reviewersAll = append(reviewersAll, body.ReviewerID)
+	}
+	if len(body.ReviewerIDs) > 0 {
+		reviewersAll = append(reviewersAll, body.ReviewerIDs...)
+	}
+	if len(reviewersAll) > 0 {
+		// ensure they are members (any role)
+		uniq := map[uint]struct{}{}
+		cleaned := make([]uint, 0, len(reviewersAll))
+		for _, rid := range reviewersAll {
+			if rid != 0 {
+				if _, ok := uniq[rid]; !ok {
+					uniq[rid] = struct{}{}
+					cleaned = append(cleaned, rid)
+				}
+			}
+		}
+		var count int64
+		if err := gdb.Model(&models.ProjectRole{}).Where("project_id = ? AND user_id IN ?", pid, cleaned).Count(&count).Error; err != nil || count != int64(len(cleaned)) {
+			c.JSON(400, gin.H{"error": "reviewer_not_member"})
+			return
+		}
+		reviewersAll = cleaned
+	}
+	if len(body.Rows) == 0 {
+		c.JSON(400, gin.H{"error": "empty_rows"})
+		return
+	}
 
 	// Validate via python using schema/rules if present
-	pyBase := os.Getenv("PYTHON_SERVICE_URL"); if pyBase=="" { pyBase = "http://python-service:8000" }
+	pyBase := os.Getenv("PYTHON_SERVICE_URL")
+	if pyBase == "" {
+		pyBase = "http://python-service:8000"
+	}
 	var schemaObj any
-	if strings.TrimSpace(ds.Schema) != "" { _ = json.Unmarshal([]byte(ds.Schema), &schemaObj) }
+	if strings.TrimSpace(ds.Schema) != "" {
+		_ = json.Unmarshal([]byte(ds.Schema), &schemaObj)
+	}
 	var rulesObj any
-	if strings.TrimSpace(ds.Rules) != "" { _ = json.Unmarshal([]byte(ds.Rules), &rulesObj) }
+	if strings.TrimSpace(ds.Rules) != "" {
+		_ = json.Unmarshal([]byte(ds.Rules), &rulesObj)
+	}
 	ok := true
 	if schemaObj != nil {
 		sb, _ := json.Marshal(gin.H{"json_schema": schemaObj, "data": body.Rows})
 		r, err := http.Post(pyBase+"/validate", "application/json", bytes.NewReader(sb))
-		if err != nil || r == nil { c.JSON(502, gin.H{"error":"python_unreachable"}); return }
-		defer r.Body.Close(); var vr map[string]any; bb,_ := io.ReadAll(r.Body); _ = json.Unmarshal(bb, &vr)
-		if v, _ := vr["valid"].(bool); !v { ok = false; c.JSON(200, gin.H{"ok": false, "schema": vr}); return }
+		if err != nil || r == nil {
+			c.JSON(502, gin.H{"error": "python_unreachable"})
+			return
+		}
+		defer r.Body.Close()
+		var vr map[string]any
+		bb, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(bb, &vr)
+		if v, _ := vr["valid"].(bool); !v {
+			ok = false
+			c.JSON(200, gin.H{"ok": false, "schema": vr})
+			return
+		}
 	}
 	if rulesObj != nil {
 		rb, _ := json.Marshal(gin.H{"rules": rulesObj, "data": body.Rows})
 		r, err := http.Post(pyBase+"/rules/validate", "application/json", bytes.NewReader(rb))
-		if err != nil || r == nil { c.JSON(502, gin.H{"error":"python_unreachable"}); return }
-		defer r.Body.Close(); var rr map[string]any; bb,_ := io.ReadAll(r.Body); _ = json.Unmarshal(bb, &rr)
-		if v, _ := rr["valid"].(bool); !v { ok = false; c.JSON(200, gin.H{"ok": false, "rules": rr}); return }
+		if err != nil || r == nil {
+			c.JSON(502, gin.H{"error": "python_unreachable"})
+			return
+		}
+		defer r.Body.Close()
+		var rr map[string]any
+		bb, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(bb, &rr)
+		if v, _ := rr["valid"].(bool); !v {
+			ok = false
+			c.JSON(200, gin.H{"ok": false, "rules": rr})
+			return
+		}
 	}
-	if !ok { return }
+	if !ok {
+		return
+	}
 
 	// Store JSON rows as upload content for audit/preview
-	fname := body.Filename; if strings.TrimSpace(fname)=="" { fname = "edited.json" }
+	fname := body.Filename
+	if strings.TrimSpace(fname) == "" {
+		fname = "edited.json"
+	}
 	jb, _ := json.Marshal(body.Rows)
-	if len(jb) > maxUploadBytes { respondTooLarge(c); return }
-	up := models.DatasetUpload{ ProjectID: uint(pid), DatasetID: ds.ID, Filename: fname, Content: jb }
-	if err := gdb.Create(&up).Error; err != nil { c.JSON(500, gin.H{"error":"db_store_upload"}); return }
+	if len(jb) > maxUploadBytes {
+		respondTooLarge(c)
+		return
+	}
+	up := models.DatasetUpload{ProjectID: uint(pid), DatasetID: ds.ID, Filename: fname, Content: jb}
+	if err := gdb.Create(&up).Error; err != nil {
+		c.JSON(500, gin.H{"error": "db_store_upload"})
+		return
+	}
 
 	payloadObj := map[string]any{"upload_id": up.ID, "filename": up.Filename}
 	pb, _ := json.Marshal(payloadObj)
-	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data (edited)", Payload: string(pb)}
-	if uid, exists := c.Get("user_id"); exists { if u, ok := uid.(uint); ok { cr.UserID = u } }
-	if err := gdb.Create(&cr).Error; err != nil { c.JSON(500, gin.H{"error":"db"}); return }
+	reviewersJSON, _ := json.Marshal(reviewersAll)
+	firstReviewer := uint(0)
+	if len(reviewersAll) > 0 {
+		firstReviewer = reviewersAll[0]
+	}
+	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data (edited)", Payload: string(pb), ReviewerID: firstReviewer, Reviewers: string(reviewersJSON)}
+	if uid, exists := c.Get("user_id"); exists {
+		if u, ok := uid.(uint); ok {
+			cr.UserID = u
+		}
+	}
+	if err := gdb.Create(&cr).Error; err != nil {
+		c.JSON(500, gin.H{"error": "db"})
+		return
+	}
 	// Create staging table and ingest JSON rows
 	_ = ensureStagingTable(gdb, ds.ID, cr.ID)
 	_ = ingestBytesToTable(gdb, jb, fname, dsStagingTable(ds.ID, cr.ID))
 	c.JSON(201, gin.H{"ok": true, "change_request": cr})
+}
+
+// AppendJSONValidate validates edited rows and stores them as an upload, returning an upload_id for later change opening
+func AppendJSONValidate(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
+	pidStr := c.Param("projectId")
+	if pidStr == "" {
+		pidStr = c.Param("id")
+	}
+	pid, _ := strconv.Atoi(pidStr)
+	dsid, _ := strconv.Atoi(c.Param("datasetId"))
+	if !HasProjectRole(c, uint(pid), "owner", "contributor") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	var ds models.Dataset
+	if err := gdb.Where("project_id = ?", pid).First(&ds, dsid).Error; err != nil {
+		c.JSON(404, gin.H{"error": "not_found"})
+		return
+	}
+	var body struct {
+		Rows     []map[string]any `json:"rows"`
+		Filename string           `json:"filename"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || len(body.Rows) == 0 {
+		c.JSON(400, gin.H{"error": "invalid_payload"})
+		return
+	}
+	// Validate via python
+	pyBase := os.Getenv("PYTHON_SERVICE_URL")
+	if pyBase == "" {
+		pyBase = "http://python-service:8000"
+	}
+	var schemaObj any
+	if strings.TrimSpace(ds.Schema) != "" {
+		_ = json.Unmarshal([]byte(ds.Schema), &schemaObj)
+	}
+	var rulesObj any
+	if strings.TrimSpace(ds.Rules) != "" {
+		_ = json.Unmarshal([]byte(ds.Rules), &rulesObj)
+	}
+	if schemaObj != nil {
+		sb, _ := json.Marshal(gin.H{"json_schema": schemaObj, "data": body.Rows})
+		r, err := http.Post(pyBase+"/validate", "application/json", bytes.NewReader(sb))
+		if err != nil || r == nil {
+			c.JSON(502, gin.H{"error": "python_unreachable"})
+			return
+		}
+		defer r.Body.Close()
+		var vr map[string]any
+		bb, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(bb, &vr)
+		if v, _ := vr["valid"].(bool); !v {
+			c.JSON(200, gin.H{"ok": false, "schema": vr})
+			return
+		}
+	}
+	if rulesObj != nil {
+		rb, _ := json.Marshal(gin.H{"rules": rulesObj, "data": body.Rows})
+		r, err := http.Post(pyBase+"/rules/validate", "application/json", bytes.NewReader(rb))
+		if err != nil || r == nil {
+			c.JSON(502, gin.H{"error": "python_unreachable"})
+			return
+		}
+		defer r.Body.Close()
+		var rr map[string]any
+		bb, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(bb, &rr)
+		if v, _ := rr["valid"].(bool); !v {
+			c.JSON(200, gin.H{"ok": false, "rules": rr})
+			return
+		}
+	}
+	// Store upload
+	fname := body.Filename
+	if strings.TrimSpace(fname) == "" {
+		fname = "edited.json"
+	}
+	jb, _ := json.Marshal(body.Rows)
+	if len(jb) > maxUploadBytes {
+		respondTooLarge(c)
+		return
+	}
+	up := models.DatasetUpload{ProjectID: uint(pid), DatasetID: ds.ID, Filename: fname, Content: jb}
+	if err := gdb.Create(&up).Error; err != nil {
+		c.JSON(500, gin.H{"error": "db_store_upload"})
+		return
+	}
+	c.JSON(200, gin.H{"ok": true, "upload_id": up.ID})
 }

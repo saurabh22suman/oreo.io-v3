@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
-import { appendUpload, approveChange, getDataset, getDatasetSample, getDatasetStatsTop, getProject, listChanges, rejectChange } from '../api'
+import { appendUpload, approveChange, getDataset, getDatasetSample, getDatasetStatsTop, getProject, listChanges, rejectChange, listMembers, myProjectRole, currentUser, withdrawChange, appendDatasetDataTop, openAppendChangeTop } from '../api'
+import AgGridDialog from '../components/AgGridDialog'
+import Alert from '../components/Alert'
+import { orderColumnsBySchema } from '../utils/columnOrder'
 
 type Dataset = { id:number; name:string; schema?: string; rules?: string; last_upload_path?: string; last_upload_at?: string }
 
-type Change = { id:number; type:string; status:string; title?:string; created_at?:string }
+type Change = { id:number; type:string; status:string; title?:string; created_at?:string; user_id?: number; reviewer_id?: number }
+type Member = { id:number; email:string; role:'owner'|'contributor'|'approver'|'viewer' }
 
 export default function DatasetDetailsPage(){
   const { id, datasetId } = useParams()
@@ -13,20 +17,35 @@ export default function DatasetDetailsPage(){
   const nav = useNavigate()
   const [project, setProject] = useState<any>(null)
   const [dataset, setDataset] = useState<Dataset|null>(null)
-  const [stats, setStats] = useState<{row_count?:number; column_count?:number; owner_name?:string} | null>(null)
+  const [stats, setStats] = useState<{row_count?:number; column_count?:number; owner_name?:string; table_location?:string} | null>(null)
   const [sample, setSample] = useState<{data:any[]; columns:string[]} | null>(null)
+  const [openPreview, setOpenPreview] = useState(false)
   const [appendFile, setAppendFile] = useState<File|null>(null)
   const [changes, setChanges] = useState<Change[]>([])
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
+  const [isApprover, setIsApprover] = useState(false)
+  const [meId, setMeId] = useState<number|undefined>(undefined)
+  const [approvers, setApprovers] = useState<Member[]>([])
+  const [reviewerDialog, setReviewerDialog] = useState(false)
+  const [selectedReviewer, setSelectedReviewer] = useState<number|undefined>(undefined)
+  const [selectedReviewerIds, setSelectedReviewerIds] = useState<number[]>([])
+  const [pendingUploadId, setPendingUploadId] = useState<number|undefined>(undefined)
 
   useEffect(()=>{ (async()=>{
     try{
-      setProject(await getProject(projectId))
+  setProject(await getProject(projectId))
       const ds = await getDataset(projectId, dsId); setDataset(ds)
       // Load metadata stats (owner, rows, columns). Do not auto-load preview.
       try{ setStats(await getDatasetStatsTop(dsId)) }catch{}
-      setChanges(await listChanges(projectId))
+  setChanges(await listChanges(projectId))
+  const role = await myProjectRole(projectId).catch(()=>({role:null as any}))
+  setIsApprover(role?.role === 'approver')
+  const me = await currentUser().catch(()=>null as any)
+  if(me?.id) setMeId(Number(me.id))
+  const members = await listMembers(projectId).catch(()=>[])
+  // Allow any project member to be selected as reviewer
+  setApprovers(members)
     }catch(e:any){ setError(e.message) }
   })() }, [projectId, dsId])
 
@@ -47,8 +66,8 @@ export default function DatasetDetailsPage(){
         </nav>
       </div>
 
-      {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
-      {toast && <div className="text-sm text-green-700 mb-2">{toast}</div>}
+  {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
+  {toast && <Alert type="success" message={toast} onClose={()=>setToast('')} />}
 
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
         {/* Left: Dataset summary */}
@@ -73,44 +92,35 @@ export default function DatasetDetailsPage(){
               <div className="text-gray-600">Columns</div>
               <div className="font-medium">{stats?.column_count ?? (sample?.columns?.length || 0)}</div>
             </div>
+            <div className="border border-gray-100 rounded-md p-3 sm:col-span-2">
+              <div className="text-gray-600">Table location</div>
+              <div className="font-medium break-words">{stats?.table_location || '—'}</div>
+            </div>
+              <div className="border border-gray-100 rounded-md p-3 sm:col-span-2">
+                <div className="text-gray-600">Last updated</div>
+                <div className="font-medium">{dataset?.last_upload_at ? new Date(dataset.last_upload_at).toLocaleString() : (stats as any)?.last_update_at ? new Date((stats as any).last_update_at).toLocaleString() : '—'}</div>
+              </div>
           </div>
 
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-sm font-medium">Preview</div>
+              <div className="text_sm font-medium">Preview</div>
               <div className="flex gap-3">
+                <Link className="text-xs text-primary hover:underline" to={`/projects/${projectId}/datasets/${dsId}/view`}>Open viewer</Link>
                 <button className="text-xs text-primary hover:underline" onClick={async()=>{
                   try{ setStats(await getDatasetStatsTop(dsId)) }catch{}
                 }}>Refresh stats</button>
                 <button className="text-xs text-primary hover:underline" onClick={async()=>{
                   try{
                     const s = await getDatasetSample(projectId, dsId)
-                    setSample({ data: s.data||[], columns: s.columns||[] })
+                    const cols = orderColumnsBySchema(s.columns||[], dataset?.schema)
+                    setSample({ data: s.data||[], columns: cols })
+                    setOpenPreview(true)
                     setToast('Loaded preview')
                   }catch(e:any){ setError(e.message) }
                 }}>Load preview</button>
               </div>
             </div>
-            {sample ? (
-              <div className="overflow-auto border border-gray-200 rounded-md">
-                <table className="min-w-full text-xs">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      {sample.columns.map(c => <th key={c} className="text-left px-3 py-2 border-b border-gray-200">{c}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sample.data.slice(0,200).map((row, i) => (
-                      <tr key={i} className={i%2? 'bg-white':'bg-gray-50'}>
-                        {sample.columns.map(c => <td key={c} className="px-3 py-2 border-b border-gray-100">{String(row[c] ?? '')}</td>)}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ): (
-              <div className="text-xs text-gray-600">No preview available.</div>
-            )}
           </div>
         </div>
 
@@ -126,11 +136,12 @@ export default function DatasetDetailsPage(){
             if(!appendFile) return
             setError('')
             try{
-              const res = await appendUpload(projectId, dsId, appendFile)
-              if(res?.ok){ setToast('Validation passed. Change Request opened.'); setAppendFile(null); setChanges(await listChanges(projectId)) }
-              else {
-                setError('Validation found issues. Please review rules/schema on the dataset page and retry.')
-              }
+              // Step 1: validate only
+              const vr = await appendDatasetDataTop(dsId, appendFile)
+              if(!vr?.ok){ setError('Validation found issues. Fix and retry.'); return }
+              setPendingUploadId(vr.upload_id)
+              if(!approvers.length){ setError('No members available as reviewers. Add a member in Members.'); return }
+              setReviewerDialog(true)
             }catch(e:any){ setError(e.message) }
           }}>Validate & open change</button>
 
@@ -148,8 +159,18 @@ export default function DatasetDetailsPage(){
                       <Link to={`/projects/${projectId}/datasets/${dsId}/changes/${ch.id}`} className="text-xs text-primary hover:underline">Open</Link>
                       {ch.status === 'pending' && (
                         <>
-                          <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{ try{ await approveChange(projectId, ch.id); setChanges(await listChanges(projectId)); setToast('Change approved'); }catch(e:any){ setError(e.message) } }}>Approve</button>
-                          <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{ try{ await rejectChange(projectId, ch.id); setChanges(await listChanges(projectId)); setToast('Change rejected'); }catch(e:any){ setError(e.message) } }}>Reject</button>
+                          {isApprover && (!ch.reviewer_id || ch.reviewer_id === meId) && (
+                            <>
+                              <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{ try{ await approveChange(projectId, ch.id); setChanges(await listChanges(projectId)); setToast('Change approved'); }catch(e:any){ setError(e.message) } }}>Approve</button>
+                              <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{ try{ await rejectChange(projectId, ch.id); setChanges(await listChanges(projectId)); setToast('Change rejected'); }catch(e:any){ setError(e.message) } }}>Reject</button>
+                            </>
+                          )}
+                          {meId === ch.user_id && (
+                            <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{
+                              try{ await withdrawChange(projectId, ch.id); setChanges(await listChanges(projectId)); setToast('Change withdrawn') }
+                              catch(e:any){ setError(e.message) }
+                            }}>Withdraw</button>
+                          )}
                         </>
                       )}
                     </div>
@@ -162,6 +183,41 @@ export default function DatasetDetailsPage(){
           </div>
         </div>
       </div>
+      <AgGridDialog
+        open={openPreview}
+        onOpenChange={setOpenPreview}
+        title={`Dataset ${dataset?.name || dsId}`}
+        rows={sample?.data || []}
+        columns={sample?.columns || []}
+        pageSize={50}
+  allowEdit={false}
+        compact
+      />
+
+      {/* Reviewer selection dialog */}
+      {reviewerDialog && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-md p-4 w-[420px] shadow">
+            <div className="text-sm font-medium mb-2">Select reviewer(s)</div>
+            <select multiple className="w-full border border-gray-300 rounded px-3 py-2 h-28" value={selectedReviewerIds.map(String)} onChange={e=> setSelectedReviewerIds(Array.from(e.target.selectedOptions).map(o=> Number(o.value)).filter(Boolean))}>
+              {approvers.map(a=> <option key={a.id} value={a.id}>{a.email}</option>)}
+            </select>
+            <div className="flex gap-2 mt-3 justify-end">
+              <button className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={()=> setReviewerDialog(false)}>Cancel</button>
+              <button disabled={selectedReviewerIds.length===0 || !pendingUploadId} className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600 disabled:opacity-60" onClick={async()=>{
+                if(selectedReviewerIds.length===0 || !pendingUploadId) return
+                setReviewerDialog(false)
+                setError('')
+                try{
+                  const res = await openAppendChangeTop(dsId, pendingUploadId, selectedReviewerIds)
+                  if(res?.ok){ setToast('Change Request opened.'); setAppendFile(null); setSelectedReviewer(undefined); setSelectedReviewerIds([]); setPendingUploadId(undefined); setChanges(await listChanges(projectId)) }
+                  else { setError('Failed to open change.') }
+                }catch(e:any){ setError(e.message) }
+              }}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

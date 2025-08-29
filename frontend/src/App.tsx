@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, Navigate } from 'react-router-dom'
 import AuthPage from './pages/AuthPage'
 import ProjectsPage from './pages/ProjectsPage'
 import DatasetsPage from './pages/DatasetsPage'
@@ -19,6 +19,7 @@ export default function App(){
       <Routes>
         <Route path="/auth" element={<AuthPage/>}/>
   <Route path="/admin_base" element={<AdminBasePage/>}/>
+        <Route path="/projects" element={<ProjectsPage/>}/>
         <Route path="/projects/:id" element={<DatasetsPage/>}/>
   <Route path="/projects/:id/datasets/:datasetId" element={<DatasetDetailsPage/>}/>
   <Route path="/projects/:id/members" element={<MembersPage/>}/>
@@ -28,8 +29,13 @@ export default function App(){
   <Route path="/projects/:id/datasets/:datasetId/approvals" element={<DatasetApprovalsPage/>}/>
   <Route path="/projects/:id/datasets/:datasetId/view" element={<DatasetViewerPage/>}/>
   <Route path="/projects/:id/datasets/:datasetId/changes/:changeId" element={<ChangeDetailsPage/>}/>
-        <Route path="/" element={<ProjectsPage/>}/>
+        <Route path="/" element={<HomeRedirect/>}/>
       </Routes>
     </Layout>
   )
+}
+
+function HomeRedirect(){
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+  return token ? <Navigate to="/projects" replace /> : <Navigate to="/auth" replace />
 }

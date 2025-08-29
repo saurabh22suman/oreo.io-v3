@@ -1,5 +1,58 @@
 # Issues Log
 
+Date: 2025-08-28
+
+- Reviewer selection before creating change requests
+  - Status: Done
+  - Notes: Frontend prompts for an approver (project member with role approver) before opening an append change. Backend requires reviewer_id and validates role.
+
+- Approver must be a project member
+  - Status: Done
+  - Notes: Backend validates reviewer_id against project members table and enforces role = approver.
+
+- All users can see change requests
+  - Status: Done (pre-existing)
+  - Notes: List/get/preview/comments endpoints allow owner, contributor, approver, viewer.
+
+- Only assigned approver can approve/reject
+  - Status: Done
+  - Notes: Approval and rejection require project role approver; if reviewer_id is set on the change, only that user can approve/reject.
+
+- Requester can withdraw their own request
+  - Status: Done
+  - Notes: New endpoint POST /api/projects/:id/changes/:changeId/withdraw; only creator can withdraw pending requests.
+
+Date: 2025-08-29
+
+- Validate-first append flow with reviewer selection post-validation
+	- Status: Done
+	- Notes: Added endpoints /append/validate and /append/open (project and top-level). Frontend now validates file first, then opens reviewer picker and creates CR.
+
+- Per-dataset append state isolation
+	- Status: Done
+	- Notes: Frontend now tracks selected file and pending upload_id per dataset to avoid cross-dataset bleed of filenames and actions.
+
+- Comments should show the commenter’s email
+	- Status: Done
+	- Notes: Backend enriches comments list/create with user_email; UI displays it in Change Details.
+
+- Assigned reviewer couldn’t see Approve/Reject
+	- Status: Done
+	- Notes: Backend auth now allows any assigned reviewer (single or multi) to approve/reject; UI shows buttons only to assigned reviewer(s).
+
+- Show who the change is pending with (reviewer email)
+	- Status: Done
+	- Notes: Change details API now returns reviewer_email and reviewer_emails; UI renders them.
+
+- Support multiple reviewers on a change
+	- Status: Done
+	- Notes: Added Reviewers array to ChangeRequest; AppendOpen/AppendJSON accept reviewer_ids; Datasets page and related dialogs support multi-select.
+
+- Append flow: edit in dialog, then validate, with undo/close
+	- Status: Partial
+	- Notes: Added AppendJSONValidate endpoint and wired top-level route + UI to validate edited rows first and then open change with selected reviewers. Undo is currently achieved by closing the dialog without saving; a dedicated Undo control is a follow-up.
+# Issues Log
+
 Active date: 2025-08-28
 
 ## Dataset controls visibility and permissions
@@ -39,3 +92,42 @@ Notes:
 - Frontend DatasetDetailsPage no longer auto-loads preview; it first fetches stats (owner and totals) and offers a Load preview button. Done.
 - Frontend DatasetViewerPage now shows metadata-derived totals and owner, and loads data on demand with an optional JSON filter. Done.
 - Next: audit remaining pages to replace preview-driven totals with metadata where applicable; add tests for metadata upsert on upload and approval.
+
+## Frontend UX tweaks (Aug 28, 2025)
+- Start on Auth page if logged out; navigate to Projects after login. Done.
+- Projects tab hidden until logged in; appears after login. Done.
+- Temporarily hide "Data operations (beta)" panel. Done (gated off in DatasetsPage).
+- Show upload progress bar during file uploads (create + per-dataset upload). Done (XHR with progress + modal overlay).
+- Show "Last updated" date on dataset details page. Done.
+
+## Preview and messaging improvements (Aug 29, 2025)
+- Add dismissible [x] button on all success/failure messages. Done (Alert component; integrated across pages).
+- In Datasets page, Preview data opens in a popup (dialog) instead of any inline table. Done (always uses AgGridDialog; no inline table).
+- Maintain column order in previews based on dataset schema. Done (orderColumnsBySchema utility applied for previews).
+- Simplify preview dialog UI: no pagination/exports/row selection when showing only 50 rows; show only Close. Done (AgGridDialog compact mode).
+
+## Follow-ups (Aug 29, 2025)
+- Dataset details preview should be a popup, not inline. Done (opens AgGridDialog compact on Load preview).
+- After initial upload, hide the Upload data option; only allow Append thereafter. Done (UI hides Upload when last_upload_at exists).
+
+## Upload and preview fixes (Aug 29, 2025)
+- Upload progress bar reaches 100% before file fully processed. Fixed.
+	- Change: During XMLHttpRequest upload progress, clamp visual progress to 99% and show "Uploading…"; set 100% only after server response (success). Updated in `frontend/src/pages/DatasetsPage.tsx` (uploadWithProgress).
+- PM2.5 column not visible in preview dialog despite source data. Fixed.
+	- Root cause: Columns with dots (e.g., "PM2.5") were used as field keys; ag-Grid field path resolution can mis-handle dotted keys.
+	- Change: Use valueGetter/valueSetter with the literal column name so special characters are read/written correctly. Updated in `frontend/src/components/AgGridDialog.tsx`.
+
+	## Viewer and persistence updates (Aug 29, 2025)
+	- Consistent column order everywhere. Done.
+		- Applied schema-based ordering via `orderColumnsBySchema` wherever previews are loaded; dialog rendering uses the ordered columns.
+	- Editing is allowed only in append flows. Done.
+		- Set `allowEdit={false}` for Dataset list/detail previews and Dataset Viewer; kept editing enabled only in Append flow dialog.
+	- Temporary upload table naming: <project_name>.upload.<dataset_name>. Done (metadata only).
+		- Metadata `table_location` added to `DatasetMeta` and computed in backend; exposed via `/datasets/:id/stats` for UI.
+	- Show table location in Dataset open tab. Done.
+		- Displayed under metadata on dataset details page using `stats.table_location`.
+
+		## Members and layout fixes (Aug 29, 2025)
+		- Remove Approver from the Add member role dropdown. Done.
+		- Owner cannot remove themselves. Done (hide Remove on owner record).
+		- Keep Datasets and Members page widths consistent to avoid layout jump. Done (both use max-w-4xl).
