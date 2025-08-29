@@ -12,7 +12,7 @@ import (
 type MemberIn struct {
 	Email string `json:"email" binding:"required,email"`
 	// Accept 'contributor' (new) and 'editor' (legacy alias)
-	Role  string `json:"role" binding:"required,oneof=owner editor contributor approver viewer"`
+	Role string `json:"role" binding:"required,oneof=owner editor contributor approver viewer"`
 }
 
 // MembersList returns members for a project (any project role can view)
@@ -80,6 +80,14 @@ func MembersUpsert(c *gin.Context) {
 			return
 		}
 	}
+	// Prevent demoting the project owner to a lower role
+	var proj models.Project
+	if err := gdb.First(&proj, pid).Error; err == nil {
+		if u.ID == proj.OwnerID && normalizeRole(in.Role) != "owner" {
+			c.JSON(400, gin.H{"error": "cannot_demote_owner"})
+			return
+		}
+	}
 	// upsert project role (normalize role name)
 	var pr models.ProjectRole
 	if err := gdb.Where("project_id = ? AND user_id = ?", pid, u.ID).First(&pr).Error; err != nil {
@@ -113,8 +121,34 @@ func MembersDelete(c *gin.Context) {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
-	uid, _ := strconv.Atoi(c.Param("userId"))
-	if err := gdb.Where("project_id = ? AND user_id = ?", pid, uid).Delete(&models.ProjectRole{}).Error; err != nil {
+	// Prevent removing self and prevent removing the project owner
+	targetUID, _ := strconv.Atoi(c.Param("userId"))
+	// Read current user id from JWT
+	meVal, has := c.Get("user_id")
+	var me uint
+	if has {
+		switch v := meVal.(type) {
+		case float64:
+			me = uint(v)
+		case int:
+			me = uint(v)
+		case uint:
+			me = v
+		}
+	}
+	if me != 0 && me == uint(targetUID) {
+		c.JSON(400, gin.H{"error": "cannot_remove_self"})
+		return
+	}
+	// Disallow removing the project owner
+	var proj models.Project
+	if err := gdb.First(&proj, pid).Error; err == nil {
+		if uint(targetUID) == proj.OwnerID {
+			c.JSON(400, gin.H{"error": "cannot_remove_owner"})
+			return
+		}
+	}
+	if err := gdb.Where("project_id = ? AND user_id = ?", pid, targetUID).Delete(&models.ProjectRole{}).Error; err != nil {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
@@ -137,9 +171,20 @@ func MemberMyRole(c *gin.Context) {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
-	uidVal, ok := c.Get("user_id"); if !ok { c.JSON(401, gin.H{"error":"unauthorized"}); return }
+	uidVal, ok := c.Get("user_id")
+	if !ok {
+		c.JSON(401, gin.H{"error": "unauthorized"})
+		return
+	}
 	var uid uint
-	switch v := uidVal.(type) { case float64: uid=uint(v); case int: uid=uint(v); case uint: uid=v }
+	switch v := uidVal.(type) {
+	case float64:
+		uid = uint(v)
+	case int:
+		uid = uint(v)
+	case uint:
+		uid = v
+	}
 	var pr models.ProjectRole
 	if err := gdb.Where("project_id = ? AND user_id = ?", pid, uid).First(&pr).Error; err != nil {
 		c.JSON(200, gin.H{"role": nil})

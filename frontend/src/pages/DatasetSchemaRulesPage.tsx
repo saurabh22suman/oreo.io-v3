@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getDatasetSchemaTop, setDatasetRulesTop, setDatasetSchemaTop, getProject } from '../api'
+import Alert from '../components/Alert'
 
 export default function DatasetSchemaRulesPage(){
   const { id, datasetId } = useParams()
@@ -26,11 +27,11 @@ export default function DatasetSchemaRulesPage(){
         <h2 className="text-xl font-semibold">Schema & Rules</h2>
         <div className="flex gap-2 text-sm">
           <Link to={`/projects/${projectId}`} className="text-primary hover:underline">Back</Link>
-          <Link to={`/projects/${projectId}/datasets/${dsId}/upload`} className="text-primary hover:underline">Next: Upload & Append</Link>
+          <Link to={`/projects/${projectId}/datasets/${dsId}`} className="text-primary hover:underline">Next: Dataset</Link>
         </div>
       </div>
-      {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
-      {toast && <div className="text-sm text-green-700 mb-2">{toast}</div>}
+  {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
+  {toast && <Alert type="success" message={toast} onClose={()=>setToast('')} />}
       <div className="grid gap-4 md:grid-cols-2">
         <div className="border border-gray-200 bg-white rounded-md p-3">
           <div className="text-sm font-medium mb-2">JSON Schema</div>

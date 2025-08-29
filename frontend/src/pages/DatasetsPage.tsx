@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import AgGridDialog from '../components/AgGridDialog'
+import Alert from '../components/Alert'
+import { orderColumnsBySchema } from '../utils/columnOrder'
 import { NavLink, useParams, Link } from 'react-router-dom'
-import { createDataset, deleteDataset, getProject, listDatasets, updateDataset, uploadDatasetFile, validateData, transformData, exportData, getDatasetSample, appendUpload } from '../api'
+import { createDataset, deleteDataset, getProject, listDatasets, updateDataset, uploadDatasetFile, validateData, transformData, exportData, getDatasetSample, listMembers, appendDatasetDataTop, openAppendChangeTop } from '../api'
 import { myProjectRole } from '../api'
 
-type Dataset = { id:number; name:string; schema?: string; rules?: string }
+type Dataset = { id:number; name:string; schema?: string; rules?: string; last_upload_at?: string; last_upload_path?: string }
 
 export default function DatasetsPage(){
   const { id } = useParams()
@@ -26,10 +28,18 @@ export default function DatasetsPage(){
   const [liveErr, setLiveErr] = useState<string>('')
   const [toast, setToast] = useState<string>('')
   const [rulesEditor, setRulesEditor] = useState('[\n  { "type": "required", "columns": ["id", "name"] },\n  { "type": "unique", "column": "id" },\n  { "type": "range", "column": "score", "min": 0, "max": 100 }\n]')
-  const [appendFile, setAppendFile] = useState<File|null>(null)
+  // Append state: track per-dataset to avoid bleed across items
+  const [appendFiles, setAppendFiles] = useState<Record<number, File|null>>({})
   const [appendResult, setAppendResult] = useState<any>(null)
+  // Reviewer selection state for append flow
+  const [approvers, setApprovers] = useState<{id:number; email:string; role:string}[]>([])
+  const [reviewerDialog, setReviewerDialog] = useState(false)
+  const [selectedReviewer, setSelectedReviewer] = useState<number|undefined>(undefined)
+  const [selectedReviewerIds, setSelectedReviewerIds] = useState<number[]>([])
+  const [selectedDatasetId, setSelectedDatasetId] = useState<number|null>(null)
+  const [pendingUploadIds, setPendingUploadIds] = useState<Record<number, number|undefined>>({})
   // Data ops panel state
-  const [opsOpen, setOpsOpen] = useState(true)
+  const [opsOpen, setOpsOpen] = useState(true) // beta panel hidden by default below
   const [dataInput, setDataInput] = useState('[\n  {"id": 1, "name": "Alice", "score": 91},\n  {"id": 2, "name": "Bob", "score": 82},\n  {"id": 3, "name": "Cara", "score": 88}\n]')
   const [opsInput, setOpsInput] = useState('[\n  { "op": "select", "columns": ["id", "name", "score"] },\n  { "op": "limit", "n": 2 }\n]')
   const [result, setResult] = useState<{data:any[]; columns:string[]}|null>(null)
@@ -41,10 +51,50 @@ export default function DatasetsPage(){
   const [modalTitle, setModalTitle] = useState('')
   const [modalRows, setModalRows] = useState<any[]>([])
   const [modalCols, setModalCols] = useState<string[]>([])
+  // Upload progress modal
+  const [progressOpen, setProgressOpen] = useState(false)
+  const [progressPct, setProgressPct] = useState(0)
+  const [progressLabel, setProgressLabel] = useState('Uploading...')
+
+  function uploadWithProgress(url: string, file: File): Promise<any>{
+    return new Promise((resolve, reject)=>{
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', url)
+      const token = localStorage.getItem('token')
+      if(token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      xhr.upload.onprogress = (e)=>{
+        if(e.lengthComputable){
+          // Don't jump to 100% until the server responds; keep at most 99%
+          const raw = Math.round((e.loaded / e.total) * 100)
+          const pct = Math.min(raw, 99)
+          setProgressPct(pct)
+        }
+      }
+      xhr.onload = ()=>{
+        try{
+          if(xhr.status >= 200 && xhr.status < 300){
+            // Only mark 100% when server confirms
+            setProgressPct(100)
+            setProgressLabel('Processing completed')
+            resolve(JSON.parse(xhr.responseText||'{}'))
+          }else if(xhr.status === 413){
+            reject(new Error('File too large. Max allowed size is 100 MB.'))
+          }else{
+            reject(new Error(xhr.responseText || 'Upload failed'))
+          }
+        }catch(err){ reject(err) }
+      }
+      xhr.onerror = ()=> reject(new Error('Network error'))
+      const form = new FormData(); form.append('file', file)
+      setProgressPct(0); setProgressLabel('Uploading…'); setProgressOpen(true)
+      xhr.send(form)
+    })
+  }
 
   useEffect(()=>{ (async()=>{
     try{ setProject(await getProject(projectId)); setItems(await listDatasets(projectId)) } catch(e:any){ setError(e.message) }
     try{ const r = await myProjectRole(projectId); setRole(r.role) }catch{ setRole(null) }
+  try{ const members = await listMembers(projectId); setApprovers(members as any[]) }catch{}
   })() }, [projectId])
 
   return (
@@ -62,8 +112,9 @@ export default function DatasetsPage(){
           <NavLink to={`/projects/${projectId}/members`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Members</NavLink>
         </nav>
       </div>
-      {/* Data operations panel (moved below tabs for visibility) */}
-      <div className="border border-gray-200 bg-white rounded-md p-3 mb-3">
+  {/* Data operations panel (beta) temporarily disabled */}
+  {false && (
+  <div className="border border-gray-200 bg-white rounded-md p-3 mb-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium">Data operations (beta)</h3>
           <button className="text-sm text-primary hover:underline" onClick={()=>setOpsOpen(!opsOpen)}>{opsOpen? 'Hide' : 'Show'}</button>
@@ -174,7 +225,8 @@ export default function DatasetsPage(){
             )}
           </div>
         )}
-      </div>
+  </div>
+  )}
       {(role === 'owner') && (
       <div className="border border-gray-200 bg-white rounded-md p-3 mb-3">
          <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
@@ -196,12 +248,12 @@ export default function DatasetsPage(){
                    if(createFile){
                      setUploadingId(d.id)
                      try{
-                       const res = await uploadDatasetFile(projectId, d.id, createFile)
+                       const url = `${(import.meta as any).env?.VITE_API_BASE || '/api'}/projects/${projectId}/datasets/${d.id}/upload`
+                       const res = await uploadWithProgress(url, createFile)
                        setSchema(JSON.stringify(res.schema||res, null, 2))
                        setToast('File uploaded and schema inferred.')
-                     } finally {
-                       setUploadingId(null)
-                     }
+                     } catch(err:any){ setError(err.message) }
+                     finally { setUploadingId(null); setProgressOpen(false) }
                      setCreateFile(null)
                    }
                    if(!createFile){ setToast('Dataset created.') }
@@ -212,8 +264,8 @@ export default function DatasetsPage(){
          </div>
        </div>
       )}
-      {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
-      {toast && <div className="text-sm text-green-700 mb-2">{toast}</div>}
+  {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
+  {toast && <Alert type="success" message={toast} onClose={()=>setToast('')} />}
       <ul className="space-y-3">
         {items.map(d => (
           <li key={d.id} className="border border-gray-200 bg-white rounded-md p-3">
@@ -242,21 +294,29 @@ export default function DatasetsPage(){
                  <input id={`file-d-${d.id}`} className="hidden" type="file" accept=".csv,.xlsx,.xls,.json" onChange={async(e)=>{
                    const file = e.target.files?.[0]; if(!file) return
                    if(file.size > 100*1024*1024){ setError('File too large. Max allowed size is 100 MB.'); e.currentTarget.value=''; return }
-                   try{ setUploadingId(d.id); const res = await uploadDatasetFile(projectId, d.id, file); setSchema(JSON.stringify(res.schema||res, null, 2)); setToast('File uploaded and schema inferred.') }catch(err:any){ setError(err.message) } finally { setUploadingId(null) }
-                   // reset input so same file can be selected again if desired
+                   try{
+                     setUploadingId(d.id)
+                     const url = `${(import.meta as any).env?.VITE_API_BASE || '/api'}/projects/${projectId}/datasets/${d.id}/upload`
+                     const res = await uploadWithProgress(url, file)
+                     setSchema(JSON.stringify(res.schema||res, null, 2))
+                     setToast('File uploaded and schema inferred.')
+                   }catch(err:any){ setError(err.message) }
+                   finally { setUploadingId(null); setProgressOpen(false) }
                    e.currentTarget.value = ''
                  }} />
                  )}
-                {role === 'owner' && (
+                {role === 'owner' && !(d as any).last_upload_at && (
                   <label htmlFor={`file-d-${d.id}`} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 cursor-pointer">
                     {uploadingId === d.id ? 'Uploading…' : 'Upload data'}
                   </label>
                 )}
-                 <button className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={async()=>{
+         <button className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={async()=>{
                    try{
                      const sample = await getDatasetSample(projectId, d.id)
-                     const data = sample.data || []
-                     const cols = sample.columns || []
+           const data = sample.data || []
+           // order columns based on stored schema if present
+           const colsRaw = sample.columns || []
+           const cols = orderColumnsBySchema(colsRaw, d.schema)
                      setPreviews(prev => ({...prev, [d.id]: { data, columns: cols }}))
                      setModalTitle(`Dataset ${d.name}`)
                      setModalRows(data)
@@ -329,66 +389,7 @@ export default function DatasetsPage(){
                </div>
              )}
 
-             {/* Validation & Append */}
-            {(role === 'owner' || role === 'contributor') && (
-            <div className="mt-3 grid gap-2">
-               {/* Preview now opens exclusively in a dialog (no inline table) */}
-               <details className="rounded-md border border-gray-200 bg-white">
-                 <summary className="px-3 py-2 cursor-pointer text-sm font-medium">Business rules (JSON)</summary>
-                 <div className="p-3">
-                   <div className="flex items-center justify-between mb-2">
-                     <div className="text-xs text-gray-600">Rules are stored with the dataset.</div>
-                     <div className="flex gap-2">
-                       <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={()=>{
-                         // load
-                         try{
-                           const txt = (d as any).rules || ''
-                           setRulesEditor(txt || rulesEditor)
-                         }catch{}
-                       }}>Load</button>
-                       <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{
-                         // save
-                         try{
-                           // quick validate JSON
-                           const parsed = JSON.parse(rulesEditor || '[]')
-                           const resp = await updateDataset(projectId, d.id, { name: d.name, schema: d.schema, rules: JSON.stringify(parsed) })
-                           setItems(items.map(x=> x.id===d.id ? { ...x, rules: resp.rules } : x))
-                           setToast('Rules saved.')
-                         }catch(e:any){ setError(e.message || 'Invalid rules JSON') }
-                       }}>Save</button>
-                     </div>
-                   </div>
-                   <textarea className="w-full border border-gray-300 rounded-md px-3 py-2 font-mono text-xs" rows={8} value={rulesEditor} onChange={e=>setRulesEditor(e.target.value)} />
-                 </div>
-               </details>
-               <div className="flex items-center gap-2">
-                 <input id={`append-${d.id}`} type="file" className="hidden" accept=".csv,.xlsx,.xls,.json" onChange={e=> setAppendFile(e.target.files?.[0] || null)} />
-                 <label htmlFor={`append-${d.id}`} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 cursor-pointer">Choose append file</label>
-                 <span className="text-xs text-gray-600 max-w-[16rem] truncate">{appendFile? appendFile.name : 'No file selected'}</span>
-                 <button disabled={!appendFile} className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600 disabled:opacity-60" onClick={async()=>{
-                   if(!appendFile) return
-                   setError(''); setAppendResult(null)
-                   try{
-                     const res = await appendUpload(projectId, d.id, appendFile)
-                     setAppendResult(res)
-                     if(res?.ok){ setToast('Validation passed. Change Request opened.'); setAppendFile(null) }
-                   }catch(e:any){ setError(e.message) }
-                 }}>Validate & open change</button>
-               </div>
-               {appendResult && (
-                 <div className="border border-gray-200 rounded-md bg-white p-3">
-                   {appendResult.ok ? (
-                     <div className="text-green-700 text-sm">Ready for approval. Change Request ID: {appendResult?.change_request?.id}</div>
-                   ) : (
-                     <div>
-                       <div className="text-red-600 text-sm mb-2">Errors detected. Fix and retry.</div>
-                       <pre className="bg-gray-100 p-3 rounded-md text-xs overflow-auto">{JSON.stringify({schema: appendResult.schema, rules: appendResult.rules}, null, 2)}</pre>
-                     </div>
-                   )}
-                 </div>
-               )}
-             </div>
-            )}
+            {/* Append UI removed from project page per UX: use dataset page instead */}
            </li>
         ))}
         <AgGridDialog
@@ -398,8 +399,53 @@ export default function DatasetsPage(){
           rows={modalRows}
           columns={modalCols}
           pageSize={50}
+          allowEdit={false}
+          compact
         />
+        {progressOpen && (
+          <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+            <div className="bg-white rounded-md p-4 w-80 shadow-lg">
+              <div className="text-sm font-medium mb-2">{progressLabel}</div>
+              <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                <div className="h-3 bg-primary" style={{ width: `${progressPct}%` }} />
+              </div>
+              <div className="text-xs text-gray-600 mt-1">{progressPct}%</div>
+            </div>
+          </div>
+        )}
       </ul>
+      {reviewerDialog && selectedDatasetId && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-md p-4 w-[420px] shadow">
+            <div className="text-sm font-medium mb-2">Select reviewer(s)</div>
+            <div className="border border-gray-300 rounded p-2 max-h-40 overflow-auto space-y-1">
+              {approvers.map(a => (
+                <label key={a.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="accent-primary" checked={selectedReviewerIds.includes(a.id)} onChange={(e)=>{
+                    setSelectedReviewerIds(prev => e.target.checked ? Array.from(new Set([...prev, a.id])) : prev.filter(x=>x!==a.id))
+                  }} />
+                  <span>{a.email}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-3 justify-end">
+              <button className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={()=>{ setReviewerDialog(false); setSelectedDatasetId(null) }}>Cancel</button>
+              <button disabled={(selectedReviewerIds.length===0) || !pendingUploadIds[selectedDatasetId!]} className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600 disabled:opacity-60" onClick={async()=>{
+                if(!selectedDatasetId) return
+                setReviewerDialog(false)
+                setError(''); setAppendResult(null)
+                try{
+                  const uploadId = pendingUploadIds[selectedDatasetId]
+                  if(!uploadId){ setError('Missing upload reference. Re-validate.'); return }
+                  const res = await openAppendChangeTop(selectedDatasetId, uploadId, selectedReviewerIds)
+                  setAppendResult(res)
+                  if(res?.ok){ setToast('Change Request opened.'); setAppendFiles(prev=> ({ ...prev, [selectedDatasetId]: null })); setSelectedReviewer(undefined); setSelectedReviewerIds([]); setSelectedDatasetId(null); setPendingUploadIds(prev=> ({ ...prev, [selectedDatasetId]: undefined })) }
+                }catch(e:any){ setError(e.message) }
+              }}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
       {schema && (
         <div className="mt-4">
           <h3 className="text-lg font-semibold mb-2">Inferred schema</h3>

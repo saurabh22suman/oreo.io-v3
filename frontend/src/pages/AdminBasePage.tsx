@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import Alert from '../components/Alert'
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
@@ -61,8 +62,8 @@ export default function AdminBasePage(){
           <div className="flex items-center justify-end mb-2">
             <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={()=>{ setPwd(''); sessionStorage.removeItem('adminPwd'); setUsers([]) }}>Clear password</button>
           </div>
-          {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
-          {status && <div className="text-sm text-green-700 mb-2">{status}</div>}
+          {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
+          {status && <Alert type="success" message={status} onClose={()=>setStatus('')} />}
 
           <div className="border border-gray-200 bg-white rounded-md p-3 mb-3">
             <div className="text-sm font-medium mb-2">Create user</div>

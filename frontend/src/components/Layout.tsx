@@ -34,7 +34,7 @@ export default function Layout({ children }: { children: React.ReactNode }){
           </div>
         )}
         <nav className="space-y-1">
-          {navLink('/', 'Projects')}
+          {token && navLink('/projects', 'Projects')}
           {navLink('/auth', 'Auth')}
           {token && (
             <button

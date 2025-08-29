@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { login, register, me, loginWithGoogleIdToken } from '../api'
 
 export default function AuthPage(){
@@ -6,6 +7,7 @@ export default function AuthPage(){
   const [password, setPassword] = useState('password')
   const [status, setStatus] = useState('')
   const googleBtnRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
 
   useEffect(()=>{
     // Load Google Identity Services script lazily
@@ -47,8 +49,8 @@ export default function AuthPage(){
         <input className="border border-gray-300 rounded-md px-3 py-2" placeholder="email" value={email} onChange={e=>setEmail(e.target.value)} />
         <input className="border border-gray-300 rounded-md px-3 py-2" placeholder="password" type="password" value={password} onChange={e=>setPassword(e.target.value)} />
         <div className="flex gap-2 pt-1">
-          <button className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600" onClick={async()=>{ try{ await register(email,password); setStatus('Registered'); }catch(e:any){ setStatus(e.message) } }}>Register</button>
-          <button className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600" onClick={async()=>{ try{ await login(email,password); setStatus('Logged in'); }catch(e:any){ setStatus(e.message) } }}>Login</button>
+          <button className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600" onClick={async()=>{ try{ await register(email,password); setStatus('Registered'); navigate('/projects'); }catch(e:any){ setStatus(e.message) } }}>Register</button>
+          <button className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600" onClick={async()=>{ try{ await login(email,password); setStatus('Logged in'); navigate('/projects'); }catch(e:any){ setStatus(e.message) } }}>Login</button>
           <button className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={async()=>{ const ok = await me(); setStatus(ok?'Token OK':'Not logged in') }}>Me</button>
         </div>
         <div className="py-2">

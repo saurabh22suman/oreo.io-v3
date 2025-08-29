@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	sqlite "github.com/glebarez/sqlite"
@@ -27,7 +28,7 @@ func setupDatasetsTest(t *testing.T) (token string, projectID uint) {
 	dbpkg.Set(gdb)
 
 	r := SetupRouter()
-	token = authToken(t, r)
+	token = dsAuthToken(t, r)
 
 	// Create project
 	body, _ := json.Marshal(map[string]any{"name": "P1"})
@@ -42,6 +43,32 @@ func setupDatasetsTest(t *testing.T) (token string, projectID uint) {
 	var proj models.Project
 	_ = json.Unmarshal(w.Body.Bytes(), &proj)
 	return token, proj.ID
+}
+
+// authToken registers and logs in a default user to obtain a JWT for protected routes
+func dsAuthToken(t *testing.T, r http.Handler) string {
+	t.Helper()
+	creds := map[string]string{"email": "tester@example.com", "password": "pass1234"}
+	body, _ := json.Marshal(creds)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("login expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+	var lr struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &lr)
+	if lr.Token == "" {
+		t.Fatalf("missing token")
+	}
+	return lr.Token
 }
 
 func TestDatasetsCRUD(t *testing.T) {
@@ -95,6 +122,87 @@ func TestDatasetsCRUD(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("delete ds %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAppendJSONValidateAndOpenTop(t *testing.T) {
+	// Fake python service that always returns valid=true for both schema and rules
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/validate" && r.URL.Path != "/rules/validate" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"valid": true}`))
+	}))
+	defer fake.Close()
+	os.Setenv("PYTHON_SERVICE_URL", fake.URL)
+	defer os.Unsetenv("PYTHON_SERVICE_URL")
+
+	// DB with necessary tables
+	gdb, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	_ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.ProjectRole{}, &models.Dataset{}, &models.DatasetUpload{}, &models.ChangeRequest{}, &models.DatasetMeta{})
+	dbpkg.Set(gdb)
+
+	r := SetupRouter()
+	token := dsAuthToken(t, r)
+
+	// Create project
+	body, _ := json.Marshal(map[string]any{"name": "P1"})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/projects", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("project create %d %s", w.Code, w.Body.String())
+	}
+	var proj models.Project
+	_ = json.Unmarshal(w.Body.Bytes(), &proj)
+
+	// Create dataset
+	body, _ = json.Marshal(map[string]any{"name": "DS1", "schema": "{}"})
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/projects/"+itoa(proj.ID)+"/datasets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create ds %d %s", w.Code, w.Body.String())
+	}
+
+	// Validate edited JSON via top-level endpoint
+	rows := []map[string]any{{"id": 1, "name": "Alice"}}
+	vbody, _ := json.Marshal(map[string]any{"rows": rows, "filename": "edited.json"})
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/datasets/1/data/append/json/validate", bytes.NewReader(vbody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("json validate %d %s", w.Code, w.Body.String())
+	}
+	var vr struct {
+		Ok       bool `json:"ok"`
+		UploadID uint `json:"upload_id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &vr); err != nil || !vr.Ok || vr.UploadID == 0 {
+		t.Fatalf("unexpected validate resp: %s", w.Body.String())
+	}
+
+	// Open change with a reviewer (self)
+	openBody := `{"upload_id": ` + strings.TrimSpace(itoa(uint(vr.UploadID))) + `, "reviewer_ids": [1]}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/datasets/1/data/append/open", bytes.NewBufferString(openBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code < 200 || w.Code > 299 {
+		t.Fatalf("open change %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "\"ok\":true") {
+		t.Fatalf("unexpected open resp: %s", w.Body.String())
 	}
 }
 

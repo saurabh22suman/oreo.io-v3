@@ -25,3 +25,4 @@ python-service/.ruff_cache/
 
 # Docker
 *.local.yml
+\n# npm cache\nfrontend/.npm-cache/\n
