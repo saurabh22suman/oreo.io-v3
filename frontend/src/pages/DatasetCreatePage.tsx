@@ -42,14 +42,14 @@ export default function DatasetCreatePage(){
         <Link to={`/projects/${projectId}`} className="text-sm text-primary hover:underline">Back</Link>
       </div>
   {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
-      <div className="border border-gray-200 bg-white rounded-md p-4 grid gap-3">
+  <div className="border border-gray-200 bg-white p-4 grid gap-3">
         <div>
           <label className="text-sm text-gray-700">Dataset name</label>
-          <input className="w-full border border-gray-300 rounded-md px-3 py-2 mt-1" placeholder="e.g. users" value={name} onChange={e=>setName(e.target.value)} />
+          <input className="w-full border border-gray-300 px-3 py-2 mt-1" placeholder="e.g. users" value={name} onChange={e=>setName(e.target.value)} />
         </div>
         <div>
           <label className="text-sm text-gray-700">Source</label>
-          <select className="w-full border border-gray-300 rounded-md px-3 py-2 mt-1" value={source} onChange={e=>setSource(e.target.value as any)}>
+          <select className="w-full border border-gray-300 px-3 py-2 mt-1" value={source} onChange={e=>setSource(e.target.value as any)}>
             <option value="local">Local uploads</option>
             <option value="s3">Amazon S3</option>
             <option value="azure">Azure Blob</option>

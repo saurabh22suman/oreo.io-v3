@@ -93,17 +93,34 @@ func Login(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "token"})
 		return
 	}
+
+	// Cookie flags: allow optional COOKIE_SECURE env to control Secure flag
+	secure := false
+	if os.Getenv("COOKIE_SECURE") == "true" {
+		secure = true
+	}
+	// Set httpOnly cookie named "session" with the JWT
+	// MaxAge in seconds (24h)
+	c.SetCookie("session", s, 24*3600, "/", "", secure, true)
+
+	// Also return token in body for backward compatibility
 	c.JSON(200, gin.H{"token": s})
 }
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		auth := c.GetHeader("Authorization")
-		if len(auth) < 8 || auth[:7] != "Bearer " {
-			c.AbortWithStatusJSON(401, gin.H{"error": "missing_token"})
-			return
+		var tokenStr string
+		// Prefer cookie 'session' if present
+		if cookie, err := c.Cookie("session"); err == nil && cookie != "" {
+			tokenStr = cookie
+		} else {
+			auth := c.GetHeader("Authorization")
+			if len(auth) < 8 || auth[:7] != "Bearer " {
+				c.AbortWithStatusJSON(401, gin.H{"error": "missing_token"})
+				return
+			}
+			tokenStr = auth[7:]
 		}
-		tokenStr := auth[7:]
 		secret := os.Getenv("JWT_SECRET")
 		if secret == "" {
 			secret = "dev-secret"
@@ -120,6 +137,18 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// Logout clears the session cookie
+func Logout(c *gin.Context) {
+	// Clear cookie. For dev, Secure=false; in prod set COOKIE_SECURE=true
+	secure := false
+	if os.Getenv("COOKIE_SECURE") == "true" {
+		secure = true
+	}
+	// MaxAge -1 instructs browser to delete cookie
+	c.SetCookie("session", "", -1, "/", "", secure, true)
+	c.JSON(200, gin.H{"ok": true})
 }
 
 func Refresh(c *gin.Context) {
@@ -251,5 +280,11 @@ func GoogleLogin(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "token"})
 		return
 	}
+	// Set cookie like Login
+	secure := false
+	if os.Getenv("COOKIE_SECURE") == "true" {
+		secure = true
+	}
+	c.SetCookie("session", s, 24*3600, "/", "", secure, true)
 	c.JSON(200, gin.H{"token": s})
 }

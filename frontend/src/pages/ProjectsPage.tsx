@@ -1,30 +1,51 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { createProject, listProjects } from '../api'
-import Alert from '../components/Alert'
+import React, { useEffect, useState } from 'react'
+import ProjectCard from '../components/ProjectCard'
+import ProjectModal from '../components/ProjectModal'
+import { listProjects } from '../api'
 
-type Project = { id:number; name:string }
+type Project = {
+  id: string
+  name: string
+  description?: string
+}
 
-export default function ProjectsPage(){
-  const [items, setItems] = useState<Project[]>([])
-  const [name, setName] = useState('')
-  const [error, setError] = useState('')
-  useEffect(()=>{ (async()=>{ try{ setItems(await listProjects()) }catch(e:any){ setError(e.message) } })() }, [])
+export default function ProjectsPage() {
+  const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(true)
+  const [open, setOpen] = useState(false)
+
+  async function load() {
+    setLoading(true)
+    try {
+      const data = await listProjects()
+      setProjects(data || [])
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
   return (
-    <div className="max-w-3xl mx-auto">
-      <h2 className="text-xl font-semibold mb-4">Projects</h2>
-      <div className="flex gap-2 mb-3">
-        <input className="border border-gray-300 rounded-md px-3 py-2 flex-1" placeholder="New project name" value={name} onChange={e=>setName(e.target.value)} />
-        <button className="rounded-md bg-primary text-white px-3 py-2 text-sm hover:bg-indigo-600" onClick={async()=>{ try{ const p = await createProject(name); setItems([p, ...items]); setName('') }catch(e:any){ setError(e.message) } }}>Create</button>
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">My Projects</h1>
+        <button onClick={() => setOpen(true)} className="px-4 py-2 bg-slate-800 text-white font-bold rounded-md">+ Create Project</button>
       </div>
-  {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
-      <ul className="space-y-2">
-        {items.map(p => (
-          <li key={p.id} className="border border-gray-200 bg-white rounded-md px-3 py-2 hover:bg-gray-50">
-            <Link className="text-sm font-medium text-gray-800 hover:text-primary" to={`/projects/${p.id}`}>{p.name}</Link>
-          </li>
-        ))}
-      </ul>
+
+      {loading ? (
+        <div>Loading...</div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {projects.map(p => (
+            <ProjectCard key={p.id} project={p} />
+          ))}
+        </div>
+      )}
+
+      <ProjectModal open={open} onClose={() => setOpen(false)} onCreate={() => load()} />
     </div>
   )
 }

@@ -10,6 +10,87 @@ html, body, #root {
 }
 body { background-color: rgb(249 250 251); color: rgb(17 24 39); }
 
+/* Design language overrides: sharp, materialized, flat */
+:root{
+  --bg-surface: #ffffff;
+  --bg-page: #f7f7fb;
+  --divider: #e6e6ef;
+  --primary: #5b21b6; /* indigo-700 */
+  --muted: #6b7280;
+}
+
+body { background-color: var(--bg-page); color: #111827; font-weight: 500 }
+
+/* Remove soft shadows used across app and prefer flat borders */
+.shadow, .shadow-sm, .shadow-md, .shadow-lg { box-shadow: none !important }
+
+/* Replace rounded corners with straight edges for material-like UI */
+.rounded, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-full, .rounded-md { border-radius: 0 !important }
+
+/* Card style: flat, bold header, clear divider */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--divider);
+  padding: 1rem;
+}
+
+.card-title { font-weight: 700; color: #0f172a }
+
+/* Sidebar styling: stronger contrast and flat divider */
+.sidebar {
+  background: #ffffff;
+  border-right: 2px solid var(--divider);
+}
+
+/* Navbar: flat and bold */
+.topbar { background: #ffffff; border-bottom: 2px solid var(--divider) }
+
+/* Buttons: material flat style */
+.btn-primary { background: var(--primary); color: white; border: none }
+.btn-ghost { background: transparent; border: 1px solid transparent }
+
+/* Theme palette additions */
+:root{
+  --mauve: #E0B0FF;
+  --goodtax: #C9A0FF;
+  --lilac: #B65FCF;
+  --brand-blue: #3B82F6;
+}
+
+/* Sidebar collapse animation */
+.sidebar{ transition: width 260ms cubic-bezier(.22,.9,.3,1), transform 180ms ease }
+
+/* Responsive layout helper: use CSS grid for sidebar + main content */
+:root { --sidebar-width: 16rem /* 256px default */; --sidebar-collapsed: 5rem /* 80px */ }
+.layout-with-sidebar {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+  gap: 0;
+  transition: grid-template-columns 260ms cubic-bezier(.22,.9,.3,1);
+}
+.layout-with-sidebar.collapsed {
+  grid-template-columns: var(--sidebar-collapsed) 1fr;
+}
+.layout-with-sidebar .sidebar { height: calc(100vh - 64px); /* leave room for topbar */ overflow: auto }
+.layout-with-sidebar .main { min-height: calc(100vh - 64px); }
+
+/* Global straight-edge form controls */
+input, textarea, select, button {
+  border-radius: 0 !important;
+}
+
+/* Keep small pill badges rounded intentionally */
+.badge-pill { border-radius: 9999px }
+
+/* subtle hover shadow for landing visuals */
+.hover-shadow { transition: box-shadow 160ms ease, transform 160ms ease }
+.hover-shadow:hover { box-shadow: 0 6px 18px rgba(11,11,11,0.08); transform: translateY(-4px) }
+
+/* Stronger typography and spacing to match enterprise dashboards */
+h1, h2, h3 { font-weight: 700 }
+.muted-small { color: var(--muted); font-size: 0.875rem }
+
+
 /* Accessible visually-hidden text helper */
 .sr-only {
   position: absolute;
@@ -21,4 +102,16 @@ body { background-color: rgb(249 250 251); color: rgb(17 24 39); }
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Mascot bounce animation */
+.mascot-bounce {
+  animation: mascot-bounce 680ms cubic-bezier(.22,.9,.3,1);
+}
+
+@keyframes mascot-bounce {
+  0% { transform: translateY(18px) scale(.98); opacity: 0 }
+  30% { transform: translateY(-6px) scale(1.02); opacity: 1 }
+  60% { transform: translateY(2px) scale(0.995) }
+  100% { transform: translateY(0) scale(1) }
 }
