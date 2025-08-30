@@ -40,7 +40,8 @@ export default function ProjectModal({ open, onClose, onCreate }: Props) {
           <form className="mt-4" onSubmit={handleSubmit}>
             <div className="mb-3">
               <label className="block text-sm font-medium mb-1">Project Name</label>
-              <input required value={name} onChange={e => setName(e.target.value)} className="w-full border px-3 py-2" />
+              <input required value={name} maxLength={20} onChange={e => setName(e.target.value)} className="w-full border px-3 py-2" />
+              <div className="text-xs text-slate-400 mt-1">{20 - name.length} characters remaining</div>
             </div>
             <div className="mb-3">
               <label className="block text-sm font-medium mb-1">Project Description</label>

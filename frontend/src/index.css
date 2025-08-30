@@ -47,7 +47,7 @@ body { background-color: var(--bg-page); color: #111827; font-weight: 500 }
 .topbar { background: #ffffff; border-bottom: 2px solid var(--divider) }
 
 /* Buttons: material flat style */
-.btn-primary { background: var(--primary); color: white; border: none }
+.btn-primary { background: #4f46e5; color: white; border: none }
 .btn-primary.bold { font-weight: 700; padding: 0.5rem 0.75rem; }
 .btn-ghost { background: transparent; border: 1px solid transparent }
 
@@ -123,33 +123,35 @@ h1, h2, h3 { font-weight: 700 }
 
 /* Project card glassmorphism / rounded design */
 .project-card {
-  background: linear-gradient(180deg, rgba(255,255,255,0.75), rgba(250,250,255,0.6));
-  border: 1px solid rgba(255,255,255,0.6);
-  transition: transform 260ms cubic-bezier(.22,.9,.3,1), box-shadow 260ms ease;
+  /* more subtle glass effect */
+  background: linear-gradient(180deg, rgba(255,255,255,0.90), rgba(250,250,255,0.85));
+  border: 1px solid rgba(255,255,255,0.5);
+  transition: transform 240ms cubic-bezier(.22,.9,.3,1), box-shadow 240ms ease, opacity 180ms ease;
 }
-.project-card:hover { transform: translateY(-6px); box-shadow: 0 12px 30px rgba(13,16,60,0.08) }
+.project-card:hover { transform: translateY(-4px); box-shadow: 0 8px 18px rgba(13,16,60,0.06) }
 
 .project-card .header {
-  background: linear-gradient(90deg, #4f46e5, #3b82f6 70%);
+  /* softened blue gradient */
+  background: linear-gradient(90deg, rgba(75,85,240,0.88), rgba(59,130,246,0.86));
 }
 
-.avatar-placeholder { font-weight: 700 }
+.avatar-placeholder { font-weight: 700; background: rgba(255,255,255,0.18) }
 
 /* CTA button with subtle glass gradient and hover lift */
 .cta-btn {
-  background: linear-gradient(90deg, rgba(59,130,246,0.95), rgba(99,102,241,0.95));
-  color: white; border: none; box-shadow: 0 6px 18px rgba(59,130,246,0.14);
-  transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+  background: linear-gradient(90deg, rgba(59,130,246,0.9), rgba(99,102,241,0.8));
+  color: white; border: none; box-shadow: 0 6px 14px rgba(59,130,246,0.08);
+  transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
 }
-.cta-btn:hover { transform: translateY(-3px); box-shadow: 0 18px 36px rgba(59,130,246,0.12) }
+.cta-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(59,130,246,0.08) }
 
 /* Create CTA more prominent */
-.create-cta { background: linear-gradient(90deg,#5b21b6,#3b82f6); color: white; font-weight: 700 }
-.create-cta:hover { transform: translateY(-4px) }
+.create-cta { background: linear-gradient(90deg, rgba(91,33,182,0.92), rgba(59,130,246,0.88)); color: white; font-weight: 700 }
+.create-cta:hover { transform: translateY(-3px) }
 
 /* Entrance animation for project cards */
 @keyframes cardFadeIn {
-  from { opacity: 0; transform: translateY(8px) scale(.995) }
+  from { opacity: 0; transform: translateY(6px) scale(.998) }
   to { opacity: 1; transform: translateY(0) scale(1) }
 }
 
@@ -158,3 +160,42 @@ h1, h2, h3 { font-weight: 700 }
   .layout-with-sidebar { grid-template-columns: 1fr }
   .project-card { padding: 14px }
 }
+
+/* Projects table style */
+.projects-table table { border-collapse: collapse }
+.projects-table thead tr { background: linear-gradient(90deg, rgba(245,247,250,1), rgba(250,251,255,1)); }
+.projects-table tbody tr:hover { background: rgba(59,130,246,0.03) }
+.sort-btn { background: transparent; border: none; cursor: pointer; color: var(--brand-blue); font-weight: 600 }
+
+/* Compact table rows */
+.projects-table td.p-2, .projects-table th.p-3 { padding-top: 0.5rem; padding-bottom: 0.5rem }
+.projects-table td.compact { padding-top: 0.4rem; padding-bottom: 0.4rem }
+
+/* Make entire row clickable */
+.row-clickable { cursor: pointer }
+.row-clickable:hover { background: rgba(59,130,246,0.04) }
+
+/* Truncate long project names in table and provide keyboard focus outline */
+.projects-table .name-cell.truncate {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-clickable:focus { outline: 2px solid rgba(59,130,246,0.24); outline-offset: 2px }
+
+/* Column resizer handle */
+.resizer { width: 10px; height: 28px; display: inline-block; cursor: col-resize; margin-left: 8px; background: transparent }
+.projects-table th { position: relative }
+.resizer { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+
+/* Column percentage widths for Projects table */
+.projects-table .name-col { width: 50%; max-width: 50%; }
+.projects-table th[style] { /* inline widths allowed - keep for explicit per-column overrides */ }
+.projects-table th:nth-child(1) { width: 50% }
+.projects-table th:nth-child(2) { width: 15% }
+.projects-table th:nth-child(3) { width: 35% }
+
+/* Layout with sidebar adjustments when included on pages */
+.layout-with-sidebar { display: grid; grid-template-columns: 16rem 1fr; gap: 0 }
+.layout-with-sidebar > main { padding-left: 1.5rem }

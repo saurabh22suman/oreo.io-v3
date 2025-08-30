@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import Sidebar from '../components/Sidebar'
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
 import { approveChange, getDataset, getDatasetSample, getDatasetStatsTop, getProject, listChanges, rejectChange, myProjectRole, currentUser, withdrawChange } from '../api'
 import AgGridDialog from '../components/AgGridDialog'
@@ -45,8 +46,14 @@ export default function DatasetDetailsPage(){
 
   const owner = useMemo(()=> stats?.owner_name || project?.owner_email || project?.owner || '', [stats, project])
 
+  const [collapsed, setCollapsed] = useState(false)
+
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="bg-gray-50 min-h-screen flex flex-col">
+      <div className={`flex-1 layout-with-sidebar ${collapsed ? 'collapsed' : ''}`}>
+        <div className="sidebar-slot"><Sidebar collapsed={collapsed} setCollapsed={setCollapsed} /></div>
+        <main className="main p-6">
+          <div className="max-w-6xl mx-auto">
       <div className="mb-3 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Project: {project?.name || projectId}</h2>
@@ -181,6 +188,9 @@ export default function DatasetDetailsPage(){
       />
 
   {/* Append reviewer selection moved to append flow page */}
+          </div>
+        </main>
+      </div>
     </div>
   )
 }
