@@ -52,8 +52,8 @@ export default function DatasetDetailsPage(){
     <div className="bg-gray-50 min-h-screen flex flex-col">
       <div className={`flex-1 layout-with-sidebar ${collapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-slot"><Sidebar collapsed={collapsed} setCollapsed={setCollapsed} /></div>
-        <main className="main p-6">
-          <div className="max-w-6xl mx-auto">
+        <main className="main p-8">
+          <div className="max-w-7xl mx-auto">
       <div className="mb-3 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Project: {project?.name || projectId}</h2>

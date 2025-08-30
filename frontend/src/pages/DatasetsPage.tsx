@@ -3,7 +3,7 @@ import Sidebar from '../components/Sidebar'
 import AgGridDialog from '../components/AgGridDialog'
 import Alert from '../components/Alert'
 import { orderColumnsBySchema } from '../utils/columnOrder'
-import { NavLink, useParams, Link } from 'react-router-dom'
+import { NavLink, useParams, Link, useNavigate } from 'react-router-dom'
 import { createDataset, deleteDataset, getProject, listDatasets, updateDataset, uploadDatasetFile, validateData, transformData, exportData, getDatasetSample, listMembers, appendDatasetDataTop, openAppendChangeTop } from '../api'
 import { myProjectRole } from '../api'
 
@@ -14,7 +14,10 @@ export default function DatasetsPage(){
   const projectId = Number(id)
   const [project, setProject] = useState<any>(null)
   const [items, setItems] = useState<Dataset[]>([])
+  const nav = useNavigate()
   const [role, setRole] = useState<'owner'|'contributor'|'approver'|'viewer'|null>(null)
+  const [sortBy, setSortBy] = useState<'name'|'type'|'modified'>('name')
+  const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc')
   const [name, setName] = useState('')
   const [createFile, setCreateFile] = useState<File|null>(null)
   const [error, setError] = useState('')
@@ -104,13 +107,11 @@ export default function DatasetsPage(){
     <div className="bg-gray-50 min-h-screen flex flex-col">
       <div className={`flex-1 layout-with-sidebar ${collapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-slot"><Sidebar collapsed={collapsed} setCollapsed={setCollapsed} /></div>
-        <main className="main p-6">
-          <div className="max-w-4xl mx-auto">
+        <main className="main p-8">
+          <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xl font-semibold">Project: {project?.name || projectId}</h2>
-              {(role === 'owner') && (
-                <Link to={`/projects/${projectId}/datasets/new`} className="btn-primary bold px-3 py-1.5 text-sm">New dataset (flow)</Link>
-              )}
+              <Link to={`/projects/${projectId}/datasets/new`} className="btn-primary bold px-3 py-1.5 text-sm">New dataset (flow)</Link>
             </div>
 
             <div className="mb-4 border-b border-gray-200">
@@ -118,6 +119,84 @@ export default function DatasetsPage(){
                 <NavLink to={`/projects/${projectId}`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Datasets</NavLink>
                 <NavLink to={`/projects/${projectId}/members`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Members</NavLink>
               </nav>
+            </div>
+
+            {/* Action cards below project name */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <Link to={`/projects/${projectId}/datasets/new`} aria-label="Create dataset" className="project-card hover-shadow p-3 flex flex-col items-center justify-center text-center min-h-[120px]">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 opacity-80">
+                  <rect x="3" y="3" width="18" height="14" rx="2" stroke="#3B82F6" strokeWidth="1.5" fill="rgba(59,130,246,0.06)" />
+                  <path d="M7 17v2h10v-2" stroke="#3B82F6" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <div className="text-base font-semibold text-brand-blue">Dataset</div>
+              </Link>
+
+              <Link to={`/projects/${projectId}/query`} aria-label="Open query" className="project-card hover-shadow p-3 flex flex-col items-center justify-center text-center min-h-[120px]">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 opacity-80">
+                  <circle cx="12" cy="8" r="3" stroke="#3B82F6" strokeWidth="1.5" fill="rgba(59,130,246,0.06)" />
+                  <path d="M5 20c1.5-2 4-3 7-3s5.5 1 7 3" stroke="#3B82F6" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <div className="text-base font-semibold text-brand-blue">Query</div>
+              </Link>
+
+              <Link to={`/projects/${projectId}/dashboard`} aria-label="Open dashboard" className="project-card hover-shadow p-3 flex flex-col items-center justify-center text-center min-h-[120px]">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 opacity-80">
+                  <rect x="4" y="6" width="6" height="12" rx="1" stroke="#3B82F6" strokeWidth="1.4" fill="rgba(59,130,246,0.06)" />
+                  <rect x="10" y="9" width="4" height="9" rx="1" stroke="#3B82F6" strokeWidth="1.4" fill="rgba(59,130,246,0.06)" />
+                  <rect x="14" y="12" width="6" height="6" rx="1" stroke="#3B82F6" strokeWidth="1.4" fill="rgba(59,130,246,0.06)" />
+                </svg>
+                <div className="text-base font-semibold text-brand-blue">Dashboard</div>
+              </Link>
+
+              <Link to={`/projects/${projectId}/audit`} aria-label="Open audit" className="project-card hover-shadow p-3 flex flex-col items-center justify-center text-center min-h-[120px]">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 opacity-80">
+                  <path d="M12 3v6" stroke="#3B82F6" strokeWidth="1.6" strokeLinecap="round"/>
+                  <circle cx="12" cy="15" r="4" stroke="#3B82F6" strokeWidth="1.5" fill="rgba(59,130,246,0.06)" />
+                </svg>
+                <div className="text-base font-semibold text-brand-blue">Audit</div>
+              </Link>
+            </div>
+
+            {/* Quick links table */}
+            <div className="border border-gray-200 bg-white rounded-md p-3 mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <div className="font-medium">Quick links</div>
+              </div>
+              <div className="overflow-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="text-left text-sm text-slate-600">
+                      <th className="p-3">
+                        <button className="sort-btn" onClick={() => { setSortBy('name'); setSortDir(sortBy==='name' && sortDir==='asc' ? 'desc' : 'asc') }}>Name</button>
+                      </th>
+                      <th className="p-3 text-right">
+                        <button className="sort-btn" onClick={() => { setSortBy('type'); setSortDir(sortBy==='type' && sortDir==='asc' ? 'desc' : 'asc') }}>Type</button>
+                      </th>
+                      <th className="p-3 text-right">
+                        <button className="sort-btn" onClick={() => { setSortBy('modified'); setSortDir(sortBy==='modified' && sortDir==='asc' ? 'desc' : 'asc') }}>Last modified</button>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const copy = [...items]
+                      copy.sort((a,b) => {
+                        if (sortBy === 'name') return sortDir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
+                        if (sortBy === 'type') return sortDir === 'asc' ? ((a.schema||'').localeCompare(b.schema||'')) : ((b.schema||'').localeCompare(a.schema||''))
+                        if (sortBy === 'modified') return sortDir === 'asc' ? (new Date(a.last_upload_at||0).getTime() - new Date(b.last_upload_at||0).getTime()) : (new Date(b.last_upload_at||0).getTime() - new Date(a.last_upload_at||0).getTime())
+                        return 0
+                      })
+                      return copy.map(d => (
+                        <tr key={d.id} className="border-t row-clickable" onClick={() => nav(`/projects/${projectId}/datasets/${d.id}`)} tabIndex={0} role="button">
+                          <td className="p-2"> <div className="font-semibold text-slate-800 name-cell truncate" title={d.name}>{d.name}</div></td>
+                          <td className="p-2 text-right">{d.schema ? 'Table' : 'File'}</td>
+                          <td className="p-2 text-right">{d.last_upload_at ? new Date(d.last_upload_at).toLocaleString() : '—'}</td>
+                        </tr>
+                      ))
+                    })()}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             {/* Data operations panel (beta) temporarily disabled */}
@@ -160,13 +239,7 @@ export default function DatasetsPage(){
             {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
             {toast && <Alert type="success" message={toast} onClose={()=>setToast('')} />}
 
-            <ul className="space-y-3">
-              {items.map(d => (
-                <li key={d.id} className="card p-3 min-h-[80px]">
-                  {/* ...dataset list item... */}
-                </li>
-              ))}
-            </ul>
+            {/* Older inline dataset list removed — quick links table above replaces it */}
 
           </div>
         </main>
