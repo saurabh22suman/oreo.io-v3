@@ -64,22 +64,22 @@ export default function DatasetCreatePage(){
                 if(!db){ setDb(slugifyDbName(project?.name || '')) }
               }}>Reset to project</button>
             </div>
-            <input className="w-full border border-gray-300 rounded-md px-3 py-2 mt-1" value={db} onChange={e=>setDb(e.target.value)} placeholder={slugifyDbName(project?.name || '')} />
+            <input className="w-full border border-gray-300 px-3 py-2 mt-1" value={db} onChange={e=>setDb(e.target.value)} placeholder={slugifyDbName(project?.name || '')} />
           </div>
           <div>
             <label className="text-sm text-gray-700">Schema</label>
-            <input className="w-full border border-gray-300 rounded-md px-3 py-2 mt-1" value={schema} onChange={e=>setSchema(e.target.value)} placeholder="public" />
+            <input className="w-full border border-gray-300 px-3 py-2 mt-1" value={schema} onChange={e=>setSchema(e.target.value)} placeholder="public" />
           </div>
           <div>
             <label className="text-sm text-gray-700">Table</label>
-            <input className="w-full border border-gray-300 rounded-md px-3 py-2 mt-1" value={table} onChange={e=>setTable(e.target.value)} placeholder="users" />
+            <input className="w-full border border-gray-300 px-3 py-2 mt-1" value={table} onChange={e=>setTable(e.target.value)} placeholder="users" />
           </div>
         </div>
         <div className="text-xs text-gray-600">Target table will be <span className="font-mono">{targetPreview}</span></div>
         <div className="flex gap-2">
           <button
             disabled={!name || !table || creating}
-            className="rounded-md bg-primary text-white px-4 py-2 text-sm hover:bg-indigo-600 disabled:opacity-60"
+            className="btn-primary bold px-4 py-2 text-sm disabled:opacity-60"
             onClick={async()=>{
               if(!name || !table) return
               setError(''); setCreating(true)
@@ -92,7 +92,7 @@ export default function DatasetCreatePage(){
               }catch(e:any){ setError(e.message) } finally { setCreating(false) }
             }}
           >Create dataset</button>
-          <button className="rounded-md border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50" onClick={()=>nav(-1)}>Cancel</button>
+          <button className="border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50" onClick={()=>nav(-1)}>Cancel</button>
         </div>
       </div>
     </div>

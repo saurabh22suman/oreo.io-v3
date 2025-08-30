@@ -71,7 +71,7 @@ export default function AuthForm({ type, onSubmit, switchForm }: { type: 'login'
         <button type="button" className="text-xs text-indigo-600 hover:underline">Forgot password?</button>
       </div>
 
-  <button type="submit" className="bg-indigo-600 text-white py-2 font-semibold hover:bg-indigo-700 transition">
+  <button type="submit" className="btn-primary bold w-full">
         {type === 'login' ? 'Sign in' : 'Create account'}
       </button>
 

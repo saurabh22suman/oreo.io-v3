@@ -102,7 +102,7 @@ export default function DatasetsPage(){
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-xl font-semibold">Project: {project?.name || projectId}</h2>
         {(role === 'owner') && (
-          <Link to={`/projects/${projectId}/datasets/new`} className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600">New dataset (flow)</Link>
+          <Link to={`/projects/${projectId}/datasets/new`} className="btn-primary bold px-3 py-1.5 text-sm">New dataset (flow)</Link>
         )}
       </div>
       
@@ -239,7 +239,7 @@ export default function DatasetsPage(){
              <span className="text-xs text-gray-600 max-w-[16rem] truncate">{createFile ? createFile.name : 'Optional: attach data file'}</span>
              <button
                disabled={!name || creating}
-               className="rounded-md bg-primary text-white px-3 py-2 text-sm hover:bg-indigo-600 disabled:opacity-60"
+               className="btn-primary bold px-3 py-2 text-sm disabled:opacity-60"
                onClick={async()=>{
                  setError(''); if(!name) return; setCreating(true)
                  try{
@@ -268,7 +268,7 @@ export default function DatasetsPage(){
   {toast && <Alert type="success" message={toast} onClose={()=>setToast('')} />}
       <ul className="space-y-3">
         {items.map(d => (
-          <li key={d.id} className="border border-gray-200 bg-white rounded-md p-3">
+          <li key={d.id} className="card p-3 min-h-[80px]">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               {role === 'viewer' ? (
                 <div className="flex-1 flex items-center gap-2">

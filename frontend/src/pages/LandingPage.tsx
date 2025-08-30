@@ -17,7 +17,7 @@ export default function LandingPage() {
             </div>
             <p className="text-lg text-gray-600 mb-6">Modern, secure, and collaborative data platform for teams.</p>
             <div className="flex flex-wrap gap-3 items-center">
-              <a href="/register" className="inline-block bg-indigo-600 text-white rounded-2xl px-8 py-3 font-semibold shadow hover:bg-indigo-700 transition">Create account</a>
+              <a href="/register" className="inline-block btn-primary bold px-8 py-3 font-semibold">Create account</a>
               <a href="/docs" className="inline-block text-indigo-700 rounded-2xl px-4 py-2 font-medium hover:underline">Read docs</a>
             </div>
             <div className="mt-6 inline-flex items-center gap-3 text-sm text-gray-600">
@@ -46,7 +46,7 @@ export default function LandingPage() {
           </ol>
         </section>
         <section className="text-center">
-          <a href="/register" className="inline-block bg-indigo-600 text-white rounded-2xl px-8 py-3 font-semibold shadow hover:bg-indigo-700 transition">Get started — it's free</a>
+          <a href="/register" className="inline-block btn-primary bold px-8 py-3 font-semibold">Get started — it's free</a>
         </section>
       </main>
       <Footer />

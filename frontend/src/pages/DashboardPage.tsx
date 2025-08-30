@@ -39,8 +39,8 @@ export default function DashboardPage() {
                 <p className="text-sm text-gray-500 mt-1">Here's what's happening with your workspace today.</p>
               </div>
               <div className="flex items-center gap-3">
-                {projects.length > 0 && (<button onClick={() => navigate('/projects')} className="bg-white border border-gray-200 px-3 py-2 rounded-xl hover:shadow">Resume Previous Project</button>)}
-                <button onClick={() => navigate('/projects')} className="bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700">Create New Project</button>
+                {projects.length > 0 && (<button onClick={() => navigate('/projects')} className="border border-gray-200 px-3 py-2 hover:shadow">Resume Previous Project</button>)}
+                <button onClick={() => navigate('/projects')} className="btn-primary bold px-4 py-2">Create New Project</button>
               </div>
             </div>
 
@@ -81,15 +81,15 @@ export default function DashboardPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {projects.map(p => (
-                        <div key={p.id} className="border border-gray-200 bg-white p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="font-semibold text-gray-800">{p.name}</div>
-                            <div className="text-xs text-gray-400">{p.datasets_count || 0} datasets</div>
+                        <div key={p.id} className="card p-4 min-h-[120px]">
+                          <div className="flex items-center justify-between h-full">
+                            <div>
+                              <div className="font-semibold text-gray-800">{p.name}</div>
+                              <div className="text-xs text-gray-400">{p.datasets_count || 0} datasets</div>
+                            </div>
+                            <div className="text-sm text-gray-500">{p.updated_at ? new Date(p.updated_at).toLocaleDateString() : ''}</div>
                           </div>
-                          <div className="text-sm text-gray-500">{p.updated_at ? new Date(p.updated_at).toLocaleDateString() : ''}</div>
                         </div>
-                      </div>
                     ))}
                   </div>
                 </div>

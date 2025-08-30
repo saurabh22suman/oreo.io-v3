@@ -2,12 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* App base styles */
 .bg-primary { background-color: rgb(99 102 241); }
 
-/* App base styles */
 html, body, #root {
   height: 100%;
 }
+
 body { background-color: rgb(249 250 251); color: rgb(17 24 39); }
 
 /* Design language overrides: sharp, materialized, flat */
@@ -15,7 +16,7 @@ body { background-color: rgb(249 250 251); color: rgb(17 24 39); }
   --bg-surface: #ffffff;
   --bg-page: #f7f7fb;
   --divider: #e6e6ef;
-  --primary: #5b21b6; /* indigo-700 */
+  --primary: #3B82F6; /* brand blue */
   --muted: #6b7280;
 }
 
@@ -47,6 +48,7 @@ body { background-color: var(--bg-page); color: #111827; font-weight: 500 }
 
 /* Buttons: material flat style */
 .btn-primary { background: var(--primary); color: white; border: none }
+.btn-primary.bold { font-weight: 700; padding: 0.5rem 0.75rem; }
 .btn-ghost { background: transparent; border: 1px solid transparent }
 
 /* Theme palette additions */
@@ -56,6 +58,9 @@ body { background-color: var(--bg-page); color: #111827; font-weight: 500 }
   --lilac: #B65FCF;
   --brand-blue: #3B82F6;
 }
+
+/* Apply primary/brand globally for links only */
+a, .link { color: var(--brand-blue) }
 
 /* Sidebar collapse animation */
 .sidebar{ transition: width 260ms cubic-bezier(.22,.9,.3,1), transform 180ms ease }

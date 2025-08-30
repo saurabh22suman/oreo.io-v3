@@ -122,7 +122,7 @@ export default function DatasetDetailsPage(){
         <div className="border border-gray-200 bg-white rounded-md p-3">
           <div className="text-sm font-medium mb-2">Append new data</div>
           <div className="flex items-center gap-2 mb-2">
-            <Link to={`/projects/${projectId}/datasets/${dsId}/append`} className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600">Open append flow</Link>
+            <Link to={`/projects/${projectId}/datasets/${dsId}/append`} className="btn-primary bold px-3 py-1.5 text-sm">Open append flow</Link>
             <span className="text-xs text-gray-600">Upload, edit, preview, and submit for approval</span>
           </div>
 

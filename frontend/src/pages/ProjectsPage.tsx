@@ -30,9 +30,19 @@ export default function ProjectsPage() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">My Projects</h1>
-        <button onClick={() => setOpen(true)} className="px-4 py-2 bg-slate-800 text-white font-bold rounded-md">+ Create Project</button>
+      {/* Intro section */}
+      <div className="mb-6 flex gap-6 items-center">
+        <div className="w-48 flex-shrink-0">
+          {/* reuse mascot component from login/register */}
+          <img src="/images/dutch_rabbit.svg" alt="Mascot explaining project section" className="w-full mascot-bounce" />
+        </div>
+        <div className="flex-1 card">
+          <h1 className="text-2xl card-title">Projects</h1>
+          <p className="muted-small mt-2">The project is the collection for your similar purpose datasets, to keep things aligned. You can add your members to the project to collaboratively take care of your data.</p>
+        </div>
+        <div>
+          <button onClick={() => setOpen(true)} className="px-4 py-2 btn-primary bold">+ Create Project</button>
+        </div>
       </div>
 
       {loading ? (

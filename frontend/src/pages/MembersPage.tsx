@@ -47,14 +47,14 @@ export default function MembersPage(){
   {isOwner && (
   <div className="border border-gray-200 bg-white rounded-md p-3 mb-3">
         <div className="grid gap-2 sm:grid-cols-3">
-          <input className="border border-gray-300 rounded-md px-3 py-2" placeholder="Member email" value={email} onChange={e=>setEmail(e.target.value)} />
-          <select className="border border-gray-300 rounded-md px-3 py-2" value={role} onChange={e=>setRole(e.target.value as Member['role'])}>
+          <input className="border border-gray-300 px-3 py-2" placeholder="Member email" value={email} onChange={e=>setEmail(e.target.value)} />
+          <select className="border border-gray-300 px-3 py-2" value={role} onChange={e=>setRole(e.target.value as Member['role'])}>
             <option value="owner">Owner</option>
             <option value="contributor">Contributor</option>
             <option value="approver">Approver</option>
             <option value="viewer">Viewer</option>
           </select>
-          <button disabled={!email || saving} className="rounded-md bg-primary text-white px-3 py-2 text-sm hover:bg-indigo-600 disabled:opacity-60" onClick={async()=>{
+          <button disabled={!email || saving} className="btn-primary bold px-3 py-2 text-sm disabled:opacity-60" onClick={async()=>{
             setError(''); setSaving(true)
             try{ const m = await upsertMember(projectId, email, role); const exists = items.find(x=>x.id===m.id); if(exists){ setItems(items.map(x=>x.id===m.id? m : x)) } else { setItems([m, ...items]) } setEmail('') }
             catch(e:any){ setError(e.message) }
