@@ -45,8 +45,12 @@ export default function DatasetDetailsPage(){
 
   const owner = useMemo(()=> stats?.owner_name || project?.owner_email || project?.owner || '', [stats, project])
 
+  const [collapsed, setCollapsed] = useState(false)
+
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="bg-gray-50 min-h-screen flex flex-col">
+      <main className="flex-1 main p-8">
+        <div className="max-w-7xl mx-auto">
       <div className="mb-3 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Project: {project?.name || projectId}</h2>
@@ -55,7 +59,7 @@ export default function DatasetDetailsPage(){
           </div>
         </div>
         <nav className="flex gap-2 mt-2">
-          <NavLink to={`/projects/${projectId}`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Datasets</NavLink>
+          <NavLink end to={`/projects/${projectId}`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Datasets</NavLink>
           <NavLink to={`/projects/${projectId}/members`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Members</NavLink>
         </nav>
       </div>
@@ -65,20 +69,20 @@ export default function DatasetDetailsPage(){
 
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
         {/* Left: Dataset summary */}
-        <div className="lg:col-span-2 border border-gray-200 bg-white rounded-md p-3">
+  <div className="lg:col-span-2 border border-gray-200 bg-white p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-lg font-semibold">{dataset?.name || `Dataset #${dsId}`}</h3>
           </div>
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
-            <div className="border border-gray-100 rounded-md p-3">
+            <div className="border border-gray-100 p-3">
               <div className="text-gray-600">File name</div>
               <div className="font-medium break-words">{dataset?.last_upload_path ? dataset.last_upload_path.split(/[/\\]/).pop() : 'Not uploaded yet'}</div>
             </div>
-            <div className="border border-gray-100 rounded-md p-3">
+            <div className="border border-gray-100 p-3">
               <div className="text-gray-600">Owner</div>
               <div className="font-medium">{owner || '—'}</div>
             </div>
-            <div className="border border-gray-100 rounded-md p-3">
+            <div className="border border-gray-100 p-3">
               <div className="text-gray-600">Rows</div>
               <div className="font-medium">{stats?.row_count ?? (sample?.data?.length || 0)}</div>
             </div>
@@ -86,7 +90,7 @@ export default function DatasetDetailsPage(){
               <div className="text-gray-600">Columns</div>
               <div className="font-medium">{stats?.column_count ?? (sample?.columns?.length || 0)}</div>
             </div>
-            <div className="border border-gray-100 rounded-md p-3 sm:col-span-2">
+            <div className="border border-gray-100 p-3 sm:col-span-2">
               <div className="text-gray-600">Table location</div>
               <div className="font-medium break-words">{stats?.table_location || '—'}</div>
             </div>
@@ -122,7 +126,7 @@ export default function DatasetDetailsPage(){
         <div className="border border-gray-200 bg-white rounded-md p-3">
           <div className="text-sm font-medium mb-2">Append new data</div>
           <div className="flex items-center gap-2 mb-2">
-            <Link to={`/projects/${projectId}/datasets/${dsId}/append`} className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600">Open append flow</Link>
+            <Link to={`/projects/${projectId}/datasets/${dsId}/append`} className="btn-primary bold px-3 py-1.5 text-sm">Open append flow</Link>
             <span className="text-xs text-gray-600">Upload, edit, preview, and submit for approval</span>
           </div>
 
@@ -180,7 +184,9 @@ export default function DatasetDetailsPage(){
         compact
       />
 
-  {/* Append reviewer selection moved to append flow page */}
+      {/* End main container */}
+        </div>
+      </main>
     </div>
   )
 }

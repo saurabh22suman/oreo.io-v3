@@ -76,7 +76,7 @@ export default function AdminBasePage(){
                 <option value="approver">approver</option>
                 <option value="owner">owner</option>
               </select>
-              <button className="rounded-md bg-primary text-white px-3 py-2 text-sm hover:bg-indigo-600" onClick={async()=>{
+              <button className="btn-primary bold px-3 py-2 text-sm" onClick={async()=>{
                 setError(''); setStatus('')
                 try{ await fetchAdmin('/admin/users', { method:'POST', body: JSON.stringify({ email, password, role }) }, pwd); setStatus('User created'); setEmail(''); setPassword(''); load() }catch(e:any){ setError(e.message) }
               }}>Create</button>
@@ -86,7 +86,7 @@ export default function AdminBasePage(){
           <div className="border border-gray-200 bg-white rounded-md p-3">
             <div className="flex items-center justify-between mb-2">
               <div className="text-sm font-medium">Users</div>
-              <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={load}>Refresh</button>
+              <button className="border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={load}>Refresh</button>
             </div>
             <div className="overflow-auto">
               <table className="min-w-full text-xs">

@@ -1,0 +1,34 @@
+<!-- Simple Dutch rabbit mascot SVG (stylized) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 280" width="280" height="280" fill="none">
+  <defs>
+    <linearGradient id="fur" x1="0" x2="1">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#f3f4f6"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" rx="20" fill="#eef2ff" />
+
+  <!-- ears -->
+  <ellipse cx="90" cy="48" rx="22" ry="60" transform="rotate(-18 90 48)" fill="#fff" stroke="#dbeafe"/>
+  <ellipse cx="160" cy="40" rx="22" ry="60" transform="rotate(10 160 40)" fill="#fff" stroke="#dbeafe"/>
+
+  <!-- head -->
+  <circle cx="125" cy="110" r="56" fill="url(#fur)" stroke="#e6e9f8"/>
+
+  <!-- eyes and nose -->
+  <circle cx="110" cy="105" r="6" fill="#111827"/>
+  <circle cx="140" cy="105" r="6" fill="#111827"/>
+  <path d="M125 118 q6 6 12 0" stroke="#ef4444" stroke-width="3" stroke-linecap="round" fill="none"/>
+
+  <!-- body -->
+  <ellipse cx="125" cy="188" rx="80" ry="48" fill="#fff" stroke="#e6e9f8" />
+
+  <!-- small orange patch to hint 'Dutch' accent -->
+  <path d="M98 150 q10 -12 26 -8 q6 2 12 8 q-16 6 -38 0z" fill="#ffedd5" />
+
+  <!-- friendly wink badge -->
+  <g transform="translate(190,180)">
+    <circle cx="0" cy="0" r="30" fill="#fff" stroke="#e6e9f8" />
+    <text x="0" y="6" font-size="14" text-anchor="middle" fill="#6b21a8" font-family="sans-serif">oreo</text>
+  </g>
+</svg>

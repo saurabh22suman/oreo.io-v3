@@ -50,25 +50,25 @@ export default function DatasetViewerPage(){
       </div>
   {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
       <div className="grid gap-3 md:grid-cols-3">
-        <div className="md:col-span-2 border border-gray-200 bg-white rounded-md p-3">
+  <div className="md:col-span-2 border border-gray-200 bg-white p-3">
           <div className="flex items-center justify-between mb-2">
             <div className="text-sm text-gray-700">Rows: {stats?.row_count ?? rows.length} {stats?.owner_name && (<span className="ml-2 text-xs text-gray-500">Owner: {stats.owner_name}</span>)} {stats?.pending_approvals != null && (<span className="ml-2 text-xs text-gray-500">Pending approvals: {stats.pending_approvals}</span>)}</div>
             <div className="flex items-center gap-2 text-xs">
               <label>Limit</label>
-              <input type="number" value={limit} onChange={e=>setLimit(Number(e.target.value)||50)} className="w-20 border border-gray-300 rounded-md px-2 py-1" />
+              <input type="number" value={limit} onChange={e=>setLimit(Number(e.target.value)||50)} className="w-20 border border-gray-300 px-2 py-1" />
               <label>Offset</label>
-              <input type="number" value={offset} onChange={e=>setOffset(Number(e.target.value)||0)} className="w-24 border border-gray-300 rounded-md px-2 py-1" />
-              <button className="rounded-md border border-gray-300 px-2 py-1 hover:bg-gray-50" onClick={()=> loadData()}>Load data</button>
+              <input type="number" value={offset} onChange={e=>setOffset(Number(e.target.value)||0)} className="w-24 border border-gray-300 px-2 py-1" />
+              <button className="border border-gray-300 px-2 py-1 hover:bg-gray-50" onClick={()=> loadData()}>Load data</button>
             </div>
           </div>
           <div className="text-xs text-gray-600">Use Load data to open a popup preview.</div>
         </div>
         <div className="border border-gray-200 bg-white rounded-md p-3">
           <div className="text-sm font-medium mb-2">Filter (JSON)</div>
-          <textarea className="w-full border border-gray-300 rounded-md px-3 py-2 font-mono text-xs" rows={12} placeholder='{"country":"US"}' value={filter} onChange={e=>setFilter(e.target.value)} />
+          <textarea className="w-full border border-gray-300 px-3 py-2 font-mono text-xs" rows={12} placeholder='{"country":"US"}' value={filter} onChange={e=>setFilter(e.target.value)} />
           <div className="flex gap-2 mt-2">
-            <button className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600" onClick={()=> loadData()}>Apply filter</button>
-            <button className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={async()=>{ try{ setStats(await getDatasetStatsTop(dsId)) }catch(e:any){ setError(e.message) } }}>Refresh stats</button>
+            <button className="btn-primary bold px-3 py-1.5 text-sm" onClick={()=> loadData()}>Apply filter</button>
+            <button className="border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50" onClick={async()=>{ try{ setStats(await getDatasetStatsTop(dsId)) }catch(e:any){ setError(e.message) } }}>Refresh stats</button>
           </div>
         </div>
       </div>

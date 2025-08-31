@@ -20,10 +20,23 @@ func SetupRouter() *gin.Engine {
 	r.MaxMultipartMemory = 110 << 20
 	// Simple CORS for dev
 	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		if c.Request.Method == http.MethodOptions {
+		origin := c.GetHeader("Origin")
+		// Simple allowlist: allow frontend dev origin and localhost
+		allowed := map[string]bool{
+			"http://localhost:5173": true,
+			"http://127.0.0.1:5173": true,
+			"http://localhost:3000": true,
+		}
+		if origin != "" && allowed[origin] {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		} else {
+			// fallback to request host if no origin matched
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(200)
 			return
 		}
@@ -59,6 +72,7 @@ func SetupRouter() *gin.Engine {
 		api.POST("/auth/register", controllers.Register)
 		api.POST("/auth/login", controllers.Login)
 		api.POST("/auth/google", controllers.GoogleLogin)
+		api.POST("/auth/logout", controllers.Logout)
 		api.GET("/auth/me", controllers.AuthMiddleware(), func(c *gin.Context) {
 			uid, _ := c.Get("user_id")
 			email, _ := c.Get("user_email")

@@ -7,49 +7,62 @@ function authHeaders() {
 }
 
 export async function register(email: string, password: string){
-  const r = await fetch(`${API_BASE}/auth/register`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email,password})})
+  const r = await fetch(`${API_BASE}/auth/register`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email,password}), credentials: 'include'})
   if(!r.ok) throw new Error(await r.text())
   return r.json()
 }
 export async function login(email: string, password: string){
-  const r = await fetch(`${API_BASE}/auth/login`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email,password})})
+  // Perform login. Backend may set an httpOnly cookie. Do not assume client-side token storage.
+  const r = await fetch(`${API_BASE}/auth/login`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email,password}), credentials: 'include'})
   if(!r.ok) throw new Error(await r.text())
-  const data = await r.json(); localStorage.setItem('token', data.token); return data
+  const data = await r.json();
+  // If backend returns a token (fallback), persist it; otherwise rely on cookie
+  if(data?.token) localStorage.setItem('token', data.token)
+  return data
 }
 
 // Google login: send ID token from Google Identity Services to backend and receive app JWT
 export async function loginWithGoogleIdToken(idToken: string){
-  const r = await fetch(`${API_BASE}/auth/google`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id_token: idToken })})
+  const r = await fetch(`${API_BASE}/auth/google`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id_token: idToken }), credentials: 'include'})
   if(!r.ok) throw new Error(await r.text())
-  const data = await r.json(); localStorage.setItem('token', data.token); return data
+  const data = await r.json(); if(data?.token) localStorage.setItem('token', data.token); return data
 }
 
 export async function me(){
-  const r = await fetch(`${API_BASE}/auth/me`, {headers:{...authHeaders()}})
+  // check session via cookie or token
+  const r = await fetch(`${API_BASE}/auth/me`, {headers:{...authHeaders()}, credentials: 'include'})
   return r.ok
 }
 
 // Get current authenticated user details (id, email, role)
 export async function currentUser(): Promise<{ ok: boolean; id: number; email: string; role: string }>{
-  const r = await fetch(`${API_BASE}/auth/me`, { headers: { ...authHeaders() } })
+  const r = await fetch(`${API_BASE}/auth/me`, { headers: { ...authHeaders() }, credentials: 'include' })
+  if(!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+export async function logout(){
+  const r = await fetch(`${API_BASE}/auth/logout`, { method: 'POST', headers: { ...authHeaders() }, credentials: 'include' })
   if(!r.ok) throw new Error(await r.text())
   return r.json()
 }
 
 export async function listProjects(){
-  const r = await fetch(`${API_BASE}/projects`, {headers:{...authHeaders()}})
+  const r = await fetch(`${API_BASE}/projects`, {headers:{...authHeaders()}, credentials: 'include'})
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
-export async function createProject(name: string){
-  const r = await fetch(`${API_BASE}/projects`, {method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify({name})})
+export async function createProject(name: string, description?: string){
+  const body: any = { name }
+  if (description && description.trim() !== '') body.description = description
+  const r = await fetch(`${API_BASE}/projects`, {method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body), credentials: 'include'})
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
 export async function getProject(id: number){
-  const r = await fetch(`${API_BASE}/projects/${id}`, {headers:{...authHeaders()}})
+  const r = await fetch(`${API_BASE}/projects/${id}`, {headers:{...authHeaders()}, credentials: 'include'})
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
 export async function getDataset(projectId: number, datasetId: number){
-  const r = await fetch(`${API_BASE}/projects/${projectId}/datasets/${datasetId}`, {headers:{...authHeaders()}})
+  const r = await fetch(`${API_BASE}/projects/${projectId}/datasets/${datasetId}`, {headers:{...authHeaders()}, credentials: 'include'})
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
 // Members (RBAC)
