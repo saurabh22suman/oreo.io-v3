@@ -18,21 +18,22 @@ import DatasetApprovalsPage from './pages/DatasetApprovalsPage'
 import DatasetViewerPage from './pages/DatasetViewerPage'
 import ChangeDetailsPage from './pages/ChangeDetailsPage'
 import AdminBasePage from './pages/AdminBasePage'
+import ProjectPlaceholderPage from './pages/ProjectPlaceholderPage'
 
 export default function App(){
   return (
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<LandingPage/>} />
-      <Route path="/login" element={<LoginPage/>} />
-      <Route path="/register" element={<RegisterPage/>} />
-  <Route path="/docs" element={<DocsPage/>} />
+  <Route path="/login" element={<LoginPage/>} />
+  <Route path="/register" element={<RegisterPage/>} />
 
       {/* Legacy auth route retained */}
       <Route path="/auth" element={<AuthPage/>} />
 
       {/* App routes under layout */}
       <Route element={<Layout/>}>
+  <Route path="/docs" element={<DocsPage/>} />
         <Route path="/dashboard" element={<DashboardPage/>} />
         <Route path="/admin_base" element={<AdminBasePage/>}/>
         <Route path="/projects" element={<ProjectsPage/>}/>
@@ -45,6 +46,9 @@ export default function App(){
         <Route path="/projects/:id/datasets/:datasetId/approvals" element={<DatasetApprovalsPage/>}/>
         <Route path="/projects/:id/datasets/:datasetId/view" element={<DatasetViewerPage/>}/>
         <Route path="/projects/:id/datasets/:datasetId/changes/:changeId" element={<ChangeDetailsPage/>}/>
+  <Route path="/projects/:id/query" element={<ProjectPlaceholderPage/>} />
+  <Route path="/projects/:id/dashboard" element={<ProjectPlaceholderPage/>} />
+  <Route path="/projects/:id/audit" element={<ProjectPlaceholderPage/>} />
         {/* Placeholder routes should show 404 until implemented */}
         <Route path="/settings" element={<NotFoundPage/>} />
         <Route path="/labs" element={<NotFoundPage/>} />

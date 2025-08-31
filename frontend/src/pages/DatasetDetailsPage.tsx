@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import Sidebar from '../components/Sidebar'
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
 import { approveChange, getDataset, getDatasetSample, getDatasetStatsTop, getProject, listChanges, rejectChange, myProjectRole, currentUser, withdrawChange } from '../api'
 import AgGridDialog from '../components/AgGridDialog'
@@ -50,10 +49,8 @@ export default function DatasetDetailsPage(){
 
   return (
     <div className="bg-gray-50 min-h-screen flex flex-col">
-      <div className={`flex-1 layout-with-sidebar ${collapsed ? 'collapsed' : ''}`}>
-        <div className="sidebar-slot"><Sidebar collapsed={collapsed} setCollapsed={setCollapsed} /></div>
-        <main className="main p-8">
-          <div className="max-w-7xl mx-auto">
+      <main className="flex-1 main p-8">
+        <div className="max-w-7xl mx-auto">
       <div className="mb-3 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Project: {project?.name || projectId}</h2>
@@ -62,7 +59,7 @@ export default function DatasetDetailsPage(){
           </div>
         </div>
         <nav className="flex gap-2 mt-2">
-          <NavLink to={`/projects/${projectId}`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Datasets</NavLink>
+          <NavLink end to={`/projects/${projectId}`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Datasets</NavLink>
           <NavLink to={`/projects/${projectId}/members`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Members</NavLink>
         </nav>
       </div>
@@ -187,10 +184,9 @@ export default function DatasetDetailsPage(){
         compact
       />
 
-  {/* Append reviewer selection moved to append flow page */}
-          </div>
-        </main>
-      </div>
+      {/* End main container */}
+        </div>
+      </main>
     </div>
   )
 }

@@ -39,10 +39,11 @@ export default function Navbar() {
         {user ? (
           <div className="relative" ref={ref}>
             <button onClick={() => setOpen(o => !o)} className="flex items-center gap-3 px-3 py-2">
+              <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-semibold">{(user.email||'U').charAt(0).toUpperCase()}</div>
               <div className="text-sm font-medium">{user.email?.split('@')[0] || 'User'}</div>
             </button>
             {open && (
-              <div className="absolute right-0 mt-2 w-48 bg-white border-t py-2">
+              <div className="absolute right-0 mt-2 w-48 bg-white border shadow py-2">
                 <button onClick={() => { handleLogout() }} className="w-full text-left px-4 py-2 text-sm text-gray-700">Logout</button>
               </div>
             )}

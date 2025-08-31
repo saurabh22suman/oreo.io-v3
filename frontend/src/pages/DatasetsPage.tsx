@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import Sidebar from '../components/Sidebar'
 import AgGridDialog from '../components/AgGridDialog'
 import Alert from '../components/Alert'
 import { orderColumnsBySchema } from '../utils/columnOrder'
@@ -105,10 +104,8 @@ export default function DatasetsPage(){
 
   return (
     <div className="bg-gray-50 min-h-screen flex flex-col">
-      <div className={`flex-1 layout-with-sidebar ${collapsed ? 'collapsed' : ''}`}>
-        <div className="sidebar-slot"><Sidebar collapsed={collapsed} setCollapsed={setCollapsed} /></div>
-        <main className="main p-8">
-          <div className="max-w-7xl mx-auto">
+      <main className="flex-1 main p-8">
+        <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xl font-semibold">Project: {project?.name || projectId}</h2>
               <Link to={`/projects/${projectId}/datasets/new`} className="btn-primary bold px-3 py-1.5 text-sm">New dataset (flow)</Link>
@@ -116,7 +113,7 @@ export default function DatasetsPage(){
 
             <div className="mb-4 border-b border-gray-200">
               <nav className="flex gap-2">
-                <NavLink to={`/projects/${projectId}`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Datasets</NavLink>
+                <NavLink end to={`/projects/${projectId}`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Datasets</NavLink>
                 <NavLink to={`/projects/${projectId}/members`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Members</NavLink>
               </nav>
             </div>
@@ -231,9 +228,7 @@ export default function DatasetsPage(){
 
             {/* Create dataset CTA for owners */}
             {(role === 'owner') && (
-              <div className="border border-gray-200 bg-white rounded-md p-3 mb-3">
-                {/* ...create dataset UI... */}
-              </div>
+              <div className="hidden">{/* owner-only CTA removed to avoid empty block */}</div>
             )}
 
             {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
@@ -243,7 +238,6 @@ export default function DatasetsPage(){
 
           </div>
         </main>
-      </div>
     </div>
   )
 }

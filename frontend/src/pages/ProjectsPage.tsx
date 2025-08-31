@@ -2,7 +2,6 @@ import React, { useEffect, useState, useMemo, useRef } from 'react'
 import ProjectModal from '../components/ProjectModal'
 import { listProjects, currentUser } from '../api'
 import { useNavigate } from 'react-router-dom'
-import Sidebar from '../components/Sidebar'
 
 type Project = {
   id: string
@@ -52,9 +51,7 @@ export default function ProjectsPage() {
   useEffect(() => { load() }, [])
 
   useEffect(() => {
-    let mounted = true
-    currentUser().then(u => { if (mounted) setUser(u) }).catch(() => { if (mounted) setUser(null) })
-    return () => { mounted = false }
+    currentUser().then(u => setUser(u)).catch(() => setUser(null))
   }, [])
 
   const sorted = useMemo(() => {
@@ -132,18 +129,14 @@ export default function ProjectsPage() {
 
   return (
     <div className="bg-gray-50 min-h-screen flex flex-col">
-      <div className={`flex-1 layout-with-sidebar ${collapsed ? 'collapsed' : ''}`}>
-        <div className="sidebar-slot">
-          <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
-        </div>
 
         <main className="main p-8">
           <div className="max-w-7xl mx-auto">
       {/* Intro section */}
       <div className="mb-6 flex flex-col md:flex-row gap-6 items-start">
         <div className="w-36 flex-shrink-0">
-          {/* keep existing mascot as requested */}
-          <img src="/images/dutch_rabbit.svg" alt="Mascot" className="w-full mascot-bounce" />
+          {/* tutorial illustration */}
+          <img src="/images/tutorial_image.png" alt="Tutorial" className="w-full mascot-bounce" />
         </div>
         <div className="flex-1 rounded-lg p-5" style={{ background: 'linear-gradient(180deg,#ffffff 0%, #fbfdff 100%)' }}>
           <h1 className="text-3xl font-extrabold text-slate-900">Projects</h1>
@@ -217,9 +210,8 @@ export default function ProjectsPage() {
       )}
 
       <ProjectModal open={open} onClose={() => setOpen(false)} onCreate={() => load()} />
-          </div>
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   )
 }

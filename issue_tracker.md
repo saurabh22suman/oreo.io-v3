@@ -26,3 +26,29 @@ New items added 2025-08-30 (UI Enhancements requested):
 - Enhancement: Truncate long project names in the table with tooltip on hover (using title attribute). Status: implemented in working tree; pending user review.
 - Enhancement: Replace text sort arrows with small SVG icons for clarity. Status: implemented.
 
+
+## 2025-08-31 — Work-in-progress 404 and layout polish
+
+- Fix: NotFound page now shows only the work-in-progress illustration and no header/copy to match current UX request. File: `frontend/src/pages/NotFoundPage.tsx`. Status: done.
+- Fix: Docs page now re-uses the NotFound/work-in-progress UI while documentation is being prepared. File: `frontend/src/pages/DocsPage.tsx`. Status: done.
+- Tweak: Centered the 404/work-in-progress image and constrained its container to avoid unnecessary vertical scrolling on the page by using a min-height relative to the viewport minus top navbar (min-h-[calc(100vh-64px)]) and overflow-hidden on the NotFound container. Status: done; please verify across breakpoints.
+
+Checks / Follow-ups:
+
+- Verify left sidebar occupies full viewport height on all pages and breakpoints. Relevant files: `frontend/src/components/Layout.tsx`, `frontend/src/index.css` (look for `.layout-with-sidebar .sidebar { height: calc(100vh - 64px); }`). Status: manual verification needed in browser; evidence so far: `Layout` was updated to apply `.layout-with-sidebar` when user is present.
+- If vertical scroll remains visible on NotFound/Docs routes, consider removing vertical padding on the `main` element for those routes or explicitly setting `overflow: hidden` on the page container. Status: pending (no further changes committed).
+
+
+## 2025-08-31 — Dashboard refinements
+
+- Change: Removed the "Resume Previous Project" button from the Dashboard header in favor of a single primary CTA for creating projects. File: `frontend/src/pages/DashboardPage.tsx`. Status: done.
+- Change: Replaced the project card grid with a table view on Dashboard (columns: Name, Datasets, Last Modified) to match the Projects listing pattern. File: `frontend/src/pages/DashboardPage.tsx`. Status: done.
+- Change: Removed the "Recent Changes" section from Dashboard to simplify the landing experience. File: `frontend/src/pages/DashboardPage.tsx`. Status: done.
+
+Follow-ups:
+
+- Verify table responds to long project names (truncation) — consider adding `title` attributes or truncation styles if needed. Status: manual QA.
+- Consider reintroducing a compact Recent Changes widget elsewhere (e.g., an expandable side panel) if users ask for quick activity. Status: deferred.
+
+
+
