@@ -15,8 +15,12 @@ export default function RegisterPage() {
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="max-w-3xl w-full grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
           <div className="hidden md:flex items-center justify-center">
-            <div className="mt-6 flex justify-center hover-shadow">
-              <Mascot pose="happy" size={200} />
+            <div className="bg-white p-6 w-full border">
+              <div className="text-indigo-700 mb-4 flex items-center gap-2 font-semibold">oreo.io</div>
+              <div className="text-gray-700">Manage datasets, invite collaborators, and approve changes — all from one place.</div>
+              <div className="mt-6 flex justify-center">
+                <Mascot pose="winking" size={200} />
+              </div>
             </div>
           </div>
           <div>
