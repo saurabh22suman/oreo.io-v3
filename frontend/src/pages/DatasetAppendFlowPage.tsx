@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getProject, getDataset, previewAppend, appendDatasetDataTop, validateEditedJSONTop, openAppendChangeTop, listMembers } from '../api'
+import { getProject, getDataset, previewAppend, appendDatasetDataTop, validateEditedJSONTop, openAppendChangeTop, listMembers, myProjectRole, currentUser } from '../api'
 import Alert from '../components/Alert'
 import AgGridDialog from '../components/AgGridDialog'
 
@@ -16,16 +16,20 @@ export default function DatasetAppendFlowPage(){
   const [rows, setRows] = useState<any[]>([])
   const [cols, setCols] = useState<string[]>([])
   const [open, setOpen] = useState(false)
+  // Which mode the grid dialog is in: 'edit' (with Save/Undo) or 'preview' (table-only)
+  const [openMode, setOpenMode] = useState<'edit'|'preview'|null>(null)
   const [members, setMembers] = useState<{id:number; email:string; role:string}[]>([])
   const [submitDialog, setSubmitDialog] = useState(false)
   const [title, setTitle] = useState('Append data')
   const [comment, setComment] = useState('')
   const [selectedReviewerIds, setSelectedReviewerIds] = useState<number[]>([])
+  const [meUser, setMeUser] = useState<{ id:number; email:string }|null>(null)
   // detailed validation errors surfaced from backend validate endpoints
   const [validationDetails, setValidationDetails] = useState<any|null>(null)
   // highlight support
   const [invalidRows, setInvalidRows] = useState<number[]>([])
   const [invalidCells, setInvalidCells] = useState<Array<{row:number; column:string}>>([])
+  const [role, setRole] = useState<'owner'|'contributor'|'viewer'|null>(null)
 
   // Build simple type hints from dataset schema to coerce edited values before validation
   const typeMap = useMemo(()=>{
@@ -97,6 +101,23 @@ export default function DatasetAppendFlowPage(){
     setInvalidCells([])
   }
 
+  // Helper: Reset form state after a successful submit
+  function resetAppendState(){
+    setTitle('Append data')
+    setComment('')
+    setSelectedReviewerIds([])
+    setRows([])
+    setCols([])
+    setFile(null)
+    setOpen(false)
+    setValidationDetails(null)
+    resetValidationMarks()
+    try{
+      const el = document.getElementById('file-app') as HTMLInputElement | null
+      if(el) el.value = ''
+    }catch{}
+  }
+
   function extractValidationMarks(v: any){
     try{
       const badRows = new Set<number>()
@@ -131,8 +152,29 @@ export default function DatasetAppendFlowPage(){
       setDataset(await getDataset(projectId, dsId))
       const mem = await listMembers(projectId).catch(()=>[])
       setMembers(mem as any[])
+      try{ const me = await currentUser(); setMeUser({ id: me.id, email: me.email }) }catch{}
+  try{ const r = await myProjectRole(projectId); setRole(r.role) }catch{ setRole(null) }
     }catch(e:any){ setError(e.message) }
   })() }, [projectId, dsId])
+
+  // Derived approver list excluding the current user
+  const approverOptions = useMemo(()=>{
+    if(!members?.length) return [] as {id:number; email:string; role:string}[]
+    const meId = meUser?.id
+    const meEmail = meUser?.email?.trim().toLowerCase()
+    return members.filter(m => {
+      const mEmail = m?.email?.trim?.().toLowerCase?.() || ''
+      const notSelfById = typeof meId === 'number' ? (m.id !== meId) : true
+      const notSelfByEmail = meEmail ? (mEmail !== meEmail) : true
+      return notSelfById && notSelfByEmail
+    })
+  }, [members, meUser])
+
+  // Ensure selected reviewers never include the requester
+  useEffect(()=>{
+    if(!meUser) return
+    setSelectedReviewerIds(prev => prev.filter(id => id !== meUser.id))
+  }, [meUser])
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -152,41 +194,43 @@ export default function DatasetAppendFlowPage(){
       )}
       {toast && <Alert type="success" message={toast} onClose={()=>setToast('')} />}
 
-      <div className="border border-gray-200 bg-white rounded-md p-3 mb-3">
+    <div className="border border-gray-200 bg-white rounded-md p-3 mb-3">
         <div className="flex items-center gap-2">
-          <input id="file-app" type="file" className="hidden" accept=".csv,.xlsx,.xls,.json" onChange={e=> { setFile(e.target.files?.[0] || null); setRows([]); setCols([]) }} />
-          <label htmlFor="file-app" className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 cursor-pointer">Choose file</label>
+  <input id="file-app" type="file" className="hidden" accept=".csv,.xlsx,.xls,.json" onChange={e=> { setFile(e.target.files?.[0] || null); setRows([]); setCols([]) }} disabled={role === 'viewer'} />
+      <label htmlFor="file-app" className={`rounded-md border border-gray-300 px-3 py-1.5 text-sm ${role==='viewer' ? 'opacity-60 cursor-not-allowed' : 'hover:bg-gray-50 cursor-pointer'}`}>Choose file</label>
           <span className="text-xs text-gray-600 max-w-[16rem] truncate">{file? file.name : 'No file selected'}</span>
-          <button disabled={!file} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-60" onClick={async()=>{
+  <button disabled={role==='viewer' || !file} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-60" onClick={async()=>{
             if(!file) return
             try{
               // If there are staged edits, reopen with them; otherwise fetch fresh preview
               if(rows && rows.length > 0){
-                setOpen(true)
+        setOpenMode('edit')
+        setOpen(true)
                 return
               }
               const pv = await previewAppend(projectId, dsId, file, 500, 0)
               setRows(pv.data || []); setCols(pv.columns || [])
-              setOpen(true)
+      setOpenMode('edit')
+      setOpen(true)
             }catch(e:any){ setError(e.message || 'Preview failed') }
           }}>Live edit</button>
-          <button disabled={!rows.length} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-60" onClick={()=> setOpen(true)}>Preview edited</button>
-          <button disabled={!file} className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600 disabled:opacity-60" onClick={()=> setSubmitDialog(true)}>Submit change</button>
+  <button disabled={!rows.length} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-60" onClick={()=> { setOpenMode('preview'); setOpen(true) }}>Preview edited</button>
+      <button disabled={role==='viewer' || !file} className="rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600 disabled:opacity-60" onClick={()=> setSubmitDialog(true)}>Submit change</button>
         </div>
       </div>
 
       <AgGridDialog
         open={open}
         onOpenChange={setOpen}
-        title={`Edit/Preview: ${file?.name || ''}`}
+    title={`${openMode==='edit' ? 'Edit' : 'Preview'}: ${file?.name || ''}`}
         rows={rows}
         columns={cols}
         pageSize={100}
-        allowEdit
-        compact
+  allowEdit={role !== 'viewer' && openMode === 'edit'}
+    compact={openMode === 'preview' || openMode === 'edit'}
   invalidRows={invalidRows}
   invalidCells={invalidCells}
-  onSave={async(updated)=>{ const normalized = normalizeRowsBySchema(updated); setRows(normalized); setToast('Edits saved locally. They will be validated on Submit.'); resetValidationMarks() }}
+  onSave={openMode === 'edit' ? async(updated)=>{ const normalized = normalizeRowsBySchema(updated); setRows(normalized); setToast('Edits saved locally. They will be validated on Submit.'); resetValidationMarks(); setOpen(false) } : undefined}
       />
 
       {submitDialog && (
@@ -200,9 +244,21 @@ export default function DatasetAppendFlowPage(){
               <textarea className="border border-gray-300 rounded px-3 py-2 text-sm" rows={3} placeholder="Add an initial comment (optional)" value={comment} onChange={e=>setComment(e.target.value)} />
               <label className="text-xs text-gray-600">Approvers</label>
               <div className="border border-gray-300 rounded p-2 max-h-40 overflow-auto space-y-1">
-                {members.map(a => (
+                {!meUser && (
+                  <div className="text-xs text-gray-500">Loading approvers…</div>
+                )}
+                {meUser && approverOptions.map(a => (
                   <label key={a.id} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" className="accent-primary" checked={selectedReviewerIds.includes(a.id)} onChange={(e)=> setSelectedReviewerIds(prev => e.target.checked ? Array.from(new Set([...prev, a.id])) : prev.filter(x=>x!==a.id))} />
+                    <input
+                      type="checkbox"
+                      className="accent-primary"
+                      checked={selectedReviewerIds.includes(a.id)}
+                      onChange={(e)=> setSelectedReviewerIds(prev => {
+                        // prevent self from ever being selected
+                        if(meUser && a.id === meUser.id) return prev.filter(x=> x !== a.id)
+                        return e.target.checked ? Array.from(new Set([...prev, a.id])) : prev.filter(x=>x!==a.id)
+                      })}
+                    />
                     <span>{a.email}</span>
                   </label>
                 ))}
@@ -234,7 +290,7 @@ export default function DatasetAppendFlowPage(){
                       method:'POST', headers:{ 'Content-Type':'application/json', ...(localStorage.getItem('token')? { Authorization: `Bearer ${localStorage.getItem('token')}` }: {}) },
                       body: JSON.stringify({ upload_id: v.upload_id, reviewer_ids: selectedReviewerIds, title, comment })
                     })
-                    if(res.ok){ setSubmitDialog(false); setToast('Change Request submitted') } else { setSubmitDialog(false); setError('Submit failed') }
+                    if(res.ok){ setSubmitDialog(false); resetAppendState(); setToast('Change Request submitted') } else { setSubmitDialog(false); setError('Submit failed') }
                   } else {
                     const v = await appendDatasetDataTop(dsId, file)
                     if(!v?.ok){
@@ -250,7 +306,7 @@ export default function DatasetAppendFlowPage(){
                       method:'POST', headers:{ 'Content-Type':'application/json', ...(localStorage.getItem('token')? { Authorization: `Bearer ${localStorage.getItem('token')}` }: {}) },
                       body: JSON.stringify({ upload_id: v.upload_id, reviewer_ids: selectedReviewerIds, title, comment })
                     })
-                    if(res.ok){ setSubmitDialog(false); setToast('Change Request submitted') } else { setSubmitDialog(false); setError('Submit failed') }
+                    if(res.ok){ setSubmitDialog(false); resetAppendState(); setToast('Change Request submitted') } else { setSubmitDialog(false); setError('Submit failed') }
                   }
                 }catch(e:any){ setSubmitDialog(false); setError(e?.message || 'Validation failed') }
               }}>Submit</button>

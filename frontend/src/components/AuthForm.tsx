@@ -21,7 +21,11 @@ export default function AuthForm({ type, onSubmit, switchForm }: { type: 'login'
       {type === 'register' && (
         <input
           type="text"
+          id="full-name"
+          name="name"
           placeholder="Full name"
+          autoComplete="name"
+          aria-label="Full name"
           className="border rounded-xl px-4 py-2"
           value={form.name}
           onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -31,7 +35,12 @@ export default function AuthForm({ type, onSubmit, switchForm }: { type: 'login'
 
       <input
         type="email"
+        id="email"
+        name="email"
         placeholder="Email"
+        autoComplete="email"
+        inputMode="email"
+        aria-label="Email"
         className="border rounded-xl px-4 py-2"
         value={form.email}
         onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
@@ -41,7 +50,11 @@ export default function AuthForm({ type, onSubmit, switchForm }: { type: 'login'
       <div className="relative">
         <input
           type={showPw ? 'text' : 'password'}
+          id="password"
+          name="password"
           placeholder="Password"
+          autoComplete={type === 'login' ? 'current-password' : 'new-password'}
+          aria-label="Password"
           className="border rounded-xl px-4 py-2 w-full"
           value={form.password}
           onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
@@ -55,7 +68,11 @@ export default function AuthForm({ type, onSubmit, switchForm }: { type: 'login'
       {type === 'register' && (
         <input
           type="password"
+          id="confirm-password"
+          name="confirm"
           placeholder="Confirm password"
+          autoComplete="new-password"
+          aria-label="Confirm password"
           className="border rounded-xl px-4 py-2"
           value={form.confirm}
           onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))}

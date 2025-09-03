@@ -30,7 +30,7 @@ func ChangesList(c *gin.Context) {
 		pidStr = c.Param("projectId")
 	}
 	pid, _ := strconv.Atoi(pidStr)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -58,7 +58,7 @@ func ChangeApprove(c *gin.Context) {
 	}
 	pid, _ := strconv.Atoi(pidStr)
 	// Basic access: must at least be a project member (viewer or above)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -101,7 +101,7 @@ func ChangeApprove(c *gin.Context) {
 			}
 		}
 	}
-	if !isAssigned && !HasProjectRole(c, uint(pid), "approver") {
+	if !isAssigned {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -243,6 +243,10 @@ func ChangeApprove(c *gin.Context) {
 			c.JSON(500, gin.H{"error": "db"})
 			return
 		}
+		// Issue-6: Notify requester that their append request was approved
+		if cr.UserID != 0 {
+			_ = AddNotification(cr.UserID, "Your append request has been approved", models.JSONB{"type": "change_approved", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID})
+		}
 		c.JSON(200, gin.H{"ok": true, "change_request": cr})
 		return
 	}
@@ -272,7 +276,7 @@ func ChangeReject(c *gin.Context) {
 	}
 	pid, _ := strconv.Atoi(pidStr)
 	// Basic access: must at least be a project member (viewer or above)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -314,7 +318,7 @@ func ChangeReject(c *gin.Context) {
 			}
 		}
 	}
-	if !isAssigned && !HasProjectRole(c, uint(pid), "approver") {
+	if !isAssigned {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -378,7 +382,7 @@ func ChangeWithdraw(c *gin.Context) {
 		pidStr = c.Param("projectId")
 	}
 	pid, _ := strconv.Atoi(pidStr)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -415,4 +419,42 @@ func ChangeWithdraw(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"ok": true, "change_request": cr})
+}
+
+// DatasetApprovalsListTop lists change requests for a given dataset ID (top-level datasets route)
+// GET /api/datasets/:id/approvals?status=pending|approved|rejected|withdrawn|all
+func DatasetApprovalsListTop(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
+	// Resolve dataset and enforce RBAC by its project
+	dsID, _ := strconv.Atoi(c.Param("id"))
+	var ds models.Dataset
+	if err := gdb.First(&ds, dsID).Error; err != nil {
+		c.JSON(404, gin.H{"error": "dataset_not_found"})
+		return
+	}
+	if !HasProjectRole(c, ds.ProjectID, "owner", "contributor", "viewer") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
+	if status == "" { // default to pending when not specified
+		status = "pending"
+	}
+	var items []models.ChangeRequest
+	q := gdb.Where("project_id = ? AND dataset_id = ?", ds.ProjectID, ds.ID)
+	if status != "all" {
+		q = q.Where("LOWER(status) = ?", status)
+	}
+	if err := q.Order("id desc").Find(&items).Error; err != nil {
+		c.JSON(500, gin.H{"error": "db"})
+		return
+	}
+	c.JSON(200, items)
 }

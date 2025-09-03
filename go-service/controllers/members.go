@@ -12,7 +12,7 @@ import (
 type MemberIn struct {
 	Email string `json:"email" binding:"required,email"`
 	// Accept 'contributor' (new) and 'editor' (legacy alias)
-	Role string `json:"role" binding:"required,oneof=owner editor contributor approver viewer"`
+	Role string `json:"role" binding:"required,oneof=owner editor contributor viewer"`
 }
 
 // MembersList returns members for a project (any project role can view)
@@ -26,7 +26,7 @@ func MembersList(c *gin.Context) {
 		gdb = dbpkg.Get()
 	}
 	pid, _ := strconv.Atoi(c.Param("id"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -96,6 +96,12 @@ func MembersUpsert(c *gin.Context) {
 			c.JSON(500, gin.H{"error": "db"})
 			return
 		}
+		// Notify the user they were added to the project
+		var projName string
+		if err := gdb.First(&proj, pid).Error; err == nil {
+			projName = proj.Name
+		}
+		_ = AddNotification(u.ID, "You were added to a project", models.JSONB{"type": "project_member_added", "project_id": uint(pid), "project_name": projName, "role": pr.Role})
 	} else {
 		pr.Role = normalizeRole(in.Role)
 		if err := gdb.Save(&pr).Error; err != nil {
@@ -167,7 +173,7 @@ func MemberMyRole(c *gin.Context) {
 	}
 	pid, _ := strconv.Atoi(c.Param("id"))
 	// must be part of the project in any capacity to query role
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}

@@ -27,7 +27,7 @@ func ChangeGet(c *gin.Context) {
 		gdb = dbpkg.Get()
 	}
 	pid, _ := strconv.Atoi(c.Param("id"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -40,12 +40,23 @@ func ChangeGet(c *gin.Context) {
 	// Add reviewer email(s) for display
 	var reviewerEmail string
 	var reviewerEmails []string
+	// Add requester info
+	var requestorEmail string
+	var requestorName string
 	// Enriched reviewer states if available
 	var reviewerStates any
 	if cr.ReviewerID != 0 {
 		var u models.User
 		if err := gdb.First(&u, cr.ReviewerID).Error; err == nil {
 			reviewerEmail = u.Email
+		}
+	}
+	// Lookup requester
+	if cr.UserID != 0 {
+		var u models.User
+		if err := gdb.First(&u, cr.UserID).Error; err == nil {
+			requestorEmail = u.Email
+			requestorName = u.Name
 		}
 	}
 	if strings.TrimSpace(cr.Reviewers) != "" {
@@ -93,7 +104,7 @@ func ChangeGet(c *gin.Context) {
 		}
 		reviewerStates = states
 	}
-	c.JSON(200, gin.H{"change": cr, "reviewer_email": reviewerEmail, "reviewer_emails": reviewerEmails, "reviewer_states": reviewerStates})
+	c.JSON(200, gin.H{"change": cr, "reviewer_email": reviewerEmail, "reviewer_emails": reviewerEmails, "reviewer_states": reviewerStates, "requestor_email": requestorEmail, "requestor_name": requestorName})
 }
 
 // ChangePreview streams a JSON preview for append-type change using stored payload path
@@ -107,7 +118,7 @@ func ChangePreview(c *gin.Context) {
 		gdb = dbpkg.Get()
 	}
 	pid, _ := strconv.Atoi(c.Param("id"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -202,7 +213,7 @@ func ChangeCommentsList(c *gin.Context) {
 		gdb = dbpkg.Get()
 	}
 	pid, _ := strconv.Atoi(c.Param("id"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -212,7 +223,7 @@ func ChangeCommentsList(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
-	// Attach user emails
+	// Attach user emails and names
 	idSet := make([]uint, 0, len(items))
 	m := map[uint]bool{}
 	for _, it := range items {
@@ -222,11 +233,13 @@ func ChangeCommentsList(c *gin.Context) {
 		}
 	}
 	emailMap := map[uint]string{}
+	nameMap := map[uint]string{}
 	if len(idSet) > 0 {
 		var users []models.User
 		if err := gdb.Where("id IN ?", idSet).Find(&users).Error; err == nil {
 			for _, u := range users {
 				emailMap[u.ID] = u.Email
+				nameMap[u.ID] = u.Name
 			}
 		}
 	}
@@ -238,6 +251,7 @@ func ChangeCommentsList(c *gin.Context) {
 			"change_request_id": it.ChangeRequestID,
 			"user_id":           it.UserID,
 			"user_email":        emailMap[it.UserID],
+			"user_name":         nameMap[it.UserID],
 			"body":              it.Body,
 			"created_at":        it.CreatedAt,
 		})
@@ -256,7 +270,7 @@ func ChangeCommentsCreate(c *gin.Context) {
 		gdb = dbpkg.Get()
 	}
 	pid, _ := strconv.Atoi(c.Param("id"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -283,13 +297,14 @@ func ChangeCommentsCreate(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
-	// include user_email in response
-	var email string
+	// include user_email and user_name in response
+	var email, name string
 	if cc.UserID != 0 {
 		var u models.User
 		if err := gdb.First(&u, cc.UserID).Error; err == nil {
 			email = u.Email
+			name = u.Name
 		}
 	}
-	c.JSON(201, gin.H{"id": cc.ID, "project_id": cc.ProjectID, "change_request_id": cc.ChangeRequestID, "user_id": cc.UserID, "user_email": email, "body": cc.Body, "created_at": cc.CreatedAt})
+	c.JSON(201, gin.H{"id": cc.ID, "project_id": cc.ProjectID, "change_request_id": cc.ChangeRequestID, "user_id": cc.UserID, "user_email": email, "user_name": name, "body": cc.Body, "created_at": cc.CreatedAt})
 }

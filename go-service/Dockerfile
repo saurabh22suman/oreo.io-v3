@@ -1,11 +1,14 @@
 # syntax=docker/dockerfile:1
 FROM golang:1.23-alpine AS build
 WORKDIR /app
-COPY go.mod .
-RUN go mod download
+# Cache go modules separately for faster rebuilds
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+	go mod download
 COPY . .
-RUN go mod tidy
-RUN go build -o server ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+	--mount=type=cache,target=/root/.cache/go-build \
+	go build -o server ./
 
 FROM alpine:3.20
 WORKDIR /app

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import { getProject, listMembers, removeMember, upsertMember, myProjectRole, currentUser } from '../api'
 
-type Member = { id: number; email: string; role: 'owner'|'contributor'|'approver'|'viewer' }
+type Member = { id: number; email: string; role: 'owner'|'contributor'|'viewer' }
 
 export default function MembersPage(){
   const { id } = useParams()
@@ -12,6 +12,7 @@ export default function MembersPage(){
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Member['role']>('viewer')
   const [isOwner, setIsOwner] = useState(false)
+  const [myRole, setMyRole] = useState<'owner'|'contributor'|'viewer'|null>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [meId, setMeId] = useState<number|undefined>(undefined)
@@ -25,24 +26,26 @@ export default function MembersPage(){
         myProjectRole(projectId).catch(()=>({role:null as any})),
         currentUser().catch(()=>null as any)
       ])
-      setProject(p); setItems(ms)
-      setIsOwner(me?.role === 'owner')
+  setProject(p); setItems(ms)
+  setIsOwner(me?.role === 'owner')
+  if(me?.role) setMyRole(me.role)
   if(meInfo?.id) setMeId(Number(meInfo.id))
   if(meInfo?.email) setMeEmail(String(meInfo.email))
     } catch(e:any){ setError(e.message) }
   })() }, [projectId])
 
   return (
-    <div className="bg-gray-50 min-h-screen flex flex-col">
-      <main className="flex-1 main p-8">
-        <div className="max-w-7xl mx-auto">
+    <>
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xl font-semibold">Project: {project?.name || projectId}</h2>
           </div>
-          <div className="mb-4 border-b border-gray-200">
+      <div className="mb-4 border-b border-gray-200">
             <nav className="flex gap-2">
               <NavLink end to={`/projects/${projectId}`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Datasets</NavLink>
               <NavLink to={`/projects/${projectId}/members`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Members</NavLink>
+  {myRole === 'owner' && (
+                <NavLink to={`/projects/${projectId}/settings`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Settings</NavLink>
+              )}
             </nav>
           </div>
 
@@ -55,7 +58,6 @@ export default function MembersPage(){
                     <select className="border border-gray-300 px-3 py-2" value={role} onChange={e=>setRole(e.target.value as Member['role'])}>
                       <option value="owner">Owner</option>
                       <option value="contributor">Contributor</option>
-                      <option value="approver">Approver</option>
                       <option value="viewer">Viewer</option>
                     </select>
                     <button disabled={!email || saving} className="btn-primary bold px-3 py-2 text-sm disabled:opacity-60" onClick={async()=>{
@@ -88,9 +90,7 @@ export default function MembersPage(){
             <div className="lg:col-span-1">
               {/* Placeholder right column for future project info or actions */}
             </div>
-          </div>
-        </div>
-      </main>
-    </div>
+      </div>
+    </>
   )
 }

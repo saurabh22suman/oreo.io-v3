@@ -2,7 +2,7 @@ package models
 
 import "time"
 
-// ProjectRole links a user to a project with a role (owner/contributor/approver/viewer)
+// ProjectRole links a user to a project with a role (owner/contributor/viewer)
 type ProjectRole struct {
 	ID        uint      `json:"id" gorm:"primaryKey"`
 	ProjectID uint      `json:"project_id" gorm:"index:uniq_project_user,unique;not null"`

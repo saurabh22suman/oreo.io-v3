@@ -23,16 +23,73 @@ func ProjectsList(c *gin.Context) {
 		gdb = dbpkg.Get()
 	}
 	var items []models.Project
-	// Optionally filter by owner
+	// Optionally filter by owner/membership
+	var uidNum uint = 0
 	if uid, ok := c.Get("user_id"); ok {
-		// Show projects owned by the user OR where the user is a member in project_roles
-		gdb = gdb.Where("owner_id = ? OR id IN (SELECT project_id FROM project_roles WHERE user_id = ?)", uid, uid)
+		// Coerce numeric types to uint for safe SQL params
+		switch v := uid.(type) {
+		case float64:
+			uidNum = uint(v)
+		case float32:
+			uidNum = uint(v)
+		case int:
+			uidNum = uint(v)
+		case int64:
+			uidNum = uint(v)
+		case uint:
+			uidNum = v
+		case string:
+			// try parse numeric strings
+			// fallthrough to 0 if parse fails
+		}
+		if uidNum != 0 {
+			// Show projects owned by the user OR where the user is a member in project_roles
+			gdb = gdb.Where("owner_id = ? OR id IN (SELECT project_id FROM project_roles WHERE user_id = ?)", uidNum, uidNum)
+		}
 	}
 	if err := gdb.Order("id desc").Find(&items).Error; err != nil {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
-	c.JSON(200, items)
+
+	// Build response that includes dataset counts per project for frontend
+	out := make([]map[string]interface{}, 0, len(items))
+	for _, p := range items {
+		var cnt int64
+		// Use a fresh DB session for the count so previous query clauses on `gdb` don't leak into this query
+		_ = dbpkg.Get().Model(&models.Dataset{}).Where("project_id = ?", p.ID).Count(&cnt).Error
+		// determine this user's role on the project (if any)
+		role := ""
+		if uidNum != 0 {
+			var pr models.ProjectRole
+			if err := dbpkg.Get().Where("project_id = ? AND user_id = ?", p.ID, uidNum).First(&pr).Error; err == nil {
+				role = pr.Role
+			}
+		}
+
+		// load members (user_id, email, role)
+		type memberRow struct {
+			UserID uint   `json:"user_id"`
+			Email  string `json:"email"`
+			Role   string `json:"role"`
+		}
+		var members []memberRow
+		_ = dbpkg.Get().Table("project_roles").Select("project_roles.user_id, project_roles.role, users.email").Joins("left join users on users.id = project_roles.user_id").Where("project_roles.project_id = ?", p.ID).Scan(&members).Error
+
+		m := map[string]interface{}{
+			"id":           p.ID,
+			"name":         p.Name,
+			"description":  p.Description,
+			"owner_id":     p.OwnerID,
+			"created_at":   p.CreatedAt,
+			"updated_at":   p.UpdatedAt,
+			"datasetCount": cnt,
+			"role":         role,
+			"members":      members,
+		}
+		out = append(out, m)
+	}
+	c.JSON(200, out)
 }
 
 func ProjectsCreate(c *gin.Context) {
@@ -88,7 +145,7 @@ func ProjectsGet(c *gin.Context) {
 		return
 	}
 	// Role: any role can view
-	if !HasProjectRole(c, p.ID, "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, p.ID, "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}

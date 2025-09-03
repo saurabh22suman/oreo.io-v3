@@ -2,6 +2,8 @@ import React, { useEffect, useState, useMemo, useRef } from 'react'
 import ProjectModal from '../components/ProjectModal'
 import { listProjects, currentUser } from '../api'
 import { useNavigate } from 'react-router-dom'
+import { useCollapse } from '../context/CollapseContext'
+// MembersPopover removed from Projects list per UX requirements
 
 type Project = {
   id: string
@@ -17,7 +19,7 @@ export default function ProjectsPage() {
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc')
   const [user, setUser] = useState(null)
   const navigate = useNavigate()
-  const [collapsed, setCollapsed] = useState(false)
+  const { collapsed } = useCollapse()
   const tableRef = useRef<HTMLTableElement | null>(null)
 
   // column widths: persist percentages in localStorage, but keep px widths while dragging for smooth UX
@@ -49,6 +51,12 @@ export default function ProjectsPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    const handler = (e: any) => { try { const pid = e?.detail?.projectId; if(!pid) load(); else load() } catch {} }
+    window.addEventListener('dataset:created', handler)
+    return () => window.removeEventListener('dataset:created', handler)
+  }, [])
 
   useEffect(() => {
     currentUser().then(u => setUser(u)).catch(() => setUser(null))
@@ -128,10 +136,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="bg-gray-50 min-h-screen flex flex-col">
-
-        <main className="main p-8">
-          <div className="max-w-7xl mx-auto">
+        <>
       {/* Intro section */}
       <div className="mb-6 flex flex-col md:flex-row gap-6 items-start">
         <div className="w-36 flex-shrink-0">
@@ -154,7 +159,7 @@ export default function ProjectsPage() {
           <table ref={tableRef} className="min-w-full bg-white">
             <thead>
               <tr className="text-left text-sm text-slate-600">
-                <th className="p-3" style={{ width: columnPxDuringDrag?.name ? `${columnPxDuringDrag.name}px` : (savedPctWidths.name ? `${savedPctWidths.name}%` : '50%') }}>
+                <th className="p-3" style={{ width: '40%' }}>
                   <div className="flex items-center gap-2">
                     <button aria-label="Sort by name" className="sort-btn" onClick={() => { setSortBy('name'); setSortDir(sortBy==='name' && sortDir==='asc' ? 'desc' : 'asc') }}>
                       Name
@@ -164,10 +169,10 @@ export default function ProjectsPage() {
                         {sortDir==='asc' ? <path d="M7 14l5-5 5 5H7z" fill="#374151"/> : <path d="M7 10l5 5 5-5H7z" fill="#374151"/>}
                       </svg>
                     )}
-                    <div className="resizer" onMouseDown={(e) => startResize('name', e)} aria-hidden />
+                    {/* fixed widths per spec; resizer disabled */}
                   </div>
                 </th>
-                <th className="p-3 text-right" style={{ width: columnPxDuringDrag?.datasets ? `${columnPxDuringDrag.datasets}px` : (savedPctWidths.datasets ? `${savedPctWidths.datasets}%` : '15%') }}>
+                <th className="p-3 text-right" style={{ width: '10%' }}>
                   <div className="flex items-center justify-end gap-2">
                     <button aria-label="Sort by datasets" className="sort-btn" onClick={() => { setSortBy('datasets'); setSortDir(sortBy==='datasets' && sortDir==='asc' ? 'desc' : 'asc') }}>Datasets</button>
                     {sortBy==='datasets' && (
@@ -175,10 +180,15 @@ export default function ProjectsPage() {
                         {sortDir==='asc' ? <path d="M7 14l5-5 5 5H7z" fill="#374151"/> : <path d="M7 10l5 5 5-5H7z" fill="#374151"/>}
                       </svg>
                     )}
-                    <div className="resizer" onMouseDown={(e) => startResize('datasets', e)} aria-hidden />
+                    {/* fixed widths per spec; resizer disabled */}
                   </div>
                 </th>
-                <th className="p-3 text-right" style={{ width: columnPxDuringDrag?.modified ? `${columnPxDuringDrag.modified}px` : (savedPctWidths.modified ? `${savedPctWidths.modified}%` : '35%') }}>
+                <th className="p-3 text-right" style={{ width: '20%' }}>
+                  <div className="flex items-center justify-end gap-2">
+                    <span className="text-sm text-slate-600">Role</span>
+                  </div>
+                </th>
+                <th className="p-3 text-right" style={{ width: '30%' }}>
                   <div className="flex items-center justify-end gap-2">
                     <button aria-label="Sort by modified" className="sort-btn" onClick={() => { setSortBy('modified'); setSortDir(sortBy==='modified' && sortDir==='asc' ? 'desc' : 'asc') }}>Last Modified</button>
                     {sortBy==='modified' && (
@@ -186,17 +196,18 @@ export default function ProjectsPage() {
                         {sortDir==='asc' ? <path d="M7 14l5-5 5 5H7z" fill="#374151"/> : <path d="M7 10l5 5 5-5H7z" fill="#374151"/>}
                       </svg>
                     )}
-                    <div className="resizer" onMouseDown={(e) => startResize('modified', e)} aria-hidden />
+                    {/* fixed widths per spec; resizer disabled */}
                   </div>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {sorted.map((p) => (
+        {sorted.map((p) => (
                 <tr key={p.id} className="border-t row-clickable" onClick={() => navigate(`/projects/${p.id}`)} onKeyDown={(e)=>onRowKeyDown(e, p.id)} tabIndex={0} role="button">
                   <td className="p-2 compact name-col"> <div className="font-semibold text-slate-800 name-cell truncate" title={p.name}>{p.name}</div></td>
-                  <td className="p-2 compact text-right">{p['datasetCount'] || 0}</td>
-                  <td className="p-2 compact text-right">{
+                    <td className="p-2 compact text-right">{p['datasetCount'] || 0}</td>
+                    <td className="p-2 compact text-right"><div className="text-sm text-slate-700">{p['role'] || ''}</div></td>
+                    <td className="p-2 compact text-right">{
                     (()=>{
                       const v = p['modified'] || p['updated_at'] || p['last_activity'] || p['lastModified']
                       return v ? new Date(v).toLocaleString() : '-'
@@ -210,8 +221,6 @@ export default function ProjectsPage() {
       )}
 
       <ProjectModal open={open} onClose={() => setOpen(false)} onCreate={() => load()} />
-        </div>
-      </main>
-    </div>
+  </>
   )
 }

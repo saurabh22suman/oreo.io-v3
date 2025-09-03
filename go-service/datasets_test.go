@@ -325,8 +325,9 @@ func TestDatasetsRBAC(t *testing.T) {
 	req = httptest.NewRequest(http.MethodDelete, "/api/projects/"+itoa(p.ID)+"/datasets/1", nil)
 	req.Header.Set("Authorization", "Bearer "+editor)
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("editor delete expected 403 got %d", w.Code)
+	// Editor (contributor) may delete an empty dataset; expect 204 if dataset has no uploads/schema/rules
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("editor delete expected 204 for empty dataset, got %d (%s)", w.Code, w.Body.String())
 	}
 }
 

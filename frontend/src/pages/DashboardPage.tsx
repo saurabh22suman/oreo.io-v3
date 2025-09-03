@@ -1,5 +1,3 @@
-import Footer from '../components/Footer'
-import Container from '../components/Container'
 import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
 import { useEffect, useMemo, useState } from 'react'
@@ -27,17 +25,22 @@ export default function DashboardPage() {
     return () => { mounted = false }
   }, [user])
 
+  // Aggregate counts for cards and use a normalized field for table (supports API keys datasetCount or datasets_count)
+  const totalDatasets = useMemo(() => {
+    try {
+      return projects.reduce((sum, p:any) => sum + (p.datasets_count ?? p.datasetCount ?? 0), 0)
+    } catch { return 0 }
+  }, [projects])
+
   return (
-    <div className="bg-gray-50 min-h-screen flex flex-col">
-      <main className="flex-1 main p-8">
-        <Container>
-          <PageHeader title={<>Welcome, <span className="text-indigo-700">{username || 'User'}</span> 👋</>} subtitle={"Here's what's happening with your workspace today."} actions={<>
+    <>
+          <PageHeader title={<>Welcome, <span className="text-indigo-700">{username || 'User'}</span> 👋</>} subtitle={"Here's what's happening with your workspace today."} actions={<> 
             <button onClick={() => navigate('/projects')} className="btn-primary bold px-4 py-2">Create New Project</button>
           </>} />
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <Card><div className="text-3xl font-bold text-indigo-700">{projects.length}</div><div className="text-sm text-gray-500">Projects</div></Card>
-            <Card><div className="text-3xl font-bold text-indigo-700">34</div><div className="text-sm text-gray-500">Datasets</div></Card>
+            <Card><div className="text-3xl font-bold text-indigo-700">{totalDatasets}</div><div className="text-sm text-gray-500">Datasets</div></Card>
             <Card><div className="text-3xl font-bold text-indigo-700">5</div><div className="text-sm text-gray-500">Pending Approvals</div></Card>
           </div>
 
@@ -107,7 +110,7 @@ export default function DashboardPage() {
                         <tbody>
                           {/** sort projects client-side for the dashboard table */}
                           {(() => {
-                            const sorted = [...projects]
+              const sorted = [...projects]
                             sorted.sort((a: any, b: any) => {
                               if (sortBy === 'name') {
                                 const an = (a.name || '').toLowerCase()
@@ -117,8 +120,8 @@ export default function DashboardPage() {
                                 return 0
                               }
                               if (sortBy === 'datasets') {
-                                const av = a.datasets_count || 0
-                                const bv = b.datasets_count || 0
+                const av = (a.datasets_count ?? a.datasetCount ?? 0) as number
+                const bv = (b.datasets_count ?? b.datasetCount ?? 0) as number
                                 return sortDir === 'asc' ? av - bv : bv - av
                               }
                               // updated_at
@@ -137,7 +140,7 @@ export default function DashboardPage() {
                                 <td className="py-3 px-4">
                                   <div className="max-w-[420px] truncate font-semibold text-gray-800" title={p.name}>{p.name}</div>
                                 </td>
-                                <td className="py-3 px-4 text-sm text-gray-500">{p.datasets_count || 0}</td>
+                                <td className="py-3 px-4 text-sm text-gray-500">{p.datasets_count ?? p.datasetCount ?? 0}</td>
                                 <td className="py-3 px-4 text-sm text-gray-500">{p.updated_at ? new Date(p.updated_at).toLocaleDateString() : ''}</td>
                               </tr>
                             ))
@@ -149,7 +152,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          
 
           <div className="mt-8">
             <Card className="text-center">
@@ -157,10 +159,7 @@ export default function DashboardPage() {
               <div className="h-48 flex items-center justify-center text-gray-400">[Chart Placeholder]</div>
             </Card>
           </div>
-        </Container>
-      </main>
-      <Footer />
-    </div>
+    </>
   )
 }
  
