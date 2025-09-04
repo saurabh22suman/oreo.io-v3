@@ -325,8 +325,9 @@ func TestDatasetsRBAC(t *testing.T) {
 	req = httptest.NewRequest(http.MethodDelete, "/api/projects/"+itoa(p.ID)+"/datasets/1", nil)
 	req.Header.Set("Authorization", "Bearer "+editor)
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("editor delete expected 403 got %d", w.Code)
+	// Editor (contributor) may delete an empty dataset; expect 204 if dataset has no uploads/schema/rules
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("editor delete expected 204 for empty dataset, got %d (%s)", w.Code, w.Body.String())
 	}
 }
 
@@ -388,8 +389,11 @@ func TestDatasetUpload(t *testing.T) {
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+owner)
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("upload %d %s", w.Code, w.Body.String())
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("upload expected 403 got %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "append_only") {
+		t.Fatalf("expected append_only error, got %s", w.Body.String())
 	}
 }
 

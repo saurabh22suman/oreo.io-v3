@@ -42,8 +42,13 @@ export async function currentUser(): Promise<{ ok: boolean; id: number; email: s
 }
 
 export async function logout(){
+  // Always clear any locally stored token so subsequent requests won't authenticate via Authorization header
+  try { localStorage.removeItem('token') } catch {}
   const r = await fetch(`${API_BASE}/auth/logout`, { method: 'POST', headers: { ...authHeaders() }, credentials: 'include' })
-  if(!r.ok) throw new Error(await r.text())
+  if(!r.ok){
+    // Even if server call fails, treat client as logged out (cookie may already be gone)
+    try { const msg = await r.text(); throw new Error(msg) } catch { throw new Error('logout_failed') }
+  }
   return r.json()
 }
 
@@ -57,9 +62,21 @@ export async function createProject(name: string, description?: string){
   const r = await fetch(`${API_BASE}/projects`, {method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body), credentials: 'include'})
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
+export async function deleteProject(projectId: number){
+  const r = await fetch(`${API_BASE}/projects/${projectId}`, { method: 'DELETE', headers: { ...authHeaders() } })
+  if(!r.ok) throw new Error(await r.text())
+  return true
+}
 export async function getProject(id: number){
   const r = await fetch(`${API_BASE}/projects/${id}`, {headers:{...authHeaders()}, credentials: 'include'})
   if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+export async function updateProject(id: number, patch: Partial<{ name: string; description: string }>) {
+  const body: any = {}
+  if (typeof patch.name === 'string') body.name = patch.name
+  if (typeof patch.description === 'string') body.description = patch.description
+  const r = await fetch(`${API_BASE}/projects/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body), credentials: 'include' })
+  if (!r.ok) throw new Error(await r.text()); return r.json()
 }
 export async function getDataset(projectId: number, datasetId: number){
   const r = await fetch(`${API_BASE}/projects/${projectId}/datasets/${datasetId}`, {headers:{...authHeaders()}, credentials: 'include'})
@@ -70,11 +87,11 @@ export async function listMembers(projectId: number){
   const r = await fetch(`${API_BASE}/projects/${projectId}/members`, {headers:{...authHeaders()}})
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
-export async function upsertMember(projectId: number, email: string, role: 'owner'|'contributor'|'approver'|'viewer'|'editor'){
+export async function upsertMember(projectId: number, email: string, role: 'owner'|'contributor'|'viewer'|'editor'){
   const r = await fetch(`${API_BASE}/projects/${projectId}/members`, {method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify({email, role})})
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
-export async function myProjectRole(projectId: number): Promise<{ role: 'owner'|'contributor'|'approver'|'viewer'|null }>{
+export async function myProjectRole(projectId: number): Promise<{ role: 'owner'|'contributor'|'viewer'|null }>{
   const r = await fetch(`${API_BASE}/projects/${projectId}/members/me`, {headers: authHeaders()}); if(!r.ok) throw new Error(await r.text()); return r.json()
 }
 export async function removeMember(projectId: number, userId: number){
@@ -202,10 +219,68 @@ export async function withdrawChange(projectId: number, changeId: number){
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
 
+// ---- Inbox (notifications) ----
+export type InboxItem = { id: number; user_id: number; message: string; is_read: boolean; metadata?: any; created_at: string }
+export async function listInbox(status: 'all'|'read'|'unread' = 'all', limit = 50, offset = 0){
+  const params = new URLSearchParams(); if(status && status !== 'all') params.set('status', status); if(limit) params.set('limit', String(limit)); if(offset) params.set('offset', String(offset))
+  const r = await fetch(`${API_BASE}/security/notifications?${params.toString()}`, { headers: { ...authHeaders() }, credentials: 'include' })
+  if(!r.ok) throw new Error(await r.text()); const body = await r.json(); return { items: body.items as InboxItem[], total: Number(body.total ?? 0) }
+}
+export async function markInboxRead(ids: number[]){
+  const r = await fetch(`${API_BASE}/security/notifications/read`, { method:'POST', headers:{ 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ ids }) })
+  if(!r.ok) throw new Error(await r.text()); return true
+}
+export async function markInboxUnread(ids: number[]){
+  const r = await fetch(`${API_BASE}/security/notifications/unread`, { method:'POST', headers:{ 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ ids }) })
+  if(!r.ok) throw new Error(await r.text()); return true
+}
+export async function getInboxUnreadCount(){
+  const r = await fetch(`${API_BASE}/security/notifications/unread_count`, { headers: { ...authHeaders() }, credentials: 'include' })
+  if(!r.ok) throw new Error(await r.text()); const body = await r.json(); return Number(body.count || 0)
+}
+
+// Subscribe to SSE stream for notifications. Returns an unsubscribe function.
+export function subscribeNotifications(onEvent: (evt: { type: string; [k: string]: any }) => void){
+  // Use absolute or relative base
+  const url = `${API_BASE}/security/notifications/stream`
+  const es = new EventSource(url, { withCredentials: true })
+  es.onmessage = (e) => {
+    try { const data = JSON.parse(e.data); onEvent(data) } catch { /* ignore */ }
+  }
+  // no retry handler; EventSource auto-reconnects
+  return () => { try{ es.close() }catch{} }
+}
+
 // ---- Top-level dataset endpoints ----
-export async function createDatasetTop(projectId: number, payload: { name: string; source?: string; target?: { type?: string; dsn?: string } }){
+export async function createDatasetTop(projectId: number, payload: { name: string; dataset_name?: string; schema?: string; table?: string; source?: string; target?: { type?: string; dsn?: string } }){
   const r = await fetch(`${API_BASE}/datasets`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify({ project_id: projectId, ...payload }) })
-  if(!r.ok) throw new Error(await r.text()); return r.json()
+  if(!r.ok){
+    let msg = 'Create failed'
+    try{
+      const text = await r.text().catch(()=> '')
+      if(text){
+        try{ const b = JSON.parse(text); msg = b?.message || b?.error || msg }catch{ msg = text || msg }
+      }
+    }catch{}
+    throw new Error(msg)
+  }
+  return r.json()
+}
+
+// Prepare dataset (atomic create with optional file upload). Accepts multipart form.
+export async function prepareDataset(projectId: number, fields: { name: string; schema?: string; table?: string; source?: string }, file?: File){
+  const form = new FormData()
+  form.append('project_id', String(projectId))
+  form.append('name', fields.name)
+  if(fields.schema) form.append('schema', fields.schema)
+  if(fields.table) form.append('table', fields.table)
+  if(fields.source) form.append('source', fields.source)
+  if(file) form.append('file', file)
+  const r = await fetch(`${API_BASE}/datasets/prepare`, { method:'POST', headers:{...authHeaders()}, body: form })
+  if(!r.ok){
+    try{ const b = await r.json(); throw new Error(b?.message || b?.error || 'Prepare failed') }catch(e:any){ throw new Error(e?.message || 'Prepare failed') }
+  }
+  return r.json()
 }
 export async function getDatasetSchemaTop(datasetId: number){
   const r = await fetch(`${API_BASE}/datasets/${datasetId}/schema`, { headers:{...authHeaders()} })
@@ -250,9 +325,22 @@ export async function openAppendChangeTop(datasetId: number, uploadId: number, r
   const r = await fetch(`${API_BASE}/datasets/${datasetId}/data/append/open`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) })
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }
+// List approvals for a dataset (defaults to status=pending)
+export async function listDatasetApprovalsTop(datasetId: number, status: 'pending'|'approved'|'rejected'|'withdrawn'|'all' = 'pending'){
+  const params = new URLSearchParams(); if(status) params.set('status', status)
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/approvals?${params.toString()}`, { headers:{...authHeaders()} })
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
 export async function queryDatasetTop(datasetId: number, sqlOrWhere: string | Record<string, any>, limit = 100, offset = 0){
   // Backend currently accepts a simple JSON filter in body.where or returns all.
   const body = typeof sqlOrWhere === 'string' ? { where: {}, limit, offset } : { where: sqlOrWhere, limit, offset }
   const r = await fetch(`${API_BASE}/datasets/${datasetId}/query`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) })
+  if(!r.ok) throw new Error(await r.text()); return r.json()
+}
+
+// Lightweight Postgres table existence check
+export async function checkTableExists(schema: string, table: string): Promise<{ exists: boolean; message?: string }>{
+  const params = new URLSearchParams({ schema, table })
+  const r = await fetch(`${API_BASE}/check_table_exists?${params.toString()}`, { headers: { ...authHeaders() } })
   if(!r.ok) throw new Error(await r.text()); return r.json()
 }

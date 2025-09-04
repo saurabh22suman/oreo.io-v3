@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getProject, currentUser, approveChange, rejectChange, myProjectRole } from '../api'
+import { getProject, currentUser, approveChange, rejectChange, myProjectRole, subscribeNotifications } from '../api'
 import AgGridDialog from '../components/AgGridDialog'
 import Alert from '../components/Alert'
 
@@ -26,21 +26,40 @@ export default function ChangeDetailsPage(){
   const [error, setError] = useState('')
   const [me, setMe] = useState<{id:number; email:string}|null>(null)
   const [isApprover, setIsApprover] = useState(false)
+  const [showSuccess, setShowSuccess] = useState(false)
 
   useEffect(()=>{ (async()=>{
     try{
       setProject(await getProject(projectId))
   const meInfo = await currentUser().catch(()=>null as any)
   if(meInfo?.id) setMe({ id: meInfo.id, email: meInfo.email })
-  try{ const role = await myProjectRole(projectId); setIsApprover(role.role === 'approver') }catch{}
+  try{ await myProjectRole(projectId); setIsApprover(false) }catch{}
   const ch = await fetchJSON(`${API_BASE}/projects/${projectId}/changes/${chId}`)
-  setChange(ch?.change || ch)
+  const base = ch?.change || ch
+  // merge top-level requestor/reviewer extras for ease of rendering
+  setChange({ ...base, requestor_email: ch?.requestor_email, requestor_name: ch?.requestor_name, reviewer_email: ch?.reviewer_email, reviewer_emails: ch?.reviewer_emails })
   if(ch?.reviewer_states) setReviewerStates(ch.reviewer_states as any[])
   // Attach reviewer email(s) if present
       try{ const pv = await fetchJSON(`${API_BASE}/projects/${projectId}/changes/${chId}/preview`); setPreview({ data: pv.data||[], columns: pv.columns||[] }) }catch{}
       try{ const cs = await fetchJSON(`${API_BASE}/projects/${projectId}/changes/${chId}/comments`); setComments(cs) }catch{}
     }catch(e:any){ setError(e.message) }
   })() }, [projectId, chId])
+
+  // Listen for change_approved SSE to show popup for the requestor
+  useEffect(()=>{
+    let mounted = true
+    const unsub = subscribeNotifications((evt) => {
+      if(!mounted) return
+      if(evt?.type === 'change_approved'){
+        const pid = Number(evt?.project_id || evt?.metadata?.project_id)
+        const cid = Number(evt?.change_request_id || evt?.metadata?.change_request_id)
+        if(pid === projectId && cid === chId){
+          setShowSuccess(true)
+        }
+      }
+    })
+    return ()=>{ mounted = false; unsub() }
+  }, [projectId, chId])
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -57,8 +76,11 @@ export default function ChangeDetailsPage(){
             <div><span className="text-gray-600">Type:</span> <span className="font-medium">{change.type}</span></div>
             <div><span className="text-gray-600">Status:</span> <span className="font-medium">{change.status}</span></div>
             {change.title && <div><span className="text-gray-600">Title:</span> <span className="font-medium">{change.title}</span></div>}
-            {change.reviewer_email && <div><span className="text-gray-600">Pending with:</span> <span className="font-medium">{change.reviewer_email}</span></div>}
-            {Array.isArray(change.reviewer_emails) && change.reviewer_emails.length>0 && <div><span className="text-gray-600">Reviewers:</span> <span className="font-medium">{change.reviewer_emails.join(', ')}</span></div>}
+            {(change.requestor_email || change.requestor_name) && (
+              <div><span className="text-gray-600">Requestor:</span> <span className="font-medium">{change.requestor_name ? `${change.requestor_name} • `: ''}{change.requestor_email || ''}</span></div>
+            )}
+            {/* Pending with removed per requirement */}
+            {/* Hide reviewers list per requirement; show Requestor above instead */}
             {Array.isArray(reviewerStates) && reviewerStates.length>0 && (
               <div className="w-full">
                 <div className="text-gray-600">Reviewer status</div>
@@ -83,14 +105,20 @@ export default function ChangeDetailsPage(){
           <div className="text-xs text-gray-600">Open the preview to explore with pagination, resizing, export, and editing.</div>
         </div>
         <div className="border border-gray-200 bg-white rounded-md p-3">
-          <div className="text-sm font-medium mb-2">Comments</div>
+      <div className="text-sm font-medium mb-2">Comments</div>
           <div className="space-y-2 max-h-64 overflow-auto mb-2">
-            {comments.length ? comments.map(cm => (
-              <div key={cm.id} className="border border-gray-100 rounded-md p-2 text-xs">
-                <div className="text-gray-600">{new Date(cm.created_at || cm.CreatedAt || Date.now()).toLocaleString()} • {cm.user_email || ''}</div>
-                <div>{cm.body}</div>
-              </div>
-            )) : <div className="text-xs text-gray-600">No comments yet.</div>}
+            {comments.length ? comments.map((cm) => {
+              const name = (cm as any).user_name as string | undefined
+              const email = (cm as any).user_email as string | undefined
+              const identity = [name, email].filter(Boolean).join(' • ') || email || name || 'Unknown user'
+              const createdAt = (cm as any).created_at || (cm as any).CreatedAt || Date.now()
+              return (
+                <div key={cm.id} className="border border-gray-100 rounded-md p-2 text-xs">
+                  <div className="text-gray-600">{identity} • {new Date(createdAt).toLocaleString()}</div>
+                  <div>{(cm as any).body}</div>
+                </div>
+              )
+            }) : <div className="text-xs text-gray-600">No comments yet.</div>}
           </div>
           <textarea className="w-full border border-gray-300 rounded-md px-3 py-2 text-xs" rows={3} placeholder="Add a comment" value={comment} onChange={e=>setComment(e.target.value)} />
           <button className="mt-2 rounded-md bg-primary text-white px-3 py-1.5 text-sm hover:bg-indigo-600" onClick={async()=>{
@@ -112,9 +140,15 @@ export default function ChangeDetailsPage(){
   allowEdit
   compact={false}
       />
+      {showSuccess && (
+        <div role="alert" className="fixed bottom-6 right-6 bg-green-600 text-white px-4 py-2 rounded-md shadow-md text-sm">
+          Data appended successfully
+          <button className="ml-3 text-white/80 hover:text-white" onClick={()=> setShowSuccess(false)} aria-label="Close">×</button>
+        </div>
+      )}
   {change && me && (
         <div className="mt-3 flex gap-2">
-      {/* Show approve/reject if user is assigned reviewer (single or in list) or has approver role */}
+  {/* Show approve/reject only if user is an assigned reviewer */}
           {(() => {
     const idsFromStates: number[] = Array.isArray(reviewerStates) ? reviewerStates.map((s:any)=> Number(s.id)).filter(Boolean) : []
     const isAssigned = (change.reviewer_id && me.id === change.reviewer_id) || idsFromStates.includes(me.id)

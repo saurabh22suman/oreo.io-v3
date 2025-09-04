@@ -14,7 +14,7 @@ export default function DatasetsPage(){
   const [project, setProject] = useState<any>(null)
   const [items, setItems] = useState<Dataset[]>([])
   const nav = useNavigate()
-  const [role, setRole] = useState<'owner'|'contributor'|'approver'|'viewer'|null>(null)
+  const [role, setRole] = useState<'owner'|'contributor'|'viewer'|null>(null)
   const [sortBy, setSortBy] = useState<'name'|'type'|'modified'>('name')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc')
   const [name, setName] = useState('')
@@ -35,6 +35,7 @@ export default function DatasetsPage(){
   const [appendFiles, setAppendFiles] = useState<Record<number, File|null>>({})
   const [appendResult, setAppendResult] = useState<any>(null)
   // Reviewer selection state for append flow
+  // reviewers list (any project member) for append flow
   const [approvers, setApprovers] = useState<{id:number; email:string; role:string}[]>([])
   const [reviewerDialog, setReviewerDialog] = useState(false)
   const [selectedReviewer, setSelectedReviewer] = useState<number|undefined>(undefined)
@@ -103,30 +104,39 @@ export default function DatasetsPage(){
   const [collapsed, setCollapsed] = useState(false)
 
   return (
-    <div className="bg-gray-50 min-h-screen flex flex-col">
-      <main className="flex-1 main p-8">
-        <div className="max-w-7xl mx-auto">
+    <>
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xl font-semibold">Project: {project?.name || projectId}</h2>
-              <Link to={`/projects/${projectId}/datasets/new`} className="btn-primary bold px-3 py-1.5 text-sm">New dataset (flow)</Link>
             </div>
 
             <div className="mb-4 border-b border-gray-200">
               <nav className="flex gap-2">
                 <NavLink end to={`/projects/${projectId}`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Datasets</NavLink>
                 <NavLink to={`/projects/${projectId}/members`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Members</NavLink>
+                {role === 'owner' && (
+                  <NavLink to={`/projects/${projectId}/settings`} className={({isActive})=>`px-3 py-2 text-sm ${isActive? 'border-b-2 border-primary text-primary' : 'text-gray-700 hover:text-primary'}`}>Settings</NavLink>
+                )}
               </nav>
             </div>
-
-            {/* Action cards below project name */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <Link to={`/projects/${projectId}/datasets/new`} aria-label="Create dataset" className="project-card hover-shadow p-3 flex flex-col items-center justify-center text-center min-h-[120px]">
-                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 opacity-80">
-                  <rect x="3" y="3" width="18" height="14" rx="2" stroke="#3B82F6" strokeWidth="1.5" fill="rgba(59,130,246,0.06)" />
-                  <path d="M7 17v2h10v-2" stroke="#3B82F6" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                <div className="text-base font-semibold text-brand-blue">Dataset</div>
-              </Link>
+              {/* Dataset card: clickable for owner/contributor; visible but disabled for viewer */}
+              {role && role !== 'viewer' ? (
+                <Link to={`/projects/${projectId}/datasets/new`} aria-label="Create dataset" className="project-card hover-shadow p-3 flex flex-col items-center justify-center text-center min-h-[120px]">
+                  <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 opacity-80">
+                    <rect x="3" y="3" width="18" height="14" rx="2" stroke="#3B82F6" strokeWidth="1.5" fill="rgba(59,130,246,0.06)" />
+                    <path d="M7 17v2h10v-2" stroke="#3B82F6" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <div className="text-base font-semibold text-brand-blue">Dataset</div>
+                </Link>
+              ) : role === 'viewer' ? (
+                <div aria-disabled="true" title="View-only role: ask the owner for edit access" className="project-card p-3 flex flex-col items-center justify-center text-center min-h-[120px] opacity-50 cursor-not-allowed select-none">
+                  <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 opacity-80">
+                    <rect x="3" y="3" width="18" height="14" rx="2" stroke="#94a3b8" strokeWidth="1.5" fill="rgba(148,163,184,0.12)" />
+                    <path d="M7 17v2h10v-2" stroke="#94a3b8" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <div className="text-base font-semibold text-slate-500">Dataset</div>
+                </div>
+              ) : null}
 
               <Link to={`/projects/${projectId}/query`} aria-label="Open query" className="project-card hover-shadow p-3 flex flex-col items-center justify-center text-center min-h-[120px]">
                 <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 opacity-80">
@@ -145,13 +155,24 @@ export default function DatasetsPage(){
                 <div className="text-base font-semibold text-brand-blue">Dashboard</div>
               </Link>
 
-              <Link to={`/projects/${projectId}/audit`} aria-label="Open audit" className="project-card hover-shadow p-3 flex flex-col items-center justify-center text-center min-h-[120px]">
-                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 opacity-80">
-                  <path d="M12 3v6" stroke="#3B82F6" strokeWidth="1.6" strokeLinecap="round"/>
-                  <circle cx="12" cy="15" r="4" stroke="#3B82F6" strokeWidth="1.5" fill="rgba(59,130,246,0.06)" />
-                </svg>
-                <div className="text-base font-semibold text-brand-blue">Audit</div>
-              </Link>
+              {/* Audit card: clickable for non-viewers; visible but disabled for viewer */}
+              {role && role !== 'viewer' ? (
+                <Link to={`/projects/${projectId}/audit`} aria-label="Open audit" className="project-card hover-shadow p-3 flex flex-col items-center justify-center text-center min-h-[120px]">
+                  <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 opacity-80">
+                    <path d="M12 3v6" stroke="#3B82F6" strokeWidth="1.6" strokeLinecap="round"/>
+                    <circle cx="12" cy="15" r="4" stroke="#3B82F6" strokeWidth="1.5" fill="rgba(59,130,246,0.06)" />
+                  </svg>
+                  <div className="text-base font-semibold text-brand-blue">Audit</div>
+                </Link>
+              ) : role === 'viewer' ? (
+                <div aria-disabled="true" title="View-only role: ask the owner for audit access" className="project-card p-3 flex flex-col items-center justify-center text-center min-h-[120px] opacity-50 cursor-not-allowed select-none">
+                  <svg width="56" height="56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 opacity-80">
+                    <path d="M12 3v6" stroke="#94a3b8" strokeWidth="1.6" strokeLinecap="round"/>
+                    <circle cx="12" cy="15" r="4" stroke="#94a3b8" strokeWidth="1.5" fill="rgba(148,163,184,0.12)" />
+                  </svg>
+                  <div className="text-base font-semibold text-slate-500">Audit</div>
+                </div>
+              ) : null}
             </div>
 
             {/* Quick links table */}
@@ -186,7 +207,7 @@ export default function DatasetsPage(){
                       return copy.map(d => (
                         <tr key={d.id} className="border-t row-clickable" onClick={() => nav(`/projects/${projectId}/datasets/${d.id}`)} tabIndex={0} role="button">
                           <td className="p-2"> <div className="font-semibold text-slate-800 name-cell truncate" title={d.name}>{d.name}</div></td>
-                          <td className="p-2 text-right">{d.schema ? 'Table' : 'File'}</td>
+                          <td className="p-2 text-right">{d.schema ? 'Dataset' : 'File'}</td>
                           <td className="p-2 text-right">{d.last_upload_at ? new Date(d.last_upload_at).toLocaleString() : '—'}</td>
                         </tr>
                       ))
@@ -235,10 +256,7 @@ export default function DatasetsPage(){
             {toast && <Alert type="success" message={toast} onClose={()=>setToast('')} />}
 
             {/* Older inline dataset list removed — quick links table above replaces it */}
-
-          </div>
-        </main>
-    </div>
+  </>
   )
 }
 

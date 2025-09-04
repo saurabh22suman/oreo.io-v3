@@ -1,11 +1,29 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { createDatasetTop, getProject } from '../api'
+import { checkTableExists, createDatasetTop, getProject, uploadDatasetFile, myProjectRole, deleteDataset, prepareDataset, inferSchemaFromFile, setDatasetSchemaTop, getDatasetSchemaTop } from '../api'
 import Alert from '../components/Alert'
 
-function slugifyDbName(name: string){
-  return (name || 'project').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 63) || 'project'
+// Reserved words (extendable)
+const PG_RESERVED = new Set([
+  'select','table','user','order','group','where','from','join','insert','update','delete','create','drop','alter'
+])
+
+// Postgres-safe slug: lowercases, spaces->_, drops invalid, collapses _, trims _,
+// prefixes '_' if starts with digit, appends '_' if reserved, truncates to 63.
+function postgresSlugify(name: string){
+  let s = (name || '').toLowerCase()
+  s = s.replace(/\s+/g, '_')
+  s = s.replace(/[^a-z0-9_]/g, '')
+  s = s.replace(/_+/g, '_')
+  s = s.replace(/^_+|_+$/g, '')
+  if(/^\d/.test(s)) s = '_' + s
+  if(PG_RESERVED.has(s)) s = s + '_'
+  if(s.length > 63) s = s.slice(0, 63)
+  return s || 'project'
 }
+
+// Backwards-compatible name for schema placeholder generation
+const slugifyDbName = postgresSlugify
 
 export default function DatasetCreatePage(){
   const { id } = useParams()
@@ -20,38 +38,99 @@ export default function DatasetCreatePage(){
   const [azureCfg, setAzureCfg] = useState({ accountName: '', accessKey: '', container: '', path: '' })
   const [gcsCfg, setGcsCfg] = useState<{ keyFile?: File | null; bucket?: string; path?: string }>({ keyFile: null, bucket: '', path: '' })
   const [mssqlCfg, setMssqlCfg] = useState({ host: '', port: 1433, database: '', username: '', password: '', schema: 'dbo', table: '' })
-  const [db, setDb] = useState('')
-  const [schema, setSchema] = useState('public')
+  const [schema, setSchema] = useState('')
   const [table, setTable] = useState('')
+  const [tableTouched, setTableTouched] = useState(false)
+  const [autoValue, setAutoValue] = useState('')
   const [error, setError] = useState('')
+  const [nameError, setNameError] = useState('')
+  const [tableError, setTableError] = useState('')
   const [creating, setCreating] = useState(false)
+  const [creatingStage, setCreatingStage] = useState<'idle'|'creating'|'uploading'|'inferring'|'finalizing'>('idle')
+  const [existsInfo, setExistsInfo] = useState<{ checking: boolean; exists: boolean; message?: string }>({ checking: false, exists: false })
+  const [role, setRole] = useState<'owner'|'contributor'|'viewer'|null>(null)
+  const existsTimer = useRef<number | null>(null)
 
   useEffect(()=>{ (async()=>{
     try{
       const p = await getProject(projectId); setProject(p)
-      const d = slugifyDbName(p?.name || '')
-      setDb(d)
+  const s = slugifyDbName(p?.name || '')
+  setSchema(s || 'public')
+  try{ const r = await myProjectRole(projectId); setRole(r.role) }catch{ setRole(null) }
     }catch(e:any){ setError(e.message) }
   })() }, [projectId])
 
+  // Auto-fill and live-sync table from dataset name using Postgres-safe rules.
+  useEffect(()=>{
+    const s = postgresSlugify(name)
+    // If user never touched table OR current table equals the last auto value, keep syncing.
+    if(!tableTouched || table === autoValue){
+      setTable(s)
+      setAutoValue(s)
+    }
+  }, [name])
+
+  // Validate dataset and table inputs inline
+  useEffect(()=>{
+    if(!name || name.trim()==='') setNameError('Dataset name is required')
+    else setNameError('')
+  }, [name])
+  function isValidTableName(v: string){
+    if(!v) return false
+    // Must be lowercase letters, digits, underscores; cannot start with a digit; <=63; not reserved
+    if(!/^[a-z0-9_]+$/.test(v)) return false
+    if(/^\d/.test(v)) return false
+    if(v.length > 63) return false
+    if(PG_RESERVED.has(v)) return false
+    return true
+  }
+  useEffect(()=>{
+    const v = (table || '').trim()
+    if(!v){ setTableError('Enter a valid table name (lowercase letters, numbers, underscores)') }
+    else if(!isValidTableName(v)){ setTableError('Enter a valid table name (lowercase letters, numbers, underscores)') }
+    else setTableError('')
+  }, [table])
+
+  // Duplicate table check when schema+table look valid
+  useEffect(()=>{
+    const s = (schema || slugifyDbName(project?.name || '')).trim()
+    const t = (table || '').trim()
+    // Clear any pending timer
+    if(existsTimer.current){ clearTimeout(existsTimer.current); existsTimer.current = null }
+    // Only check when both present and table name valid
+    if(!s || !t || tableError){ setExistsInfo({ checking:false, exists:false }); return }
+    setExistsInfo({ checking:true, exists:false })
+    existsTimer.current = window.setTimeout(()=>{
+      let cancelled = false
+      checkTableExists(s, t).then(res=>{
+        if(cancelled) return
+        setExistsInfo({ checking:false, exists: !!res.exists, message: res.message })
+      }).catch(()=>{ if(!cancelled) setExistsInfo({ checking:false, exists:false }) })
+      return ()=>{ cancelled = true }
+    }, 300)
+  }, [schema, table, project?.name, tableError])
+
   const targetPreview = useMemo(()=>{
-    const t = table.trim().replace(/\s+/g, '_')
-    const s = schema.trim() || 'public'
-    const database = db.trim() || slugifyDbName(project?.name || '')
-    return `${database}.${s}.${t || 'table'}`
-  }, [db, schema, table, project?.name])
+    const t = (table || '').trim().replace(/\s+/g, '_')
+    const s = (schema || '').trim() || slugifyDbName(project?.name || '') || 'public'
+    return `${s}.${t || 'table'}`
+  }, [schema, table, project?.name])
 
   return (
-    <div className="max-w-3xl mx-auto">
+  <div className="max-w-3xl mx-auto relative">
+      {role === 'viewer' && (
+        <Alert type="warning" message="You have read-only access to this project. Dataset creation is disabled." onClose={()=>{}} />
+      )}
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-xl font-semibold">New dataset in {project?.name || `Project #${projectId}`}</h2>
         <Link to={`/projects/${projectId}`} className="text-sm text-primary hover:underline">Back</Link>
       </div>
   {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
-  <div className="border border-gray-200 bg-white p-4 grid gap-3">
+  <div className="border border-gray-200 bg-white p-4 grid gap-3 opacity-100">
         <div>
           <label className="text-sm text-gray-700">Dataset name</label>
           <input className="w-full border border-gray-300 px-3 py-2 mt-1" placeholder="e.g. users" value={name} onChange={e=>setName(e.target.value)} />
+          {nameError && <div className="text-xs text-red-600 mt-1">{nameError}</div>}
         </div>
         <div>
           <label className="text-sm text-gray-700">Source</label>
@@ -164,33 +243,46 @@ export default function DatasetCreatePage(){
             </div>
           </div>
         )}
-        <div className="grid sm:grid-cols-3 gap-3">
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="text-sm text-gray-700">Database</label>
-              <button className="text-xs text-primary hover:underline" onClick={()=>{
-                if(!db){ setDb(slugifyDbName(project?.name || '')) }
-              }}>Reset to project</button>
-            </div>
-            <input className="w-full border border-gray-300 px-3 py-2 mt-1" value={db} onChange={e=>setDb(e.target.value)} placeholder={slugifyDbName(project?.name || '')} />
-          </div>
+        <div className="grid sm:grid-cols-2 gap-3">
           <div>
             <label className="text-sm text-gray-700">Schema</label>
-            <input className="w-full border border-gray-300 px-3 py-2 mt-1" value={schema} onChange={e=>setSchema(e.target.value)} placeholder="public" />
+            <input className="w-full border border-gray-300 px-3 py-2 mt-1" value={schema} onChange={e=>setSchema(e.target.value)} placeholder={slugifyDbName(project?.name || '')} />
           </div>
           <div>
-            <label className="text-sm text-gray-700">Table</label>
-            <input className="w-full border border-gray-300 px-3 py-2 mt-1" value={table} onChange={e=>setTable(e.target.value)} placeholder="users" />
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-gray-700">Table</label>
+              {tableTouched && (
+                <button type="button" className="text-xs text-primary hover:underline" onClick={()=>{
+                  const s = postgresSlugify(name)
+                  setTable(s); setAutoValue(s); setTableTouched(false)
+                }}>Reset to name</button>
+              )}
+            </div>
+            <input
+              className="w-full border border-gray-300 px-3 py-2 mt-1"
+              value={table}
+              onChange={e=>{ const v = e.target.value; setTable(v); setTableTouched(v.trim() !== ''); if(v.trim()===''){ setAutoValue(postgresSlugify(name)); /* allow re-sync */ setTableTouched(false) } }}
+              placeholder="users"
+            />
+            {tableError && <div className="text-xs text-red-600 mt-1">{tableError}</div>}
+            {!tableError && existsInfo.checking && <div className="text-xs text-gray-500 mt-1">Checking availability…</div>}
+            {!tableError && !existsInfo.checking && existsInfo.exists && (
+              <div className="text-xs text-red-600 mt-1">Table already exists, please choose a different name.</div>
+            )}
           </div>
         </div>
-        <div className="text-xs text-gray-600">Target table will be <span className="font-mono">{targetPreview}</span></div>
+  <div className="text-xs text-gray-600">Target table will be <span className="font-mono">{targetPreview}</span></div>
         <div className="flex gap-2">
           <button
-            disabled={creating}
+            disabled={role === 'viewer' || creating || !!nameError || !!tableError || existsInfo.exists || existsInfo.checking}
             className="btn-primary bold px-4 py-2 text-sm disabled:opacity-60"
             onClick={async()=>{
+              if(role === 'viewer'){ setError('You do not have permission to create datasets'); return }
               // basic validation
               if(!name){ setError('Dataset name is required'); return }
+              if(nameError){ setError(nameError); return }
+              if(tableError){ setError(tableError); return }
+              if(existsInfo.exists){ setError('Table already exists, please choose a different name'); return }
               if(!source){ setError('Source is required'); return }
               // source-specific validation
               if(source === 'local' && !localFile){ setError('Please upload a file for Local file source'); return }
@@ -206,10 +298,10 @@ export default function DatasetCreatePage(){
               if(source === 'mssql'){
                 if(!mssqlCfg.host || !mssqlCfg.port || !mssqlCfg.database || !mssqlCfg.username || !mssqlCfg.password || !mssqlCfg.table){ setError('Host, port, database, username, password, and table are required for SQL Server'); return }
               }
-
-              setError(''); setCreating(true)
-              const database = db.trim() || slugifyDbName(project?.name || '')
-              const dsn = `${database}.${(schema||'public').trim()}.${table.trim()}`
+              setError(''); setCreating(true); setCreatingStage('creating')
+              const s = (schema || slugifyDbName(project?.name || '')).trim() || 'public'
+              const tClean = (table || '').trim().toLowerCase()
+              const dsn = `${s}.${tClean}`
               const sourceConfig: any = { type: source }
               if(source === 'local'){
                 // note: local file upload handled separately by upload endpoint; we'll send placeholder metadata here
@@ -226,15 +318,82 @@ export default function DatasetCreatePage(){
               }
 
               try{
-                const resp = await createDatasetTop(projectId, ({ name, source: source, sourceConfig, target: { type: 'table', dsn } } as any))
-                // Navigate to schema page next
-                nav(`/projects/${projectId}/datasets/${resp.id}/schema`)
-              }catch(e:any){ setError(e.message) } finally { setCreating(false) }
+                // For local file source, use atomic prepare endpoint
+                let resp: any
+                if(source === 'local'){
+                  setCreatingStage(localFile ? 'uploading' : 'creating')
+                  resp = await prepareDataset(projectId, { name, schema: s, table: tClean, source }, localFile || undefined)
+                  const datasetId = resp?.id
+                  // Attempt schema inference before redirecting
+                  if(datasetId && localFile){
+                    try{
+                      setCreatingStage('inferring')
+                      const inf = await inferSchemaFromFile(localFile)
+                      const schemaObj = inf?.schema ?? inf
+                      if(schemaObj){
+                        // Persist schema to backend
+                        setCreatingStage('finalizing')
+                        await setDatasetSchemaTop(datasetId, schemaObj)
+                      } else {
+                        // Fallback: poll backend schema endpoint briefly (worker may infer)
+                        setCreatingStage('finalizing')
+                        const ok = await (async()=>{
+                          const start = Date.now()
+                          while(Date.now() - start < 15000){
+                            try{
+                              const sj = await getDatasetSchemaTop(datasetId)
+                              if(sj && sj.schema){ return true }
+                            }catch{/* ignore */}
+                            await new Promise(r=>setTimeout(r, 1000))
+                          }
+                          return false
+                        })()
+                        if(!ok){ /* proceed to schema page anyway */ }
+                      }
+                    }catch{
+                      // If inference fails, try a short backend poll, then proceed
+                      setCreatingStage('finalizing')
+                      const start = Date.now()
+                      while(Date.now() - start < 10000){
+                        try{
+                          const sj = await getDatasetSchemaTop(datasetId)
+                          if(sj && sj.schema){ break }
+                        }catch{/* ignore */}
+                        await new Promise(r=>setTimeout(r, 1000))
+                      }
+                    }
+                  }
+                  // Notify and redirect after inference path
+                  try{ window.dispatchEvent(new CustomEvent('dataset:created', { detail: { projectId, datasetId } })) }catch(e){}
+                  nav(`/projects/${projectId}/datasets/${resp.id}/schema`)
+                } else {
+                  // Non-local sources: create and navigate immediately
+                  // Send both legacy target.dsn and explicit schema/table for newer backend
+                  resp = await createDatasetTop(projectId, ({ name, dataset_name: name, schema: s, table: tClean, source: source, sourceConfig, target: { type: 'table', dsn } } as any))
+                  try{ window.dispatchEvent(new CustomEvent('dataset:created', { detail: { projectId, datasetId: resp.id } })) }catch(e){}
+                  nav(`/projects/${projectId}/datasets/${resp.id}/schema`)
+                }
+              }catch(e:any){ setError(e.message) } finally { setCreating(false); setCreatingStage('idle') }
             }}
-          >Create dataset</button>
+          >
+            {creating ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-200 border-t-primary"></span>
+                {creatingStage === 'creating' ? 'Creating…' : creatingStage === 'uploading' ? 'Uploading file…' : creatingStage === 'inferring' ? 'Inferring schema…' : creatingStage === 'finalizing' ? 'Finalizing…' : 'Working…'}
+              </span>
+            ) : 'Create dataset'}
+          </button>
           <button className="border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50" onClick={()=>nav(-1)}>Cancel</button>
         </div>
       </div>
+  {creating && (
+        <div className="absolute inset-0 bg-white/60 flex items-center justify-center pointer-events-none">
+          <div className="flex flex-col items-center gap-2 text-sm text-gray-700">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-primary"></div>
+    <div>{creatingStage === 'creating' ? 'Creating dataset…' : creatingStage === 'uploading' ? 'Uploading file…' : creatingStage === 'inferring' ? 'Inferring schema…' : creatingStage === 'finalizing' ? 'Finalizing…' : 'Working…'}</div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

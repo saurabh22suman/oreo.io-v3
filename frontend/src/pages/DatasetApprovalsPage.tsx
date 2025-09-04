@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { approveChange, getProject, listChanges, rejectChange, currentUser, myProjectRole } from '../api'
+import { approveChange, getProject, rejectChange, currentUser, myProjectRole, listDatasetApprovalsTop } from '../api'
 import Alert from '../components/Alert'
 
 export default function DatasetApprovalsPage(){
@@ -13,15 +13,18 @@ export default function DatasetApprovalsPage(){
   const [toast, setToast] = useState('')
   const [me, setMe] = useState<{id:number; email:string}|null>(null)
   const [isApprover, setIsApprover] = useState(false)
+  const [status, setStatus] = useState<'pending'|'approved'|'rejected'|'withdrawn'|'all'>('pending')
 
-  useEffect(()=>{ (async()=>{
+  async function load(){
     try{
-      setProject(await getProject(projectId)); setChanges(await listChanges(projectId))
+      setProject(await getProject(projectId))
+      setChanges(await listDatasetApprovalsTop(dsId, status))
       const meInfo = await currentUser().catch(()=>null as any)
       if(meInfo?.id) setMe({ id: meInfo.id, email: meInfo.email })
-      try{ const role = await myProjectRole(projectId); setIsApprover(role.role === 'approver') }catch{}
+      try{ await myProjectRole(projectId); setIsApprover(false) }catch{}
     }catch(e:any){ setError(e.message) }
-  })() }, [projectId])
+  }
+  useEffect(()=>{ load() }, [projectId, dsId, status])
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -31,6 +34,16 @@ export default function DatasetApprovalsPage(){
           <Link to={`/projects/${projectId}/datasets/${dsId}`} className="text-primary hover:underline">Back: Dataset</Link>
           <Link to={`/projects/${projectId}/datasets/${dsId}/view`} className="text-primary hover:underline">Next: Viewer</Link>
         </div>
+      </div>
+      <div className="mb-3">
+        <label className="text-xs text-gray-600 mr-2">Status</label>
+        <select className="border px-2 py-1 text-sm" value={status} onChange={e=>setStatus(e.target.value as any)}>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+          <option value="withdrawn">Withdrawn</option>
+          <option value="all">All</option>
+        </select>
       </div>
   {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
   {toast && <Alert type="success" message={toast} onClose={()=>setToast('')} />}
@@ -54,8 +67,8 @@ export default function DatasetApprovalsPage(){
                     return isAssigned || isApprover
                   })() && (
                     <>
-                      <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{ try{ await approveChange(projectId, ch.id); setChanges(await listChanges(projectId)); setToast('Change approved') }catch(e:any){ setError(e.message) } }}>Approve</button>
-                      <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{ try{ await rejectChange(projectId, ch.id); setChanges(await listChanges(projectId)); setToast('Change rejected') }catch(e:any){ setError(e.message) } }}>Reject</button>
+                      <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{ try{ await approveChange(projectId, ch.id); await load(); setToast('Change approved') }catch(e:any){ setError(e.message) } }}>Approve</button>
+                      <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={async()=>{ try{ await rejectChange(projectId, ch.id); await load(); setToast('Change rejected') }catch(e:any){ setError(e.message) } }}>Reject</button>
                     </>
                   )}
                 </div>

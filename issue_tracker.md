@@ -3,6 +3,11 @@
 This file records known issues, fixes and planned enhancements for the oreo.io v3 project.
 
 
+## 2025-09-01 — Projects table adjustments
+
+- Enhancement: Projects page table simplified to four columns with fixed responsive widths: Name (40%), Datasets (10%), Role (20%), Last Modified (30%). Resizers disabled to maintain the specified layout. File: `frontend/src/pages/ProjectsPage.tsx`. Status: done.
+- Change: Removed inline Delete action from Projects list per UX. Deletion will be moved to a dedicated Project settings/details view. File: `frontend/src/pages/ProjectsPage.tsx`. Status: done.
+
 ## 2025-08-30 — Recent fixes & follow-ups
 
 - Fix: Navbar now reads authenticated user from `UserContext` and shows username instead of Login when authenticated.
@@ -25,6 +30,17 @@ New items added 2025-08-30 (UI Enhancements requested):
 - Enhancement: Keyboard accessibility for rows (Enter/Space to open) and row focus outline. Status: implemented in working tree; pending user review.
 - Enhancement: Truncate long project names in the table with tooltip on hover (using title attribute). Status: implemented in working tree; pending user review.
 - Enhancement: Replace text sort arrows with small SVG icons for clarity. Status: implemented.
+
+## 2025-09-02 — Dark theme consistency pass
+
+- Change: Expanded dark-mode CSS overrides to cover common Tailwind classes used across pages (bg-gray-50/100/200/300, text-slate-*, text-gray-*, border-gray-*, hover:bg-gray-50). This ensures cards, tables, and buttons inherit readable colors in dark mode even if local light classes are present. File: `frontend/src/index.css`. Status: done.
+- Change: Added dark-friendly tints for status badges (green/red) used in change details to maintain contrast. File: `frontend/src/index.css`. Status: done.
+- Change: Updated projects table header gradient for dark mode to a slate/navy gradient. File: `frontend/src/index.css`. Status: done.
+
+Follow-ups:
+- Refactor page components to prefer CSS variable-bound utility classes (surface/page/text/divider) instead of hardcoded bg-white/bg-gray-* to reduce reliance on overrides. Files: various under `frontend/src/pages/*`. Status: pending.
+- Replace inline table zebra classes with theme-aware classes and rely on variables for consistent appearance. Status: pending.
+- Audit landing/register/login pages for leftover light-only imagery backgrounds and ensure containers use `var(--bg-page)` and `var(--text)`. Status: pending.
 
 
 ## 2025-08-31 — Work-in-progress 404 and layout polish

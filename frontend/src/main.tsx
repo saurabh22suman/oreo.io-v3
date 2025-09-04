@@ -5,6 +5,10 @@ import App from './App'
 import { UserProvider } from './context/UserContext'
 import './index.css'
 
+// Apply stored theme before React mounts to avoid flash
+const storedTheme = (localStorage.getItem('oreo.theme') as 'light'|'dark'|null)
+if(storedTheme){ document.documentElement.classList.toggle('dark', storedTheme==='dark') }
+
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>

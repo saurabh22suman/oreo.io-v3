@@ -1,0 +1,7 @@
+vendor
+.git
+.vscode
+.DS_Store
+*.test
+*.out
+coverage

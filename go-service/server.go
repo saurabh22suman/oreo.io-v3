@@ -7,10 +7,13 @@ import (
 	"os"
 	"strings"
 
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/oreo-io/oreo.io-v2/go-service/controllers"
 	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
 	"github.com/oreo-io/oreo.io-v2/go-service/models"
+	"github.com/oreo-io/oreo.io-v2/go-service/services"
 )
 
 // SetupRouter configures the Gin engine. Exposed for tests.
@@ -53,7 +56,33 @@ func SetupRouter() *gin.Engine {
 		if strings.HasPrefix(strings.ToLower(os.Getenv("DATABASE_URL")), "postgres://") || strings.HasPrefix(strings.ToLower(os.Getenv("DATABASE_URL")), "postgresql://") {
 			_ = gdb.Exec("CREATE SCHEMA IF NOT EXISTS sys").Error
 		}
-		_ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.Dataset{}, &models.ProjectRole{}, &models.ChangeRequest{}, &models.ChangeComment{}, &models.DatasetUpload{}, &models.DatasetMeta{}, &models.DatasetVersion{})
+		_ = gdb.AutoMigrate(
+			&models.User{},
+			&models.Project{},
+			&models.Dataset{},
+			&models.ProjectRole{},
+			&models.ChangeRequest{},
+			&models.ChangeComment{},
+			&models.DatasetUpload{},
+			&models.DatasetMeta{},
+			&models.DatasetVersion{},
+			&models.SavedQuery{},
+			&models.QueryHistory{},
+			// Ensure supporting tables exist in dev/test
+			&models.Notification{},
+			&models.ProjectActivity{},
+			&models.DataQualityRule{},
+			&models.DataQualityResult{},
+		)
+
+		// Only migrate jobs table and start worker when using Postgres (skip for sqlite tests)
+		if gdb.Dialector != nil && strings.EqualFold(gdb.Dialector.Name(), "postgres") {
+			_ = gdb.AutoMigrate(&models.Job{})
+			if os.Getenv("DISABLE_WORKER") != "1" {
+				// Start background worker for dev (poll every 2s)
+				services.StartWorker(2 * time.Second)
+			}
+		}
 	}
 	// Static UI for quick auth testing
 	r.Static("/ui", "./static")
@@ -79,6 +108,15 @@ func SetupRouter() *gin.Engine {
 			role, _ := c.Get("user_role")
 			c.JSON(http.StatusOK, gin.H{"ok": true, "id": uid, "email": email, "role": role})
 		})
+
+		// User settings (profile & preferences)
+		me := api.Group("/me", controllers.AuthMiddleware())
+		{
+			me.GET("/profile", controllers.MeProfile)
+			me.PUT("/profile", controllers.MeProfileUpdate)
+			me.GET("/preferences", controllers.MePreferencesGet)
+			me.PUT("/preferences", controllers.MePreferencesUpdate)
+		}
 		api.POST("/auth/refresh", controllers.AuthMiddleware(), controllers.Refresh)
 
 		// Admin (static password header)
@@ -89,6 +127,9 @@ func SetupRouter() *gin.Engine {
 			admin.PUT("/users/:userId", controllers.AdminUsersUpdate)
 			admin.DELETE("/users/:userId", controllers.AdminUsersDelete)
 		}
+
+		// Utility: check if a physical table exists
+		api.GET("/check_table_exists", controllers.CheckTableExists)
 
 		// Projects (protected)
 		proj := api.Group("/projects", controllers.AuthMiddleware())
@@ -145,12 +186,21 @@ func SetupRouter() *gin.Engine {
 			}
 		}
 
+		// Query APIs (project-agnostic endpoints)
+		controllers.RegisterQueryRoutes(r, gdb)
+
+		// Security & governance routes
+		controllers.RegisterSecurityRoutes(r)
+		// Jobs (background tasks)
+		controllers.RegisterJobsRoutes(r)
+
 		// Note: Datasets APIs are currently nested under projects routes.
 
 		// Top-level dataset endpoints
 		dsTop := api.Group("/datasets", controllers.AuthMiddleware())
 		{
 			dsTop.POST("", controllers.DatasetsCreateTop)
+			dsTop.POST("/prepare", controllers.DatasetsPrepare)
 			dsTop.GET(":id/schema", controllers.DatasetSchemaGet)
 			dsTop.POST(":id/schema", controllers.DatasetSchemaSet)
 			dsTop.POST(":id/rules", controllers.DatasetRulesSet)
@@ -160,6 +210,8 @@ func SetupRouter() *gin.Engine {
 			dsTop.POST(":id/data/append/open", controllers.DatasetAppendOpenTop)
 			dsTop.GET(":id/data", controllers.DatasetDataGet)
 			dsTop.GET(":id/stats", controllers.DatasetStats)
+			// Dataset-level approvals listing (filterable by status)
+			dsTop.GET(":id/approvals", controllers.DatasetApprovalsListTop)
 			dsTop.POST(":id/query", controllers.DatasetQuery)
 			// Validate edited JSON (validate-first) and return upload_id
 			dsTop.POST(":id/data/append/json/validate", controllers.DatasetAppendJSONValidateTop)

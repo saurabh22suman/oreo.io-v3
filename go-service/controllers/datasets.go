@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
@@ -40,6 +41,68 @@ type DatasetIn struct {
 		Type string `json:"type"`
 		DSN  string `json:"dsn"`
 	} `json:"target"`
+}
+
+// normalizeTargetDSN accepts a DSN in either "schema.table" or "database.schema.table"
+// form and returns a trimmed canonical string. This keeps the backend tolerant of
+// frontend changes that omit the database segment when targeting a Postgres schema.table.
+func normalizeTargetDSN(dsn string) string {
+	dsn = strings.TrimSpace(dsn)
+	if dsn == "" {
+		return ""
+	}
+	parts := strings.Split(dsn, ".")
+	if len(parts) == 2 {
+		// schema.table — accept as-is
+		return parts[0] + "." + parts[1]
+	}
+	// for 3+ parts, preserve the original (e.g. database.schema.table)
+	return dsn
+}
+
+// parseTargetDSN returns database, schema, table parts for common DSN forms:
+// - schema.table => "", schema, table
+// - database.schema.table => database, schema, table
+// - anything else => "", "", original
+func parseTargetDSN(dsn string) (string, string, string) {
+	dsn = strings.TrimSpace(dsn)
+	if dsn == "" {
+		return "", "", ""
+	}
+	parts := strings.Split(dsn, ".")
+	if len(parts) == 2 {
+		return "", parts[0], parts[1]
+	}
+	if len(parts) >= 3 {
+		// join any extra leading parts as database
+		db := strings.Join(parts[:len(parts)-2], ".")
+		return db, parts[len(parts)-2], parts[len(parts)-1]
+	}
+	return "", "", dsn
+}
+
+// CheckTableExists responds with { exists: boolean, message: string }
+func CheckTableExists(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
+	schema := strings.TrimSpace(c.Query("schema"))
+	table := strings.TrimSpace(c.Query("table"))
+	if schema == "" || table == "" {
+		c.JSON(400, gin.H{"error": "invalid_params", "message": "schema and table are required"})
+		return
+	}
+	exists := tableExistsInSchema(gdb, schema, table)
+	msg := ""
+	if exists {
+		msg = "Table already exists"
+	}
+	c.JSON(200, gin.H{"exists": exists, "message": msg})
 }
 
 // --- DB storage helpers ---
@@ -85,6 +148,86 @@ func tableExists(gdb *gorm.DB, name string) bool {
 	return cnt > 0
 }
 
+// tableExistsInSchema checks existence by schema and table when available (Postgres)
+func tableExistsInSchema(gdb *gorm.DB, schema, name string) bool {
+	if gdb == nil {
+		return false
+	}
+	if dialect(gdb) == "postgres" {
+		var exists bool
+		row := gdb.Raw("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ?)", schema, name).Row()
+		_ = row.Scan(&exists)
+		return exists
+	}
+	// sqlite has no schemas; fallback to simple
+	return tableExists(gdb, name)
+}
+
+// datasetPhysicalTable resolves the storage table for a dataset: prefer target schema.table when set
+func datasetPhysicalTable(ds *models.Dataset) string {
+	if ds == nil {
+		return ""
+	}
+	s := strings.TrimSpace(ds.TargetSchema)
+	t := strings.TrimSpace(ds.TargetTable)
+	if s != "" && t != "" {
+		return fmt.Sprintf("%s.%s", s, t)
+	}
+	return dsMainTable(ds.ID)
+}
+
+// ensureDatasetTable creates the resolved physical table (schema.table or fallback) with JSON storage
+func ensureDatasetTable(gdb *gorm.DB, ds *models.Dataset) error {
+	if gdb == nil || ds == nil {
+		return fmt.Errorf("invalid args")
+	}
+	tbl := datasetPhysicalTable(ds)
+	if tbl == "" {
+		return fmt.Errorf("table not resolved")
+	}
+	if dialect(gdb) == "postgres" {
+		// Create schema if needed when using target schema
+		if strings.Contains(tbl, ".") {
+			parts := strings.SplitN(tbl, ".", 2)
+			if len(parts) == 2 {
+				_ = gdb.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", parts[0])).Error
+			}
+		}
+		return gdb.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (id BIGSERIAL PRIMARY KEY, data JSONB NOT NULL)", tbl)).Error
+	}
+	return gdb.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL)", tbl)).Error
+}
+
+// dropDatasetPhysicalAndStaging drops the main physical table and any staging tables for a dataset.
+func dropDatasetPhysicalAndStaging(gdb *gorm.DB, ds *models.Dataset) {
+	if gdb == nil || ds == nil {
+		return
+	}
+	// Drop main/physical table
+	tbl := datasetPhysicalTable(ds)
+	if strings.TrimSpace(tbl) != "" {
+		_ = gdb.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tbl)).Error
+	}
+	// Drop any staging tables for this dataset (pattern: ds_<id>_stg_*)
+	likePrefix := fmt.Sprintf("ds_%d_stg_", ds.ID)
+	if dialect(gdb) == "postgres" {
+		type row struct{ TableName string }
+		var rows []row
+		// Restrict to non-system schemas; staging are created without explicit schema
+		_ = gdb.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog','information_schema') AND table_name LIKE ?", likePrefix+"%").Scan(&rows).Error
+		for _, r := range rows {
+			_ = gdb.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", r.TableName)).Error
+		}
+	} else {
+		type row struct{ Name string }
+		var rows []row
+		_ = gdb.Raw("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE ?", likePrefix+"%").Scan(&rows).Error
+		for _, r := range rows {
+			_ = gdb.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", r.Name)).Error
+		}
+	}
+}
+
 // upsertDatasetMeta updates or creates sys.metadata for a dataset based on current main table
 func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 	if gdb == nil || ds == nil {
@@ -92,13 +235,15 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 	}
 	// Count rows
 	var rows int64
-	if tableExists(gdb, dsMainTable(ds.ID)) {
-		_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", dsMainTable(ds.ID))).Row().Scan(&rows)
+	tbl := datasetPhysicalTable(ds)
+	if strings.TrimSpace(tbl) != "" {
+		// Attempt count; ignore errors
+		_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", tbl)).Row().Scan(&rows)
 	}
 	// Sample one row to infer columns count
 	cols := 0
 	if rows > 0 {
-		if r1, err := gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT 1", dsMainTable(ds.ID))).Rows(); err == nil {
+		if r1, err := gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT 1", tbl)).Rows(); err == nil {
 			defer r1.Close()
 			if r1.Next() {
 				var raw any
@@ -127,13 +272,19 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 		}
 	}
 	now := time.Now()
-	// Compose table location string as <project_name>.upload.<dataset_name>
-	// Fallback to ds_<id> if names are unavailable.
-	projName := fmt.Sprintf("p_%d", ds.ProjectID)
-	if err := gdb.First(&proj, ds.ProjectID).Error; err == nil && strings.TrimSpace(proj.Name) != "" {
-		projName = proj.Name
+	// Compose table location string from dataset target fields when available
+	tableLoc := ""
+	s := strings.TrimSpace(ds.TargetSchema)
+	t := strings.TrimSpace(ds.TargetTable)
+	d := strings.TrimSpace(ds.TargetDatabase)
+	switch {
+	case d != "" && s != "" && t != "":
+		tableLoc = fmt.Sprintf("%s.%s.%s", d, s, t)
+	case s != "" && t != "":
+		tableLoc = fmt.Sprintf("%s.%s", s, t)
+	default:
+		tableLoc = datasetPhysicalTable(ds)
 	}
-	tableLoc := fmt.Sprintf("%s.upload.%s", projName, ds.Name)
 	var meta models.DatasetMeta
 	if err := gdb.Where("dataset_id = ?", ds.ID).First(&meta).Error; err != nil {
 		meta = models.DatasetMeta{ProjectID: ds.ProjectID, DatasetID: ds.ID, OwnerName: ownerName, RowCount: rows, ColumnCount: cols, LastUpdateAt: now, TableLocation: tableLoc}
@@ -281,6 +432,10 @@ func DatasetsCreate(c *gin.Context) {
 		c.JSON(409, gin.H{"error": "name_conflict"})
 		return
 	}
+	// Create an empty physical table immediately so downstream flows can rely on its existence
+	_ = ensureDatasetTable(gdb, &ds)
+	// Initialize metadata row with zero counts
+	upsertDatasetMeta(gdb, &ds)
 	c.JSON(201, ds)
 }
 
@@ -297,10 +452,14 @@ func DatasetsCreateTop(c *gin.Context) {
 		gdb = dbpkg.Get()
 	}
 	var body struct {
-		ProjectID uint   `json:"project_id" binding:"required"`
-		Name      string `json:"name" binding:"required"`
-		Source    string `json:"source"`
-		Target    struct {
+		ProjectID   uint   `json:"project_id" binding:"required"`
+		Name        string `json:"name"`
+		DatasetName string `json:"dataset_name"`
+		Source      string `json:"source"`
+		// DB mapping (schema.table) support
+		Schema string `json:"schema"`
+		Table  string `json:"table"`
+		Target struct {
 			Type string `json:"type"`
 			DSN  string `json:"dsn"`
 		} `json:"target"`
@@ -313,12 +472,201 @@ func DatasetsCreateTop(c *gin.Context) {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
-	ds := models.Dataset{ProjectID: body.ProjectID, Name: body.Name, Source: body.Source, TargetType: body.Target.Type, TargetDSN: body.Target.DSN}
+
+	// Resolve dataset name (accept alias dataset_name)
+	dsName := strings.TrimSpace(body.Name)
+	if dsName == "" {
+		dsName = strings.TrimSpace(body.DatasetName)
+	}
+	if dsName == "" {
+		c.JSON(400, gin.H{"error": "invalid_dataset_name", "message": "Dataset name cannot be empty"})
+		return
+	}
+
+	// Helper validator: allow only letters, digits, underscore
+	isValidIdent := func(s string) bool {
+		if strings.TrimSpace(s) == "" {
+			return false
+		}
+		for _, ch := range s {
+			if !(unicode.IsLetter(ch) || unicode.IsDigit(ch) || ch == '_') {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Prefer explicit schema/table if provided; else parse DSN
+	schemaName := strings.TrimSpace(body.Schema)
+	tableName := strings.TrimSpace(body.Table)
+	var norm string
+	var dbName string
+	if schemaName != "" && tableName != "" {
+		// validate table
+		if !isValidIdent(tableName) {
+			c.JSON(400, gin.H{"error": "invalid_table", "message": "Table name must contain only letters, numbers, and underscores"})
+			return
+		}
+		// normalize case for table: lowercase as conventional
+		tableName = strings.ToLower(tableName)
+		norm = schemaName + "." + tableName
+	} else {
+		norm = normalizeTargetDSN(body.Target.DSN)
+		dbName2, schema2, table2 := parseTargetDSN(body.Target.DSN)
+		dbName = dbName2
+		if schemaName == "" {
+			schemaName = schema2
+		}
+		if tableName == "" {
+			tableName = table2
+		}
+		// If a table is parsed, validate
+		if tableName != "" && !isValidIdent(tableName) {
+			c.JSON(400, gin.H{"error": "invalid_table", "message": "Table name must contain only letters, numbers, and underscores"})
+			return
+		}
+	}
+
+	// Idempotency: if schema+table resolved, ensure not already used within the project
+	if gdb != nil && schemaName != "" && tableName != "" {
+		var existing models.Dataset
+		err := gdb.Where("project_id = ? AND LOWER(target_schema) = ? AND LOWER(target_table) = ?", body.ProjectID, strings.ToLower(schemaName), strings.ToLower(tableName)).First(&existing).Error
+		if err == nil {
+			c.JSON(409, gin.H{"error": "dataset_exists", "message": "A dataset for this schema.table already exists."})
+			return
+		}
+	}
+	ds := models.Dataset{
+		ProjectID:      body.ProjectID,
+		Name:           dsName,
+		Source:         body.Source,
+		TargetType:     body.Target.Type,
+		TargetDSN:      norm,
+		TargetDatabase: dbName,
+		TargetSchema:   schemaName,
+		TargetTable:    tableName,
+	}
 	if err := gdb.Create(&ds).Error; err != nil {
 		c.JSON(409, gin.H{"error": "name_conflict"})
 		return
 	}
+	// Ensure physical storage table exists on creation
+	_ = ensureDatasetTable(gdb, &ds)
+	upsertDatasetMeta(gdb, &ds)
 	c.JSON(201, ds)
+}
+
+// DatasetsPrepare performs an atomic dataset creation with an optional file upload and validation.
+// It accepts multipart/form-data with fields: project_id, name (or dataset_name), schema, table, source, and file.
+// If any step fails, it deletes the newly created dataset to avoid dangling rows.
+func DatasetsPrepare(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
+	// Parse multipart
+	if err := c.Request.ParseMultipartForm(int64(maxUploadBytes) + (10 << 20)); err != nil {
+		c.JSON(400, gin.H{"error": "invalid_multipart"})
+		return
+	}
+	pidStr := strings.TrimSpace(c.PostForm("project_id"))
+	pid, _ := strconv.Atoi(pidStr)
+	if pid == 0 {
+		c.JSON(400, gin.H{"error": "project_required"})
+		return
+	}
+	if !HasProjectRole(c, uint(pid), "owner", "contributor") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	name := strings.TrimSpace(c.PostForm("name"))
+	if name == "" {
+		name = strings.TrimSpace(c.PostForm("dataset_name"))
+	}
+	if name == "" {
+		c.JSON(400, gin.H{"error": "invalid_dataset_name", "message": "Dataset name cannot be empty"})
+		return
+	}
+	schemaName := strings.TrimSpace(c.PostForm("schema"))
+	tableName := strings.ToLower(strings.TrimSpace(c.PostForm("table")))
+	source := strings.TrimSpace(c.PostForm("source"))
+	// Prevent duplicates if schema.table provided
+	if schemaName != "" && tableName != "" {
+		var existing models.Dataset
+		if err := gdb.Where("project_id = ? AND LOWER(target_schema) = ? AND LOWER(target_table) = ?", pid, strings.ToLower(schemaName), tableName).First(&existing).Error; err == nil {
+			c.JSON(409, gin.H{"error": "dataset_exists", "message": "A dataset for this schema.table already exists."})
+			return
+		}
+	}
+	ds := models.Dataset{ProjectID: uint(pid), Name: name, Source: source, TargetSchema: schemaName, TargetTable: tableName}
+	if err := gdb.Create(&ds).Error; err != nil {
+		c.JSON(409, gin.H{"error": "name_conflict"})
+		return
+	}
+	created := true
+	// If a file is present, allow a one-time initial ingest into the main table during dataset creation.
+	// After creation, all further data additions must use the append approval flow.
+	file, header, err := c.Request.FormFile("file")
+	if err == nil && file != nil && header != nil {
+		defer file.Close()
+		if header.Size > maxUploadBytes {
+			// cleanup the just-created dataset
+			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+			respondTooLarge(c)
+			return
+		}
+		// Ensure physical table exists
+		if err := ensureDatasetTable(gdb, &ds); err != nil {
+			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+			c.JSON(500, gin.H{"error": "table_create_failed"})
+			return
+		}
+		// Sanity: ensure main table is empty so this is truly the first ingest
+		var existing int64
+		tbl := datasetPhysicalTable(&ds)
+		if strings.TrimSpace(tbl) != "" {
+			_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", tbl)).Row().Scan(&existing)
+		}
+		if existing > 0 {
+			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+			c.JSON(403, gin.H{"error": "append_only", "message": "Modifications are not allowed. Use append flow."})
+			return
+		}
+		// Read all bytes and ingest according to extension (csv/json)
+		content, rerr := io.ReadAll(file)
+		if rerr != nil {
+			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+			c.JSON(400, gin.H{"error": "invalid_file"})
+			return
+		}
+		if err2 := ingestBytesToTable(gdb, content, header.Filename, tbl); err2 != nil {
+			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+			// Unsupported format or ingest error
+			if err2.Error() == "unsupported_format" {
+				c.JSON(400, gin.H{"error": "unsupported_format", "message": "Only .csv and .json are supported."})
+			} else {
+				c.JSON(500, gin.H{"error": "ingest_failed"})
+			}
+			return
+		}
+		// Update metadata after initial ingest
+		upsertDatasetMeta(gdb, &ds)
+		c.JSON(201, gin.H{"id": ds.ID, "project_id": ds.ProjectID, "name": ds.Name})
+		return
+	} else if err != nil && err != http.ErrMissingFile {
+		// unexpected error reading file part
+		if created {
+			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+		}
+		c.JSON(400, gin.H{"error": "invalid_file"})
+		return
+	}
+	// No file provided; dataset prepared as empty
+	c.JSON(201, gin.H{"id": ds.ID, "project_id": ds.ProjectID, "name": ds.Name})
 }
 
 // Helper to load dataset and check project-scoped permission
@@ -347,7 +695,56 @@ func DatasetSchemaGet(c *gin.Context) {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
-	c.JSON(200, gin.H{"schema": ds.Schema})
+	// If schema exists, return it.
+	if strings.TrimSpace(ds.Schema) != "" {
+		c.JSON(200, gin.H{"schema": ds.Schema})
+		return
+	}
+
+	// Defensive: attempt to infer schema from last uploaded file if available.
+	if ds.LastUploadPath != "" {
+		gdb := dbpkg.Get()
+		if gdb == nil {
+			if _, err := dbpkg.Init(); err == nil {
+				gdb = dbpkg.Get()
+			}
+		}
+		pyBase := os.Getenv("PYTHON_SERVICE_URL")
+		if pyBase == "" {
+			pyBase = "http://python-service:8000"
+		}
+		// Build multipart request with the stored file
+		var mpBuf bytes.Buffer
+		mw := multipart.NewWriter(&mpBuf)
+		fw, _ := mw.CreateFormFile("file", filepath.Base(ds.LastUploadPath))
+		f, ferr := os.Open(ds.LastUploadPath)
+		if ferr == nil {
+			io.Copy(fw, f)
+			f.Close()
+		}
+		mw.Close()
+		req, _ := http.NewRequest(http.MethodPost, pyBase+"/infer-schema", &mpBuf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil && resp != nil {
+			defer resp.Body.Close()
+			var result struct {
+				Schema any `json:"schema"`
+			}
+			b, _ := io.ReadAll(resp.Body)
+			_ = json.Unmarshal(b, &result)
+			if result.Schema != nil {
+				if schemaBytes, err := json.Marshal(result.Schema); err == nil {
+					ds.Schema = string(schemaBytes)
+					_ = gdb.Save(ds).Error
+					c.JSON(200, gin.H{"schema": ds.Schema})
+					return
+				}
+			}
+		}
+	}
+	// Nothing to infer now — respond with no schema (frontend may poll)
+	c.JSON(200, gin.H{"schema": nil})
 }
 func DatasetSchemaSet(c *gin.Context) {
 	gdb := dbpkg.Get()
@@ -378,6 +775,10 @@ func DatasetSchemaSet(c *gin.Context) {
 	}
 	c.JSON(200, gin.H{"ok": true})
 }
+
+// DatasetAppendValidateTop validates a file for a dataset by delegating to AppendUpload validation logic without opening a change.
+// For now, reuse the existing two-step in frontends that first call /data/append/validate and then /data/append/open.
+// This handler simply proxies to the project-scoped validate by mapping context params.
 func DatasetRulesSet(c *gin.Context) {
 	gdb := dbpkg.Get()
 	if gdb == nil {
@@ -556,11 +957,10 @@ func DatasetStats(c *gin.Context) {
 		"table_location": meta.TableLocation,
 	}
 	if stats["row_count"] == nil || stats["row_count"] == int64(0) {
-		if tableExists(gdb, dsMainTable(ds.ID)) {
-			var total int64
-			_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", dsMainTable(ds.ID))).Row().Scan(&total)
-			stats["row_count"] = total
-		}
+		var total int64
+		// Attempt to count directly from the dataset's physical table (schema.table or ds_<id>)
+		_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", datasetPhysicalTable(ds))).Row().Scan(&total)
+		stats["row_count"] = total
 	}
 	var pending int64
 	_ = gdb.Model(&models.ChangeRequest{}).Where("dataset_id = ? AND status = ?", ds.ID, "pending").Count(&pending)
@@ -585,7 +985,8 @@ func DatasetQuery(c *gin.Context) {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
-	if !tableExists(gdb, dsMainTable(ds.ID)) {
+	// Ensure the resolved physical table exists (schema.table or fallback ds_<id>)
+	if !tableExists(gdb, datasetPhysicalTable(ds)) {
 		c.JSON(404, gin.H{"error": "no_data"})
 		return
 	}
@@ -607,13 +1008,13 @@ func DatasetQuery(c *gin.Context) {
 	if len(body.Where) > 0 {
 		jb, _ := json.Marshal(body.Where)
 		if dialect(gdb) == "postgres" {
-			rows, err = gdb.Raw(fmt.Sprintf("SELECT data FROM %s WHERE data @> ?::jsonb LIMIT ? OFFSET ?", dsMainTable(ds.ID)), string(jb), body.Limit, body.Offset).Rows()
+			rows, err = gdb.Raw(fmt.Sprintf("SELECT data FROM %s WHERE data @> ?::jsonb LIMIT ? OFFSET ?", datasetPhysicalTable(ds)), string(jb), body.Limit, body.Offset).Rows()
 		} else {
 			// naive filter for sqlite: match as substring
-			rows, err = gdb.Raw(fmt.Sprintf("SELECT data FROM %s WHERE data LIKE ? LIMIT ? OFFSET ?", dsMainTable(ds.ID)), "%"+string(jb)+"%", body.Limit, body.Offset).Rows()
+			rows, err = gdb.Raw(fmt.Sprintf("SELECT data FROM %s WHERE data LIKE ? LIMIT ? OFFSET ?", datasetPhysicalTable(ds)), "%"+string(jb)+"%", body.Limit, body.Offset).Rows()
 		}
 	} else {
-		rows, err = gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT ? OFFSET ?", dsMainTable(ds.ID)), body.Limit, body.Offset).Rows()
+		rows, err = gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT ? OFFSET ?", datasetPhysicalTable(ds)), body.Limit, body.Offset).Rows()
 	}
 	if err != nil {
 		c.JSON(500, gin.H{"error": "db"})
@@ -710,6 +1111,15 @@ func DatasetsUpdate(c *gin.Context) {
 	}
 	ds.Name = in.Name
 	ds.Schema = in.Schema
+	// If a target DSN was provided in the payload, parse and store structured fields
+	if strings.TrimSpace(in.Target.DSN) != "" {
+		norm := normalizeTargetDSN(in.Target.DSN)
+		dbName, schemaName, tableName := parseTargetDSN(in.Target.DSN)
+		ds.TargetDSN = norm
+		ds.TargetDatabase = dbName
+		ds.TargetSchema = schemaName
+		ds.TargetTable = tableName
+	}
 	if in.Rules != "" {
 		ds.Rules = in.Rules
 	}
@@ -735,11 +1145,72 @@ func DatasetsDelete(c *gin.Context) {
 	}
 	pid, _ := strconv.Atoi(pidStr)
 	id, _ := strconv.Atoi(c.Param("datasetId"))
-	if !HasProjectRole(c, uint(pid), "owner") {
-		c.JSON(403, gin.H{"error": "forbidden"})
+
+	// Load dataset to check emptiness if needed
+	var ds models.Dataset
+	if err := gdb.Where("project_id = ?", pid).First(&ds, id).Error; err != nil {
+		c.JSON(404, gin.H{"error": "not_found"})
 		return
 	}
-	if err := gdb.Where("project_id = ?", pid).Delete(&models.Dataset{}, id).Error; err != nil {
+
+	// Owners can always delete
+	if !HasProjectRole(c, uint(pid), "owner") {
+		// Contributors may delete only if the dataset is effectively empty (no uploads, no schema/rules)
+		if HasProjectRole(c, uint(pid), "contributor") {
+			var cnt int64
+			if err := gdb.Model(&models.DatasetUpload{}).Where("project_id = ? AND dataset_id = ?", pid, ds.ID).Count(&cnt).Error; err != nil {
+				c.JSON(500, gin.H{"error": "db"})
+				return
+			}
+			isEmpty := cnt == 0 && strings.TrimSpace(ds.Schema) == "" && strings.TrimSpace(ds.Rules) == "" && strings.TrimSpace(ds.LastUploadPath) == ""
+			if !isEmpty {
+				c.JSON(403, gin.H{"error": "forbidden"})
+				return
+			}
+		} else {
+			c.JSON(403, gin.H{"error": "forbidden"})
+			return
+		}
+	}
+
+	// Perform cascading delete in a transaction: child rows, metadata, and physical tables
+	if err := gdb.Transaction(func(tx *gorm.DB) error {
+		// Delete change comments linked to change requests of this dataset
+		if err := tx.Exec("DELETE FROM change_comments WHERE project_id = ? AND change_request_id IN (SELECT id FROM change_requests WHERE project_id = ? AND dataset_id = ?)", pid, pid, ds.ID).Error; err != nil {
+			return err
+		}
+		// Delete data quality results linked via uploads
+		if err := tx.Exec("DELETE FROM data_quality_results WHERE upload_id IN (SELECT id FROM dataset_uploads WHERE project_id = ? AND dataset_id = ?)", pid, ds.ID).Error; err != nil {
+			return err
+		}
+		// Delete uploads
+		if err := tx.Where("project_id = ? AND dataset_id = ?", pid, ds.ID).Delete(&models.DatasetUpload{}).Error; err != nil {
+			return err
+		}
+		// Delete change requests
+		if err := tx.Where("project_id = ? AND dataset_id = ?", pid, ds.ID).Delete(&models.ChangeRequest{}).Error; err != nil {
+			return err
+		}
+		// Delete dataset versions
+		if err := tx.Where("dataset_id = ?", ds.ID).Delete(&models.DatasetVersion{}).Error; err != nil {
+			return err
+		}
+		// Delete data quality rules
+		if err := tx.Where("dataset_id = ?", ds.ID).Delete(&models.DataQualityRule{}).Error; err != nil {
+			return err
+		}
+		// Delete metadata
+		if err := tx.Where("dataset_id = ?", ds.ID).Delete(&models.DatasetMeta{}).Error; err != nil {
+			return err
+		}
+		// Drop physical and staging tables for dataset
+		dropDatasetPhysicalAndStaging(tx, &ds)
+		// Finally delete dataset row
+		if err := tx.Where("project_id = ?", pid).Delete(&models.Dataset{}, id).Error; err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
@@ -748,138 +1219,8 @@ func DatasetsDelete(c *gin.Context) {
 
 // DatasetUpload streams a file to a temp folder for later processing (schema inference/append)
 func DatasetUpload(c *gin.Context) {
-	gdb := dbpkg.Get()
-	if gdb == nil {
-		if _, err := dbpkg.Init(); err != nil {
-			c.JSON(500, gin.H{"error": "db"})
-			return
-		}
-		gdb = dbpkg.Get()
-	}
-	pidStr := c.Param("projectId")
-	if pidStr == "" {
-		pidStr = c.Param("id")
-	}
-	pid, _ := strconv.Atoi(pidStr)
-	dsid, _ := strconv.Atoi(c.Param("datasetId"))
-	// Only owner can perform direct uploads to a dataset
-	if !HasProjectRole(c, uint(pid), "owner") {
-		c.JSON(403, gin.H{"error": "forbidden"})
-		return
-	}
-	// Ensure dataset exists
-	var ds models.Dataset
-	if err := gdb.Where("project_id = ?", pid).First(&ds, dsid).Error; err != nil {
-		c.JSON(404, gin.H{"error": "not_found"})
-		return
-	}
-
-	// Accept multipart/form-data file field "file"
-	file, header, err := c.Request.FormFile("file")
-	if err != nil {
-		c.JSON(400, gin.H{"error": "missing_file"})
-		return
-	}
-	defer file.Close()
-
-	// Enforce size limit using header size if provided
-	if header != nil && header.Size > maxUploadBytes {
-		respondTooLarge(c)
-		return
-	}
-
-	// Save to temp dir (could be replaced by S3, disk, etc.)
-	base := os.TempDir()
-	dir := filepath.Join(base, "oreo_uploads")
-	_ = os.MkdirAll(dir, 0o755)
-	uniqueName := fmt.Sprintf("ds_%d_%d_%s", ds.ID, time.Now().UnixNano(), filepath.Base(header.Filename))
-	dstPath := filepath.Join(dir, uniqueName)
-	dst, err := os.Create(dstPath)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "store"})
-		return
-	}
-	defer dst.Close()
-	// Guard actual bytes copied against limit
-	var limited int64 = 0
-	chunkBuf := make([]byte, 32*1024)
-	for {
-		n, rerr := file.Read(chunkBuf)
-		if n > 0 {
-			limited += int64(n)
-			if limited > maxUploadBytes {
-				_ = dst.Close()
-				_ = os.Remove(dstPath)
-				respondTooLarge(c)
-				return
-			}
-			if _, werr := dst.Write(chunkBuf[:n]); werr != nil {
-				c.JSON(500, gin.H{"error": "write"})
-				return
-			}
-		}
-		if rerr == io.EOF {
-			break
-		}
-		if rerr != nil {
-			c.JSON(500, gin.H{"error": "write"})
-			return
-		}
-	}
-
-	// Record last upload info
-	now := time.Now()
-	ds.LastUploadPath = dstPath
-	ds.LastUploadAt = &now
-	_ = gdb.Save(&ds).Error
-
-	// Ingest into main table (overwrite contents)
-	_ = ensureMainTable(gdb, ds.ID)
-	_ = gdb.Exec(fmt.Sprintf("DELETE FROM %s", dsMainTable(ds.ID))).Error
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	switch ext {
-	case ".csv":
-		_ = ingestCSVToTable(gdb, dstPath, dsMainTable(ds.ID))
-	case ".json":
-		_ = ingestJSONToTable(gdb, dstPath, dsMainTable(ds.ID))
-	}
-
-	// Update metadata
-	upsertDatasetMeta(gdb, &ds)
-
-	// Call Python /infer-schema with the stored file
-	pyBase := os.Getenv("PYTHON_SERVICE_URL")
-	if pyBase == "" {
-		pyBase = "http://python-service:8000"
-	}
-	var mpBuf bytes.Buffer
-	mw := multipart.NewWriter(&mpBuf)
-	fw, _ := mw.CreateFormFile("file", filepath.Base(dstPath))
-	f, _ := os.Open(dstPath)
-	io.Copy(fw, f)
-	f.Close()
-	mw.Close()
-
-	req, _ := http.NewRequest(http.MethodPost, pyBase+"/infer-schema", &mpBuf)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	resp, err := http.DefaultClient.Do(req)
-	if err == nil && resp != nil {
-		defer resp.Body.Close()
-		var result struct {
-			Schema any `json:"schema"`
-		}
-		b, _ := io.ReadAll(resp.Body)
-		_ = json.Unmarshal(b, &result)
-		if result.Schema != nil {
-			// Persist only the schema portion
-			if schemaBytes, err := json.Marshal(result.Schema); err == nil {
-				ds.Schema = string(schemaBytes)
-			}
-			_ = gdb.Save(&ds).Error
-		}
-	}
-
-	c.JSON(201, gin.H{"stored": true, "path": dstPath, "dataset_id": ds.ID})
+	// Append-only policy: direct uploads are disabled. Use the append flow (validate -> open -> approve).
+	c.JSON(403, gin.H{"error": "append_only", "message": "Modifications are not allowed. Use append flow."})
 }
 
 // DatasetSample returns a small preview (first N rows) of the last uploaded file as JSON rows
@@ -898,7 +1239,7 @@ func DatasetSample(c *gin.Context) {
 	}
 	pid, _ := strconv.Atoi(pidStr)
 	dsid, _ := strconv.Atoi(c.Param("datasetId"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -908,13 +1249,13 @@ func DatasetSample(c *gin.Context) {
 		return
 	}
 	// If DB table exists, return sample from it
-	if tableExists(gdb, dsMainTable(ds.ID)) {
+	if tableExists(gdb, datasetPhysicalTable(&ds)) {
 		nStr := c.DefaultQuery("n", "50")
 		n, _ := strconv.Atoi(nStr)
 		if n <= 0 {
 			n = 50
 		}
-		rows, err := gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT ?", dsMainTable(ds.ID)), n).Rows()
+		rows, err := gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT ?", datasetPhysicalTable(&ds)), n).Rows()
 		if err == nil {
 			defer rows.Close()
 			out := struct {
@@ -1028,14 +1369,10 @@ func AppendUpload(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "reviewer_required"})
 		return
 	}
-	// Reviewer must be a project member with role 'approver'
+	// Reviewer must be a project member (any role) now that 'approver' role is removed
 	var pr models.ProjectRole
 	if err := gdb.Where("project_id = ? AND user_id = ?", pid, reviewerID).First(&pr).Error; err != nil {
 		c.JSON(400, gin.H{"error": "reviewer_not_member"})
-		return
-	}
-	if normalizeRole(pr.Role) != "approver" {
-		c.JSON(400, gin.H{"error": "reviewer_not_approver"})
 		return
 	}
 	defer file.Close()
@@ -1147,8 +1484,13 @@ func AppendUpload(c *gin.Context) {
 	rsJSON, _ := json.Marshal(rs)
 	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data", Payload: string(pb), ReviewerID: reviewerID, ReviewerStates: string(rsJSON)}
 	if uid, exists := c.Get("user_id"); exists {
-		if u, ok := uid.(uint); ok {
-			cr.UserID = u
+		switch v := uid.(type) {
+		case float64:
+			cr.UserID = uint(v)
+		case int:
+			cr.UserID = uint(v)
+		case uint:
+			cr.UserID = v
 		}
 	}
 	if err := gdb.Create(&cr).Error; err != nil {
@@ -1158,6 +1500,10 @@ func AppendUpload(c *gin.Context) {
 	// Create staging table and ingest upload content
 	_ = ensureStagingTable(gdb, ds.ID, cr.ID)
 	_ = ingestBytesToTable(gdb, up.Content, up.Filename, dsStagingTable(ds.ID, cr.ID))
+	// Notify reviewer if present
+	if reviewerID != 0 {
+		_ = AddNotification(reviewerID, "You were requested to review a change", models.JSONB{"type": "reviewer_assigned", "project_id": uint(pid), "dataset_id": ds.ID, "change_request_id": cr.ID, "title": "Append data"})
+	}
 	c.JSON(201, gin.H{"ok": true, "change_request": cr})
 }
 
@@ -1457,8 +1803,13 @@ func AppendOpen(c *gin.Context) {
 	}
 	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: title, Payload: string(pb), ReviewerID: firstReviewer, Reviewers: string(reviewersJSON), ReviewerStates: string(reviewerStatesJSON)}
 	if uid, exists := c.Get("user_id"); exists {
-		if u, ok := uid.(uint); ok {
-			cr.UserID = u
+		switch v := uid.(type) {
+		case float64:
+			cr.UserID = uint(v)
+		case int:
+			cr.UserID = uint(v)
+		case uint:
+			cr.UserID = v
 		}
 	}
 	if err := gdb.Create(&cr).Error; err != nil {
@@ -1467,12 +1818,26 @@ func AppendOpen(c *gin.Context) {
 	}
 	_ = ensureStagingTable(gdb, ds.ID, cr.ID)
 	_ = ingestBytesToTable(gdb, up.Content, up.Filename, dsStagingTable(ds.ID, cr.ID))
+	// Notify reviewers
+	reviewers := []uint{}
+	if firstReviewer != 0 {
+		reviewers = append(reviewers, firstReviewer)
+	}
+	if len(cleaned) > 0 {
+		reviewers = cleaned
+	}
+	_ = AddNotificationsBulk(reviewers, "You were requested to review a change", models.JSONB{"type": "reviewer_assigned", "project_id": uint(pid), "dataset_id": ds.ID, "change_request_id": cr.ID, "title": title})
 	// Optional: initial comment
 	if strings.TrimSpace(body.Comment) != "" {
 		cc := models.ChangeComment{ProjectID: uint(pid), ChangeRequestID: cr.ID, Body: strings.TrimSpace(body.Comment)}
 		if uid, exists := c.Get("user_id"); exists {
-			if u, ok := uid.(uint); ok {
-				cc.UserID = u
+			switch v := uid.(type) {
+			case float64:
+				cc.UserID = uint(v)
+			case int:
+				cc.UserID = uint(v)
+			case uint:
+				cc.UserID = v
 			}
 		}
 		_ = gdb.Create(&cc).Error
@@ -1685,6 +2050,15 @@ func AppendJSON(c *gin.Context) {
 	// Create staging table and ingest JSON rows
 	_ = ensureStagingTable(gdb, ds.ID, cr.ID)
 	_ = ingestBytesToTable(gdb, jb, fname, dsStagingTable(ds.ID, cr.ID))
+	// Notify reviewers for edited-rows path
+	reviewers := []uint{}
+	if firstReviewer != 0 {
+		reviewers = append(reviewers, firstReviewer)
+	}
+	if len(reviewersAll) > 0 {
+		reviewers = reviewersAll
+	}
+	_ = AddNotificationsBulk(reviewers, "You were requested to review a change", models.JSONB{"type": "reviewer_assigned", "project_id": uint(pid), "dataset_id": ds.ID, "change_request_id": cr.ID, "title": "Append data (edited)"})
 	c.JSON(201, gin.H{"ok": true, "change_request": cr})
 }
 

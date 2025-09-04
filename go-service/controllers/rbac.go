@@ -64,17 +64,15 @@ func normalizeRole(role string) string {
 }
 
 // expandAllowedRoles applies precedence so higher roles satisfy lower role checks
-// Order of precedence (high->low): owner > contributor (prev. editor) > approver > viewer
+// Order of precedence (high->low): owner > contributor (prev. editor) > viewer
 func expandAllowedRoles(want string) []string {
 	switch want {
 	case "owner":
 		return []string{"owner"}
 	case "contributor":
 		return []string{"contributor", "owner"}
-	case "approver":
-		return []string{"approver", "contributor", "owner"}
 	case "viewer":
-		return []string{"viewer", "approver", "contributor", "owner"}
+		return []string{"viewer", "contributor", "owner"}
 	default:
 		return []string{want}
 	}

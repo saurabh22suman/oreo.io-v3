@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
 	"github.com/oreo-io/oreo.io-v2/go-service/models"
+	"gorm.io/gorm"
 )
 
 // ChangesList lists change requests for a project
@@ -30,7 +29,7 @@ func ChangesList(c *gin.Context) {
 		pidStr = c.Param("projectId")
 	}
 	pid, _ := strconv.Atoi(pidStr)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -58,7 +57,7 @@ func ChangeApprove(c *gin.Context) {
 	}
 	pid, _ := strconv.Atoi(pidStr)
 	// Basic access: must at least be a project member (viewer or above)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -101,7 +100,7 @@ func ChangeApprove(c *gin.Context) {
 			}
 		}
 	}
-	if !isAssigned && !HasProjectRole(c, uint(pid), "approver") {
+	if !isAssigned {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -172,51 +171,106 @@ func ChangeApprove(c *gin.Context) {
 			c.JSON(404, gin.H{"error": "upload_not_found"})
 			return
 		}
-		// DB path: append staging table rows to main table, then drop staging
+		// DB path: append staging table rows to main PHYSICAL table, then drop staging (transactional)
 		stg := dsStagingTable(ds.ID, cr.ID)
-		main := dsMainTable(ds.ID)
+		main := datasetPhysicalTable(&ds)
+		altMain := dsMainTable(ds.ID)
+		// Diagnostics
+		fmt.Printf("[ChangeApprove] append start ds=%d cr=%d stg=%s main=%s altMain=%s\n", ds.ID, cr.ID, stg, main, altMain)
 		usedDB := false
 		if tableExists(gdb, stg) {
-			_ = ensureMainTable(gdb, ds.ID)
-			if ex := gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) SELECT data FROM %s", main, stg)); ex.Error == nil {
-				_ = gdb.Exec(fmt.Sprintf("DROP TABLE %s", stg)).Error
-				now := time.Now()
-				ds.LastUploadAt = &now
-				_ = gdb.Save(&ds).Error
-				// Refresh dataset metadata (rows/columns/last update)
-				upsertDatasetMeta(gdb, &ds)
-				usedDB = true
+			// Non-transactional merge to avoid driver/visibility issues observed in dev
+			// ensure physical table exists
+			if err := ensureDatasetTable(gdb, &ds); err != nil {
+				fmt.Printf("[ChangeApprove] ensureDatasetTable failed: %v\n", err)
+			} else {
+				// Count rows to be appended (for auditing)
+				var toAppend int64
+				_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", stg)).Row().Scan(&toAppend)
+				fmt.Printf("[ChangeApprove] stg rows to append = %d\n", toAppend)
+				// append into physical table; on failure, fallback to internal ds_<id> table
+				var ex *gorm.DB
+				if strings.EqualFold(gdb.Dialector.Name(), "postgres") {
+					ex = gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) SELECT data::jsonb FROM %s", main, stg))
+				} else {
+					ex = gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) SELECT data FROM %s", main, stg))
+				}
+				if ex.Error != nil {
+					fmt.Printf("[ChangeApprove] insert into main failed: %v\n", ex.Error)
+					// Ensure alt table exists and retry
+					if err := ensureMainTable(gdb, ds.ID); err == nil {
+						if strings.EqualFold(gdb.Dialector.Name(), "postgres") {
+							ex = gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) SELECT data::jsonb FROM %s", altMain, stg))
+						} else {
+							ex = gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) SELECT data FROM %s", altMain, stg))
+						}
+					}
+					if ex.Error == nil {
+						main = altMain
+					}
+				}
+				if ex != nil && ex.Error == nil {
+					fmt.Printf("[ChangeApprove] rows appended = %d into %s\n", ex.RowsAffected, main)
+					// drop staging (best-effort)
+					_ = gdb.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", stg)).Error
+					// timestamps and metadata
+					now := time.Now()
+					ds.LastUploadAt = &now
+					_ = gdb.Save(&ds).Error
+					upsertDatasetMeta(gdb, &ds)
+					// Post-merge count (best-effort)
+					var after int64
+					_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", main)).Row().Scan(&after)
+					fmt.Printf("[ChangeApprove] post-merge row_count in %s = %d\n", main, after)
+					// audit
+					_ = gdb.AutoMigrate(&models.AuditLog{})
+					_ = gdb.Create(&models.AuditLog{
+						ActorID:    actingUID,
+						ProjectID:  ds.ProjectID,
+						EntityType: "dataset",
+						EntityID:   fmt.Sprintf("%d", ds.ID),
+						Action:     "append_approved",
+						NewValue:   models.JSONB{"change_request_id": cr.ID, "dataset_id": ds.ID, "rows_appended": ex.RowsAffected},
+						CreatedAt:  time.Now(),
+					}).Error
+					usedDB = true
+				}
 			}
 		}
 		if !usedDB {
-			// Fallback: Write upload bytes to a durable temp file, then point dataset to it
-			base := os.TempDir()
-			dir := filepath.Join(base, "oreo_uploads")
-			_ = os.MkdirAll(dir, 0o755)
-			name := payload.Filename
-			if name == "" {
-				name = "approved_append.csv"
-			}
-			out := filepath.Join(dir, "ds_"+strconv.Itoa(int(ds.ID))+"_approved_"+strconv.FormatInt(time.Now().UnixNano(), 10)+"_"+filepath.Base(name))
-			if err := os.WriteFile(out, up.Content, 0o644); err != nil {
-				c.JSON(500, gin.H{"error": "store"})
+			// Fallback: Directly ingest upload content into the dataset's physical table
+			mainTbl := datasetPhysicalTable(&ds)
+			if err := gdb.Transaction(func(tx *gorm.DB) error {
+				if err := ensureDatasetTable(tx, &ds); err != nil {
+					return err
+				}
+				if err := ingestBytesToTable(tx, up.Content, payload.Filename, mainTbl); err != nil {
+					return err
+				}
+				// Drop staging if it exists (best-effort)
+				_ = tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", dsStagingTable(ds.ID, cr.ID))).Error
+				now := time.Now()
+				ds.LastUploadAt = &now
+				if err := tx.Save(&ds).Error; err != nil {
+					return err
+				}
+				upsertDatasetMeta(tx, &ds)
+				var after int64
+				_ = tx.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", mainTbl)).Row().Scan(&after)
+				fmt.Printf("[ChangeApprove] fallback ingest into %s complete, row_count = %d\n", mainTbl, after)
+				return nil
+			}); err != nil {
+				c.JSON(500, gin.H{"error": "append_ingest_failed"})
 				return
 			}
-			now := time.Now()
-			ds.LastUploadPath = out
-			ds.LastUploadAt = &now
-			if err := gdb.Save(&ds).Error; err != nil {
-				c.JSON(500, gin.H{"error": "db"})
-				return
-			}
-			// Refresh metadata as well (may not reflect row count if not in DB, but update owner/last update)
-			upsertDatasetMeta(gdb, &ds)
+			usedDB = true
 		}
 
 		// Record a dataset version snapshot (table reference and row count) on approved change
 		// Compute row count from main table if available
-		var rowCount int64
-		_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", main)).Row().Scan(&rowCount)
+	var rowCount int64
+	_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", main)).Row().Scan(&rowCount)
+	fmt.Printf("[ChangeApprove] version snapshot: table=%s row_count=%d\n", main, rowCount)
 		verData := map[string]any{
 			"table":      main,
 			"row_count":  rowCount,
@@ -237,11 +291,24 @@ func ChangeApprove(c *gin.Context) {
 				Approvers: approvers,
 			}).Error
 		}
-		cr.Status = "approved"
+		// Mark change status
+	if usedDB {
+			cr.Status = "completed"
+		} else {
+			cr.Status = "approved"
+		}
 		cr.Summary = "Applied append at " + time.Now().Format(time.RFC3339)
 		if err := gdb.Save(&cr).Error; err != nil {
 			c.JSON(500, gin.H{"error": "db"})
 			return
+		}
+		// Notify requester that their append request was applied
+		if cr.UserID != 0 {
+			msg := "Your append request has been applied successfully"
+			if !usedDB {
+				msg = "Your append request was approved; data was stored for later processing"
+			}
+			_ = AddNotification(cr.UserID, msg, models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID})
 		}
 		c.JSON(200, gin.H{"ok": true, "change_request": cr})
 		return
@@ -272,7 +339,7 @@ func ChangeReject(c *gin.Context) {
 	}
 	pid, _ := strconv.Atoi(pidStr)
 	// Basic access: must at least be a project member (viewer or above)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -314,7 +381,7 @@ func ChangeReject(c *gin.Context) {
 			}
 		}
 	}
-	if !isAssigned && !HasProjectRole(c, uint(pid), "approver") {
+	if !isAssigned {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -378,7 +445,7 @@ func ChangeWithdraw(c *gin.Context) {
 		pidStr = c.Param("projectId")
 	}
 	pid, _ := strconv.Atoi(pidStr)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "approver", "viewer") {
+	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -415,4 +482,42 @@ func ChangeWithdraw(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"ok": true, "change_request": cr})
+}
+
+// DatasetApprovalsListTop lists change requests for a given dataset ID (top-level datasets route)
+// GET /api/datasets/:id/approvals?status=pending|approved|rejected|withdrawn|all
+func DatasetApprovalsListTop(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
+	// Resolve dataset and enforce RBAC by its project
+	dsID, _ := strconv.Atoi(c.Param("id"))
+	var ds models.Dataset
+	if err := gdb.First(&ds, dsID).Error; err != nil {
+		c.JSON(404, gin.H{"error": "dataset_not_found"})
+		return
+	}
+	if !HasProjectRole(c, ds.ProjectID, "owner", "contributor", "viewer") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
+	if status == "" { // default to pending when not specified
+		status = "pending"
+	}
+	var items []models.ChangeRequest
+	q := gdb.Where("project_id = ? AND dataset_id = ?", ds.ProjectID, ds.ID)
+	if status != "all" {
+		q = q.Where("LOWER(status) = ?", status)
+	}
+	if err := q.Order("id desc").Find(&items).Error; err != nil {
+		c.JSON(500, gin.H{"error": "db"})
+		return
+	}
+	c.JSON(200, items)
 }

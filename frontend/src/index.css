@@ -5,11 +5,7 @@
 /* App base styles */
 .bg-primary { background-color: rgb(99 102 241); }
 
-html, body, #root {
-  height: 100%;
-}
-
-body { background-color: rgb(249 250 251); color: rgb(17 24 39); }
+html, body, #root { height: 100%; }
 
 /* Design language overrides: sharp, materialized, flat */
 :root{
@@ -18,9 +14,23 @@ body { background-color: rgb(249 250 251); color: rgb(17 24 39); }
   --divider: #e6e6ef;
   --primary: #3B82F6; /* brand blue */
   --muted: #6b7280;
+  --text: #111827;     /* default text color */
+  --text-muted: #6b7280;
+}
+/* Dark theme variables (enabled via .dark on html) */
+.dark{
+  /* Lighter dark theme (less black, more slate) */
+  --bg-page: #111827;    /* slate-900 */
+  --bg-surface: #1f2937; /* slate-800 */
+  --divider: #334155;    /* slate-700 */
+  --primary: #a78bfa;    /* lighter violet */
+  --muted: #cbd5e1;      /* slate-300 */
+  --text: #e5e7eb;       /* slate-200 */
+  --text-muted: #cbd5e1; /* slate-300 */
 }
 
-body { background-color: var(--bg-page); color: #111827; font-weight: 500 }
+/* Apply page colors and improve contrast automatically */
+body { background-color: var(--bg-page); color: var(--text); font-weight: 500 }
 
 /* Remove soft shadows used across app and prefer flat borders */
 .shadow, .shadow-sm, .shadow-md, .shadow-lg { box-shadow: none !important }
@@ -35,16 +45,13 @@ body { background-color: var(--bg-page); color: #111827; font-weight: 500 }
   padding: 1rem;
 }
 
-.card-title { font-weight: 700; color: #0f172a }
+.card-title { font-weight: 700; color: var(--text) }
 
 /* Sidebar styling: stronger contrast and flat divider */
-.sidebar {
-  background: #ffffff;
-  border-right: 2px solid var(--divider);
-}
+.sidebar { background: var(--bg-surface); border-right: 2px solid var(--divider); color: var(--text) }
 
 /* Navbar: flat and bold */
-.topbar { background: #ffffff; border-bottom: 2px solid var(--divider) }
+.topbar { background: var(--bg-surface); border-bottom: 2px solid var(--divider); color: var(--text) }
 
 /* Buttons: material flat style */
 .btn-primary { background: #4f46e5; color: white; border: none }
@@ -77,7 +84,48 @@ a, .link { color: var(--brand-blue) }
   grid-template-columns: var(--sidebar-collapsed) 1fr;
 }
 .layout-with-sidebar .sidebar { height: calc(100vh - 64px); /* leave room for topbar */ overflow: auto }
-.layout-with-sidebar .main { min-height: calc(100vh - 64px); }
+.layout-with-sidebar .main { min-height: calc(100vh - 64px); background: var(--bg-page); color: var(--text) }
+
+/* Ensure main content reflects dark theme even if Tailwind light classes are present */
+.dark .bg-white { background-color: var(--bg-surface) !important }
+.dark .text-gray-900 { color: #f1f5f9 !important }
+.dark .text-gray-800 { color: #e5e7eb !important }
+.dark .text-gray-700 { color: #d1d5db !important }
+.dark .text-gray-600, .dark .text-gray-500 { color: #9ca3af !important }
+/* Brand indigo text on dark should map to primary variable */
+.dark .text-indigo-700, .dark .text-indigo-600 { color: var(--primary) !important }
+
+/* More dark-mode mappings for common Tailwind utility classes used across pages */
+/* Backgrounds */
+.dark .bg-gray-50 { background-color: #111827 !important }      /* use page bg for zebra */
+.dark .bg-gray-100 { background-color: #1f2937 !important }     /* surface-ish */
+.dark .bg-gray-200, .dark .bg-gray-300 { background-color: #1f2937 !important }
+/* Translucent overlays */
+.dark .bg-white\/60 { background-color: rgba(255,255,255,0.08) !important }
+
+/* Borders */
+.dark .border-gray-100, .dark .border-gray-200, .dark .border-gray-300 { border-color: var(--divider) !important }
+
+/* Hover variants frequently used in buttons/rows */
+.dark .hover\:bg-gray-50:hover { background-color: #334155 !important } /* slate-700 */
+.dark .row-clickable:hover { background: rgba(255,255,255,0.04) !important }
+
+/* Slate text class mappings */
+.dark .text-slate-900, .dark .text-slate-800 { color: #e5e7eb !important }
+.dark .text-slate-700, .dark .text-slate-600 { color: #cbd5e1 !important }
+.dark .text-slate-500, .dark .text-slate-400 { color: #94a3b8 !important }
+.dark .text-gray-400 { color: #9ca3af !important }
+
+/* Status badge tints (used in change details lists) */
+.dark .bg-green-50 { background-color: rgba(34,197,94,0.15) !important }
+.dark .border-green-200 { border-color: rgba(34,197,94,0.35) !important }
+.dark .text-green-800 { color: #86efac !important }
+.dark .bg-red-50 { background-color: rgba(239,68,68,0.15) !important }
+.dark .border-red-200 { border-color: rgba(239,68,68,0.35) !important }
+.dark .text-red-800 { color: #fca5a5 !important }
+
+/* Projects table header gradient in dark */
+.dark .projects-table thead tr { background: linear-gradient(90deg, rgba(30,41,59,1), rgba(15,23,42,1)) !important }
 
 /* Global straight-edge form controls */
 input, textarea, select, button {
@@ -86,6 +134,7 @@ input, textarea, select, button {
 
 /* Keep small pill badges rounded intentionally */
 .badge-pill { border-radius: 9999px }
+.text-xxs { font-size: 0.65rem; line-height: 0.9rem }
 
 /* subtle hover shadow for landing visuals */
 .hover-shadow { transition: box-shadow 160ms ease, transform 160ms ease }
@@ -191,7 +240,7 @@ h1, h2, h3 { font-weight: 700 }
 
 /* Column percentage widths for Projects table */
 .projects-table .name-col { width: 50%; max-width: 50%; }
-.projects-table th[style] { /* inline widths allowed - keep for explicit per-column overrides */ }
+.projects-table th[style] { /* inline widths allowed - keep for explicit per-column overrides */ outline: none; }
 .projects-table th:nth-child(1) { width: 50% }
 .projects-table th:nth-child(2) { width: 15% }
 .projects-table th:nth-child(3) { width: 35% }
@@ -199,3 +248,51 @@ h1, h2, h3 { font-weight: 700 }
 /* Layout with sidebar adjustments when included on pages */
 .layout-with-sidebar { display: grid; grid-template-columns: 16rem 1fr; gap: 0 }
 .layout-with-sidebar > main { padding-left: 1.5rem }
+
+/* Landing animations and helpers (from ui_sample) */
+.hero-gradient{
+  background:
+    radial-gradient(1200px 600px at 10% 10%, rgba(99,102,241,.20), transparent 55%),
+    radial-gradient(800px 500px at 90% 20%, rgba(56,189,248,.15), transparent 55%),
+    radial-gradient(900px 600px at 40% 90%, rgba(168,85,247,.10), transparent 60%);
+}
+@keyframes floatY {
+  0% { transform: translateY(0) }
+  50% { transform: translateY(-10px) }
+  100% { transform: translateY(0) }
+}
+@keyframes blob {
+  0% { border-radius: 38% 62% 40% 60% / 38% 40% 60% 62% }
+  50% { border-radius: 62% 38% 60% 40% / 58% 42% 58% 42% }
+  100% { border-radius: 38% 62% 40% 60% / 38% 40% 60% 62% }
+}
+@keyframes orbit {
+  0% { transform: rotate(0deg) translateX(110px) rotate(0deg) }
+  50% { transform: rotate(180deg) translateX(110px) rotate(-180deg) }
+  100% { transform: rotate(360deg) translateX(110px) rotate(-360deg) }
+}
+@keyframes shine {
+  0% { transform: translateX(-150%) }
+  100% { transform: translateX(150%) }
+}
+@keyframes spinSlow {
+  from { transform: translate(-50%, -50%) rotate(0deg) }
+  to { transform: translate(-50%, -50%) rotate(360deg) }
+}
+@keyframes gridMove {
+  0% { background-position: 0 0, 0 0 }
+  100% { background-position: 120px 0, 0 120px }
+}
+@keyframes drift {
+  0% { transform: translateY(0) scale(1) }
+  50% { transform: translateY(-6px) scale(1.02) }
+  100% { transform: translateY(0) scale(1) }
+}
+.reveal { opacity: 0; transform: translateY(12px); transition: all .7s cubic-bezier(.21,1,.21,1) }
+.reveal.show { opacity: 1; transform: translateY(0) }
+.btn-shine{ position: relative; overflow: hidden }
+.btn-shine::after{
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(115deg, transparent 0%, rgba(255,255,255,.2) 50%, transparent 100%);
+  transform: translateX(-150%); animation: shine 2.8s infinite;
+}
