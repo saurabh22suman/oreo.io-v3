@@ -26,3 +26,13 @@ python-service/.ruff_cache/
 # Docker
 *.local.yml
 \n# npm cache\nfrontend/.npm-cache/\n
+## Playwright artifacts (root)
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/**/trace.zip
+
+## Local screenshots/snapshots
+.playwright-mcp/
+cookies.txt
+

@@ -2,3 +2,12 @@ node_modules
 dist
 .DS_Store
 \n# npm cache\n.npm-cache/\n
+## Playwright artifacts
+test-results/
+playwright-report/
+blob-report/
+trace.zip
+
+## Local snapshots/screens
+.playwright-mcp/
+
