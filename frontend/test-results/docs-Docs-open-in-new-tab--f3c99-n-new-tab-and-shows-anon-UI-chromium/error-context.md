@@ -1,0 +1,119 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - generic [ref=e6]:
+        - link "oreo.io oreo.io" [ref=e8] [cursor=pointer]:
+          - /url: /landing
+          - img "oreo.io" [ref=e9] [cursor=pointer]
+          - generic [ref=e10] [cursor=pointer]: oreo.io
+        - generic [ref=e11]:
+          - link "Features" [ref=e12] [cursor=pointer]:
+            - /url: "#features"
+          - link "How it works" [ref=e13] [cursor=pointer]:
+            - /url: "#how"
+          - link "Docs" [ref=e14] [cursor=pointer]:
+            - /url: /docs
+        - link "Log in" [ref=e16] [cursor=pointer]:
+          - /url: /login
+  - generic [ref=e19]:
+    - generic [ref=e20]:
+      - generic [ref=e21]: "New: Collaborative review flows"
+      - heading "Welcome to oreo.io" [level=1] [ref=e23]
+      - paragraph [ref=e24]: Modern, secure, and collaborative data platform for teams. Bring your datasets, review changes, and ship confidently with automated approvals.
+      - generic [ref=e25]:
+        - link "Create account" [ref=e26] [cursor=pointer]:
+          - /url: /register
+        - link "Read docs" [ref=e27] [cursor=pointer]:
+          - /url: /docs
+          - img [ref=e28] [cursor=pointer]
+          - text: Read docs
+      - generic [ref=e30]:
+        - img [ref=e31]
+        - generic [ref=e33]: Loved by early users for speed and simplicity.
+    - generic [ref=e39]:
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - heading "Meet Oreo, your dutch rabbit guide" [level=3] [ref=e42]
+          - paragraph [ref=e43]: He keeps your data tidy, approvals swift, and dashboards happy.
+        - generic [ref=e44]:
+          - generic:
+            - img [ref=e46]
+            - img [ref=e50]
+      - img "Oreo mascot" [ref=e58]
+      - generic [ref=e59]:
+        - generic [ref=e60]:
+          - generic [ref=e61]: 1.3M
+          - generic [ref=e62]: rows/day
+        - generic [ref=e63]:
+          - generic [ref=e64]: 99.99%
+          - generic [ref=e65]: uptime
+        - generic [ref=e66]:
+          - generic [ref=e67]: ~120ms
+          - generic [ref=e68]: queries
+  - generic [ref=e70]:
+    - generic [ref=e71]:
+      - heading "What you get" [level=2] [ref=e72]
+      - paragraph [ref=e73]: Essential building blocks for collaborative data workflows.
+    - generic [ref=e74]:
+      - generic [ref=e75]:
+        - generic [ref=e76]:
+          - img [ref=e78]
+          - heading "Data Management" [level=3] [ref=e82]
+        - paragraph [ref=e83]: Upload, validate, and manage datasets with ease.
+      - generic [ref=e84]:
+        - generic [ref=e85]:
+          - img [ref=e87]
+          - heading "Collaboration" [level=3] [ref=e92]
+        - paragraph [ref=e93]: Invite teammates, assign roles, and review changes.
+      - generic [ref=e94]:
+        - generic [ref=e95]:
+          - img [ref=e97]
+          - heading "Secure Approvals" [level=3] [ref=e100]
+        - paragraph [ref=e101]: Multi-reviewer approval flows ensure integrity.
+      - generic [ref=e102]:
+        - generic [ref=e103]:
+          - img [ref=e105]
+          - heading "Fast & Modern" [level=3] [ref=e110]
+        - paragraph [ref=e111]: Built for speed with a robust, scalable backend.
+  - generic [ref=e115]:
+    - heading "How it works" [level=2] [ref=e116]
+    - list [ref=e117]:
+      - listitem [ref=e118]:
+        - generic [ref=e119]: "1"
+        - paragraph [ref=e120]: Register and create your project.
+      - listitem [ref=e121]:
+        - generic [ref=e122]: "2"
+        - paragraph [ref=e123]: Upload datasets and define schema/rules.
+      - listitem [ref=e124]:
+        - generic [ref=e125]: "3"
+        - paragraph [ref=e126]: Invite reviewers and submit changes for approval.
+      - listitem [ref=e127]:
+        - generic [ref=e128]: "4"
+        - paragraph [ref=e129]: Track approvals and manage data collaboratively.
+  - generic [ref=e139]:
+    - heading "Ship trustworthy data, faster" [level=3] [ref=e140]
+    - paragraph [ref=e141]: Sign up in minutes. Your dutch rabbit will guide the way.
+    - generic [ref=e142]:
+      - link "Get started free" [ref=e143] [cursor=pointer]:
+        - /url: /register
+        - text: Get started free
+        - img [ref=e144] [cursor=pointer]
+      - link "Book a demo" [ref=e146] [cursor=pointer]:
+        - /url: /docs
+        - text: Book a demo
+        - img [ref=e147] [cursor=pointer]
+  - contentinfo [ref=e149]:
+    - generic [ref=e151]:
+      - generic [ref=e152]:
+        - img "oreo.io" [ref=e153]
+        - generic [ref=e154]: oreo.io
+      - navigation [ref=e155]:
+        - link "Features" [ref=e156] [cursor=pointer]:
+          - /url: "#features"
+        - link "How it works" [ref=e157] [cursor=pointer]:
+          - /url: "#how"
+      - paragraph [ref=e158]: © 2025 oreo.io — All rights reserved.
+```

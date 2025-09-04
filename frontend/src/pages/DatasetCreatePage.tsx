@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { checkTableExists, createDatasetTop, getProject, uploadDatasetFile, myProjectRole, deleteDataset, prepareDataset } from '../api'
+import { checkTableExists, createDatasetTop, getProject, uploadDatasetFile, myProjectRole, deleteDataset, prepareDataset, inferSchemaFromFile, setDatasetSchemaTop, getDatasetSchemaTop } from '../api'
 import Alert from '../components/Alert'
 
 // Reserved words (extendable)
@@ -46,7 +46,7 @@ export default function DatasetCreatePage(){
   const [nameError, setNameError] = useState('')
   const [tableError, setTableError] = useState('')
   const [creating, setCreating] = useState(false)
-  const [creatingStage, setCreatingStage] = useState<'idle'|'creating'|'uploading'>('idle')
+  const [creatingStage, setCreatingStage] = useState<'idle'|'creating'|'uploading'|'inferring'|'finalizing'>('idle')
   const [existsInfo, setExistsInfo] = useState<{ checking: boolean; exists: boolean; message?: string }>({ checking: false, exists: false })
   const [role, setRole] = useState<'owner'|'contributor'|'viewer'|null>(null)
   const existsTimer = useRef<number | null>(null)
@@ -323,32 +323,74 @@ export default function DatasetCreatePage(){
                 if(source === 'local'){
                   setCreatingStage(localFile ? 'uploading' : 'creating')
                   resp = await prepareDataset(projectId, { name, schema: s, table: tClean, source }, localFile || undefined)
+                  const datasetId = resp?.id
+                  // Attempt schema inference before redirecting
+                  if(datasetId && localFile){
+                    try{
+                      setCreatingStage('inferring')
+                      const inf = await inferSchemaFromFile(localFile)
+                      const schemaObj = inf?.schema ?? inf
+                      if(schemaObj){
+                        // Persist schema to backend
+                        setCreatingStage('finalizing')
+                        await setDatasetSchemaTop(datasetId, schemaObj)
+                      } else {
+                        // Fallback: poll backend schema endpoint briefly (worker may infer)
+                        setCreatingStage('finalizing')
+                        const ok = await (async()=>{
+                          const start = Date.now()
+                          while(Date.now() - start < 15000){
+                            try{
+                              const sj = await getDatasetSchemaTop(datasetId)
+                              if(sj && sj.schema){ return true }
+                            }catch{/* ignore */}
+                            await new Promise(r=>setTimeout(r, 1000))
+                          }
+                          return false
+                        })()
+                        if(!ok){ /* proceed to schema page anyway */ }
+                      }
+                    }catch{
+                      // If inference fails, try a short backend poll, then proceed
+                      setCreatingStage('finalizing')
+                      const start = Date.now()
+                      while(Date.now() - start < 10000){
+                        try{
+                          const sj = await getDatasetSchemaTop(datasetId)
+                          if(sj && sj.schema){ break }
+                        }catch{/* ignore */}
+                        await new Promise(r=>setTimeout(r, 1000))
+                      }
+                    }
+                  }
+                  // Notify and redirect after inference path
+                  try{ window.dispatchEvent(new CustomEvent('dataset:created', { detail: { projectId, datasetId } })) }catch(e){}
+                  nav(`/projects/${projectId}/datasets/${resp.id}/schema`)
                 } else {
+                  // Non-local sources: create and navigate immediately
                   // Send both legacy target.dsn and explicit schema/table for newer backend
                   resp = await createDatasetTop(projectId, ({ name, dataset_name: name, schema: s, table: tClean, source: source, sourceConfig, target: { type: 'table', dsn } } as any))
+                  try{ window.dispatchEvent(new CustomEvent('dataset:created', { detail: { projectId, datasetId: resp.id } })) }catch(e){}
+                  nav(`/projects/${projectId}/datasets/${resp.id}/schema`)
                 }
-                // Notify other pages a dataset was created so they can refresh
-                try{ window.dispatchEvent(new CustomEvent('dataset:created', { detail: { projectId, datasetId: resp.id } })) }catch(e){}
-                // Navigate to schema page next
-                nav(`/projects/${projectId}/datasets/${resp.id}/schema`)
               }catch(e:any){ setError(e.message) } finally { setCreating(false); setCreatingStage('idle') }
             }}
           >
             {creating ? (
               <span className="inline-flex items-center gap-2">
                 <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-200 border-t-primary"></span>
-                {creatingStage === 'creating' ? 'Creating…' : creatingStage === 'uploading' ? 'Uploading file…' : 'Working…'}
+                {creatingStage === 'creating' ? 'Creating…' : creatingStage === 'uploading' ? 'Uploading file…' : creatingStage === 'inferring' ? 'Inferring schema…' : creatingStage === 'finalizing' ? 'Finalizing…' : 'Working…'}
               </span>
             ) : 'Create dataset'}
           </button>
           <button className="border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50" onClick={()=>nav(-1)}>Cancel</button>
         </div>
       </div>
-      {creating && (
+  {creating && (
         <div className="absolute inset-0 bg-white/60 flex items-center justify-center pointer-events-none">
           <div className="flex flex-col items-center gap-2 text-sm text-gray-700">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-primary"></div>
-            <div>{creatingStage === 'creating' ? 'Creating dataset…' : creatingStage === 'uploading' ? 'Uploading file…' : 'Working…'}</div>
+    <div>{creatingStage === 'creating' ? 'Creating dataset…' : creatingStage === 'uploading' ? 'Uploading file…' : creatingStage === 'inferring' ? 'Inferring schema…' : creatingStage === 'finalizing' ? 'Finalizing…' : 'Working…'}</div>
           </div>
         </div>
       )}

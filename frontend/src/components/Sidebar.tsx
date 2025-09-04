@@ -49,14 +49,24 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
   <nav className="flex-1 px-1 mt-4">
         {itemsBase.map(it => {
           const isInbox = it.to === '/inbox'
+          const isDocs = it.to === '/docs'
           return (
-            <Link key={it.to} to={it.to} className={`flex items-center justify-between px-3 py-2 text-gray-700 transition ${pathname === it.to ? 'font-semibold border-l-4 border-indigo-700 pl-2' : ''}`}>
-              <div className="flex items-center gap-3">
-                <div className="w-6">{it.icon}</div>
-                {!collapsed && <span>{it.label}</span>}
-              </div>
-              {isInbox && unread > 0 && <span className="badge-pill bg-indigo-600 text-white text-xxs px-2 py-0.5 ml-2">{unread > 99 ? '99+' : unread}</span>}
-            </Link>
+            isDocs ? (
+              <a key={it.to} href={it.to} target="_blank" rel="noopener noreferrer" className={`flex items-center justify-between px-3 py-2 text-gray-700 transition`}>
+                <div className="flex items-center gap-3">
+                  <div className="w-6">{it.icon}</div>
+                  {!collapsed && <span>{it.label}</span>}
+                </div>
+              </a>
+            ) : (
+              <Link key={it.to} to={it.to} className={`flex items-center justify-between px-3 py-2 text-gray-700 transition ${pathname === it.to ? 'font-semibold border-l-4 border-indigo-700 pl-2' : ''}`}>
+                <div className="flex items-center gap-3">
+                  <div className="w-6">{it.icon}</div>
+                  {!collapsed && <span>{it.label}</span>}
+                </div>
+                {isInbox && unread > 0 && <span className="badge-pill bg-indigo-600 text-white text-xxs px-2 py-0.5 ml-2">{unread > 99 ? '99+' : unread}</span>}
+              </Link>
+            )
           )
         })}
       </nav>

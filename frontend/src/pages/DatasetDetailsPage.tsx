@@ -56,26 +56,26 @@ export default function DatasetDetailsPage(){
         <Link className="text-sm text-primary hover:underline" to={`/projects/${projectId}`}>Back to datasets</Link>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* View */}
         <CardLink to={`/projects/${projectId}/datasets/${dsId}/view`} title="View" desc="Open data viewer" icon={
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-8 h-8"><path strokeWidth="2" d="M3 5h18M3 12h18M3 19h18"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-10 h-10 opacity-80"><path strokeWidth="2" d="M3 5h18M3 12h18M3 19h18"/></svg>
         } />
         {/* Append */}
         <CardLink
           to={`/projects/${projectId}/datasets/${dsId}/append`}
           title="Append"
           desc={role === 'viewer' ? 'Requires contributor role' : 'Upload and submit'}
-          icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-8 h-8"><path strokeWidth="2" d="M12 5v14m-7-7h14"/></svg>}
+      icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-10 h-10 opacity-80"><path strokeWidth="2" d="M12 5v14m-7-7h14"/></svg>}
           disabled={role === 'viewer'}
         />
         {/* Query */}
         <CardLink to={`/projects/${projectId}/query?dataset=${dsId}`} title="Query" desc="Open SQL editor" icon={
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-8 h-8"><path strokeWidth="2" d="M4 6h16M4 12h10M4 18h7"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-10 h-10 opacity-80"><path strokeWidth="2" d="M4 6h16M4 12h10M4 18h7"/></svg>
         } />
         {/* Settings */}
         <CardLink to={`/projects/${projectId}/datasets/${dsId}/settings`} title="Settings" desc="Manage dataset" icon={
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-8 h-8"><path strokeWidth="2" d="M12 6.75a5.25 5.25 0 100 10.5 5.25 5.25 0 000-10.5z"/><path strokeWidth="2" d="M12 2v2m0 16v2m10-10h-2M4 12H2m15.364-7.364l-1.414 1.414M6.05 17.95l-1.414 1.414m12.728 0l-1.414-1.414M6.05 6.05L4.636 4.636"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-10 h-10 opacity-80"><path strokeWidth="2" d="M12 6.75a5.25 5.25 0 100 10.5 5.25 5.25 0 000-10.5z"/><path strokeWidth="2" d="M12 2v2m0 16v2m10-10h-2M4 12H2m15.364-7.364l-1.414 1.414M6.05 17.95l-1.414 1.414m12.728 0l-1.414-1.414M6.05 6.05L4.636 4.636"/></svg>
         } />
       </div>
 
@@ -118,14 +118,15 @@ export default function DatasetDetailsPage(){
 function CardLink({ to, title, desc, icon, disabled }: { to: string; title: string; desc: string; icon: React.ReactNode, disabled?: boolean }){
   const Cmp: any = disabled ? 'div' : Link
   return (
-    <Cmp to={disabled ? undefined : to} className={`group border border-gray-200 rounded-lg p-4 bg-white transition transform ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:shadow-md hover:-translate-y-0.5'}`} title={disabled ? desc : undefined} aria-disabled={disabled}>
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-lg font-semibold">{title}</div>
-          <div className="text-xs text-gray-500">{desc}</div>
-        </div>
-        <div className="text-gray-400 group-hover:text-primary">{icon}</div>
-      </div>
+    <Cmp
+      to={disabled ? undefined : to}
+      className={`project-card p-3 flex flex-col items-center justify-center text-center min-h-[120px] ${disabled ? 'opacity-50 cursor-not-allowed select-none' : 'hover-shadow'}`}
+      title={disabled ? desc : undefined}
+      aria-disabled={disabled}
+    >
+      <div className="mb-2 text-gray-700">{icon}</div>
+      <div className="text-base font-semibold text-brand-blue">{title}</div>
+      <div className="text-xs text-slate-500 mt-0.5">{desc}</div>
     </Cmp>
   )
 }

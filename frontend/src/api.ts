@@ -42,8 +42,13 @@ export async function currentUser(): Promise<{ ok: boolean; id: number; email: s
 }
 
 export async function logout(){
+  // Always clear any locally stored token so subsequent requests won't authenticate via Authorization header
+  try { localStorage.removeItem('token') } catch {}
   const r = await fetch(`${API_BASE}/auth/logout`, { method: 'POST', headers: { ...authHeaders() }, credentials: 'include' })
-  if(!r.ok) throw new Error(await r.text())
+  if(!r.ok){
+    // Even if server call fails, treat client as logged out (cookie may already be gone)
+    try { const msg = await r.text(); throw new Error(msg) } catch { throw new Error('logout_failed') }
+  }
   return r.json()
 }
 

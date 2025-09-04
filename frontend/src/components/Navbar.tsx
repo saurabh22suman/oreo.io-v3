@@ -12,7 +12,8 @@ export default function Navbar() {
 	const location = useLocation()
 	const isLanding = location.pathname.startsWith('/landing')
 	const isAuthPage = location.pathname.startsWith('/login') || location.pathname.startsWith('/register')
-	const brandTo = ready && user ? '/dashboard' : '/landing'
+	// Clicking brand: if on landing/auth pages, keep user on /landing; else go to root for RootRedirect
+	const brandTo = (isLanding || isAuthPage) ? '/landing' : '/'
 
 	// Close user menu on outside click
 	useEffect(() => {
@@ -26,8 +27,9 @@ export default function Navbar() {
 
 	async function handleLogout(){
 		try{ await apiLogout() }catch{}
-	await refresh()
-	navigate('/landing')
+		// Immediately refresh session (will set user=null) and route to landing
+		await refresh()
+		navigate('/landing')
 	}
 
 	return (
@@ -48,7 +50,7 @@ export default function Navbar() {
 							<>
 								<a href="#features" className="text-sm font-medium text-slate-600 hover:text-slate-900">Features</a>
 								<a href="#how" className="text-sm font-medium text-slate-600 hover:text-slate-900">How it works</a>
-								<Link to="/docs" className="text-sm font-medium text-slate-600 hover:text-slate-900">Docs</Link>
+								<a href="/docs" target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-slate-600 hover:text-slate-900">Docs</a>
 							</>
 						)}
 					</div>
@@ -123,7 +125,7 @@ export default function Navbar() {
 							<>
 								<a href="#features" className="block text-sm font-medium text-slate-700">Features</a>
 								<a href="#how" className="block text-sm font-medium text-slate-700">How it works</a>
-								<Link to="/docs" className="block text-sm font-medium text-slate-700">Docs</Link>
+								<a href="/docs" target="_blank" rel="noopener noreferrer" className="block text-sm font-medium text-slate-700">Docs</a>
 								<div className="pt-2 border-t border-slate-200" />
 							</>
 						)}

@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
 	"github.com/oreo-io/oreo.io-v2/go-service/models"
+	"gorm.io/gorm"
 )
 
 type ProjectIn struct {
@@ -208,7 +209,85 @@ func ProjectsDelete(c *gin.Context) {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
-	if err := gdb.Where("id = ?", id).Delete(&models.Project{}).Error; err != nil {
+	// Transactional cascade: delete datasets and related entities, then the project itself
+	if err := gdb.Transaction(func(tx *gorm.DB) error {
+		// Load datasets under this project
+		var datasets []models.Dataset
+		if err := tx.Where("project_id = ?", p.ID).Find(&datasets).Error; err != nil {
+			return err
+		}
+		// For each dataset, reuse the dataset delete logic (inline) to clean up related rows and tables
+		for _, ds := range datasets {
+			// Delete data quality results linked via uploads
+			if err := tx.Exec("DELETE FROM data_quality_results WHERE upload_id IN (SELECT id FROM dataset_uploads WHERE project_id = ? AND dataset_id = ?)", p.ID, ds.ID).Error; err != nil {
+				return err
+			}
+			// Delete change comments for change requests under this dataset
+			if err := tx.Exec("DELETE FROM change_comments WHERE project_id = ? AND change_request_id IN (SELECT id FROM change_requests WHERE project_id = ? AND dataset_id = ?)", p.ID, p.ID, ds.ID).Error; err != nil {
+				return err
+			}
+			// Delete uploads, change requests, versions, rules, metadata
+			if err := tx.Where("project_id = ? AND dataset_id = ?", p.ID, ds.ID).Delete(&models.DatasetUpload{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("project_id = ? AND dataset_id = ?", p.ID, ds.ID).Delete(&models.ChangeRequest{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("dataset_id = ?", ds.ID).Delete(&models.DatasetVersion{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("dataset_id = ?", ds.ID).Delete(&models.DataQualityRule{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("dataset_id = ?", ds.ID).Delete(&models.DatasetMeta{}).Error; err != nil {
+				return err
+			}
+			// Drop physical and staging tables
+			dropDatasetPhysicalAndStaging(tx, &ds)
+		}
+		// Delete datasets rows
+		if err := tx.Where("project_id = ?", p.ID).Delete(&models.Dataset{}).Error; err != nil {
+			return err
+		}
+		// Delete project roles
+		if err := tx.Where("project_id = ?", p.ID).Delete(&models.ProjectRole{}).Error; err != nil {
+			return err
+		}
+		// Delete saved queries and query history
+		if err := tx.Where("project_id = ?", p.ID).Delete(&models.SavedQuery{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("project_id = ?", p.ID).Delete(&models.QueryHistory{}).Error; err != nil {
+			return err
+		}
+		// Delete any remaining change comments and change requests at project scope (safety)
+		if err := tx.Where("project_id = ?", p.ID).Delete(&models.ChangeComment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("project_id = ?", p.ID).Delete(&models.ChangeRequest{}).Error; err != nil {
+			return err
+		}
+		// Delete project activities (has project_id column)
+		if err := tx.Where("project_id = ?", p.ID).Delete(&models.ProjectActivity{}).Error; err != nil {
+			return err
+		}
+		// Notifications do not have project_id column; best-effort cleanup by metadata on Postgres only
+		if tx.Dialector != nil && tx.Dialector.Name() == "postgres" {
+			// metadata is JSONB; delete notifications tagged with this project
+			_ = tx.Exec("DELETE FROM notifications WHERE metadata->>'project_id' = ?", strconv.Itoa(int(p.ID))).Error
+		}
+		// Delete jobs scoped to this project (if any)
+		if err := tx.Where("(metadata->>'project_id')::text = ?", strconv.Itoa(int(p.ID))).Delete(&models.Job{}).Error; err != nil {
+			// ignore if dialect doesn't support json operator; try a softer match by clearing anyway
+			// Not critical for deletion success
+			_ = err
+		}
+		// Finally remove the project
+		if err := tx.Where("id = ?", p.ID).Delete(&models.Project{}).Error; err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}

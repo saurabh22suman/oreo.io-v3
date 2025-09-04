@@ -68,7 +68,7 @@ export default function ProjectQueryPage(){
     // basic client-side guard
     const selectRe = /^\s*(with\b[\s\S]+select\b|select\b)/i
     if(!selectRe.test(sql)){
-      setError('Only SELECT queries are allowed.')
+      setError('Modifications are not allowed. Use append flow.')
       return
     }
     setLoading(true)

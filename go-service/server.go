@@ -68,8 +68,11 @@ func SetupRouter() *gin.Engine {
 			&models.DatasetVersion{},
 			&models.SavedQuery{},
 			&models.QueryHistory{},
-			// Ensure inbox/notifications table exists in dev/test
+			// Ensure supporting tables exist in dev/test
 			&models.Notification{},
+			&models.ProjectActivity{},
+			&models.DataQualityRule{},
+			&models.DataQualityResult{},
 		)
 
 		// Only migrate jobs table and start worker when using Postgres (skip for sqlite tests)

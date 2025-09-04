@@ -80,7 +80,7 @@ export default function LandingPage() {
 							<p className="mt-4 text-base sm:text-lg text-slate-600 max-w-xl">Modern, secure, and collaborative data platform for teams. Bring your datasets, review changes, and ship confidently with automated approvals.</p>
 							<div className="mt-8 flex flex-col sm:flex-row gap-3">
 								<a href="/register" className="relative btn-shine inline-flex items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 via-sky-500 to-violet-500 px-5 py-3 text-sm font-medium text-white shadow-[0_0_0_1px_rgba(0,0,0,.05)_inset,0_10px_30px_-10px_rgba(99,102,241,.35)]">Create account</a>
-								<a href="/docs" className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-900 hover:bg-slate-50 transition">
+								<a href="/docs" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-900 hover:bg-slate-50 transition">
 									<BookOpen className="w-4 h-4" /> Read docs
 								</a>
 							</div>
@@ -240,7 +240,7 @@ export default function LandingPage() {
 							<a href="/register" className="relative btn-shine inline-flex items-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-medium text-neutral-900 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 transition">
 								Get started free <Sparkles className="w-4 h-4" />
 							</a>
-							<a href="/docs" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-900 hover:bg-slate-50 transition">
+							<a href="/docs" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-900 hover:bg-slate-50 transition">
 								Book a demo <Calendar className="w-4 h-4" />
 							</a>
 						</div>

@@ -54,6 +54,12 @@ export default function InboxPage(){
     if(type === 'change_approved'){
       const pid = it?.metadata?.project_id; const ds = it?.metadata?.dataset_id; const cid = it?.metadata?.change_request_id; if(pid && ds && cid) return `/projects/${pid}/datasets/${ds}/changes/${cid}`
     }
+    if(type === 'append_completed'){
+      const pid = it?.metadata?.project_id; const ds = it?.metadata?.dataset_id; const cid = it?.metadata?.change_request_id
+      // Prefer linking to the specific change details; fallback to dataset details if CID missing
+      if(pid && ds && cid) return `/projects/${pid}/datasets/${ds}/changes/${cid}`
+      if(pid && ds) return `/projects/${pid}/datasets/${ds}`
+    }
     return undefined
   }
 

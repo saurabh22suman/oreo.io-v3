@@ -55,6 +55,7 @@ export default function App(){
       {/* Public routes */}
       <Route path="/" element={<RootRedirect/>} />
       <Route path="/landing" element={<LandingPage/>} />
+  <Route path="/docs" element={<DocsPage/>} />
   <Route path="/login" element={<LoginPage/>} />
   <Route path="/register" element={<RegisterPage/>} />
 
@@ -63,7 +64,6 @@ export default function App(){
 
       {/* App routes under layout */}
       <Route element={<Layout/>}>
-  <Route path="/docs" element={<DocsPage/>} />
   <Route path="/dashboard" element={<DashboardPage/>} />
   <Route path="/settings" element={<SettingsPage/>} />
   <Route path="/inbox" element={<InboxPage/>} />

@@ -389,8 +389,11 @@ func TestDatasetUpload(t *testing.T) {
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+owner)
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("upload %d %s", w.Code, w.Body.String())
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("upload expected 403 got %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "append_only") {
+		t.Fatalf("expected append_only error, got %s", w.Body.String())
 	}
 }
 

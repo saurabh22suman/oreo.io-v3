@@ -48,7 +48,8 @@ func ExecuteQueryHandler(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		if !selectRe.MatchString(req.SQL) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "only SELECT queries allowed"})
+			// Enforce read-only queries with a clear, consistent message
+			c.JSON(http.StatusForbidden, gin.H{"error": "append_only", "message": "Modifications are not allowed. Use append flow."})
 			return
 		}
 
