@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, field_validator, ConfigDict
 from typing import List, Dict, Any, Optional
 from jsonschema import Draft202012Validator, exceptions as js_exceptions
@@ -176,6 +176,183 @@ def transform(req: TransformRequest):
 
     cols = list(result[0].keys()) if result else []
     return {"data": result, "rows": len(result), "columns": cols}
+
+# --------- Delta Lake adapter (experimental, non-breaking) ---------
+try:
+    from delta_adapter import DeltaStorageAdapter
+    _delta_adapter = DeltaStorageAdapter()
+except Exception as e:
+    # Surface detailed import/initialization errors to logs to aid debugging
+    import sys, traceback
+    print(f"[DeltaAdapterInitError] {type(e).__name__}: {e}", file=sys.stderr)
+    traceback.print_exc()
+    _delta_adapter = None
+
+
+class DeltaAppendPayload(BaseModel):
+    table: str
+    rows: List[Dict[str, Any]]
+class DeltaEnsurePayload(BaseModel):
+    table: str
+    schema: Dict[str, Any]
+
+
+@app.post("/delta/ensure")
+def delta_ensure(payload: DeltaEnsurePayload):
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    if not payload.table:
+        raise HTTPException(status_code=400, detail="table is required")
+    try:
+        _delta_adapter.ensure_empty_table(payload.table, payload.schema or {})
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+@app.post("/delta/append")
+def delta_append(payload: DeltaAppendPayload):
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    if not payload.table:
+        raise HTTPException(status_code=400, detail="table is required")
+    _delta_adapter.append_rows(payload.table, payload.rows or [])
+    return {"ok": True}
+
+
+@app.post("/delta/append-file")
+def delta_append_file(table: str = Form(...), file: UploadFile = File(...)):
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    if not table:
+        raise HTTPException(status_code=400, detail="table is required")
+    content = file.file.read()
+    # Try CSV, JSON, Excel
+    rows: List[Dict[str, Any]] = []
+    if pd is None:
+        # minimal fallback: attempt JSON only
+        try:
+            import json as _json
+            arr = _json.loads(content.decode("utf-8"))
+            if isinstance(arr, list):
+                rows = [r for r in arr if isinstance(r, dict)]
+        except Exception:
+            raise HTTPException(status_code=400, detail="pandas not available; send JSON array")
+    else:
+        try:
+            df = None
+            # Heuristic by filename
+            name = (file.filename or "").lower()
+            import io as _io
+            bio = _io.BytesIO(content)
+            if name.endswith(".csv"):
+                df = pd.read_csv(bio)
+            elif name.endswith(".xlsx") or name.endswith(".xls"):
+                df = pd.read_excel(bio)
+            elif name.endswith(".json"):
+                # load as JSON array of objects
+                import json as _json
+                arr = _json.loads(content.decode("utf-8"))
+                if isinstance(arr, list):
+                    rows = [r for r in arr if isinstance(r, dict)]
+            if df is not None:
+                rows = df.to_dict(orient="records")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Unsupported or invalid file: {e}")
+    if not isinstance(rows, list):
+        raise HTTPException(status_code=400, detail="invalid rows")
+    _delta_adapter.append_rows(table, rows or [])
+    return {"ok": True, "inserted": len(rows)}
+
+
+class DeltaQueryPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    table: Optional[str] = None
+    path: Optional[str] = None
+    where: Optional[str] = None
+    filters: Optional[Dict[str, Any]] = None
+    order_by: Optional[str] = None
+    sql: Optional[str] = None
+    limit: int = 100
+    offset: int = 0
+
+
+@app.post("/delta/query")
+def delta_query(payload: DeltaQueryPayload):
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    # accept either table or full path
+    tbl = payload.table
+    if not tbl and payload.path:
+        # derive name from path by stripping root prefix
+        try:
+            from delta_adapter import DeltaConfig  # local import to avoid top-level cycles
+            root = DeltaConfig.from_env().root
+        except Exception:
+            root = "/data/delta"
+        p = payload.path.replace("\\", "/")
+        r = root.rstrip("/\\")
+        if p.startswith(r):
+            tbl = p[len(r):].lstrip("/\\")
+        else:
+            # fallback: use last segment as table name
+            tbl = p.strip("/\\").split("/")[-1]
+    if not tbl:
+        raise HTTPException(status_code=400, detail="table or path is required")
+    # prefer payload.sql if present (backend may choose to use it)
+    where = payload.where
+    res = _delta_adapter.query(tbl, where, payload.limit, payload.offset, filters=payload.filters, order_by=payload.order_by)
+    return res
+
+
+@app.get("/delta/history/{table}")
+def delta_history(table: str):
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    return {"history": _delta_adapter.history(table)}
+
+
+@app.post("/delta/restore/{table}/{version}")
+def delta_restore(table: str, version: int):
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    _delta_adapter.restore(table, version)
+    return {"ok": True}
+
+
+class DeltaMergePayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    table: Optional[str] = None
+    target_path: Optional[str] = None
+    staging_path: Optional[str] = None
+    keys: List[str]
+    rows: Optional[List[Dict[str, Any]]] = None
+
+
+@app.post("/delta/merge")
+def delta_merge(payload: DeltaMergePayload):
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    tbl = payload.table
+    if not tbl and payload.target_path:
+        try:
+            from delta_adapter import DeltaConfig
+            root = DeltaConfig.from_env().root
+        except Exception:
+            root = "/data/delta"
+        p = payload.target_path.replace("\\", "/")
+        r = root.rstrip("/\\")
+        if p.startswith(r):
+            tbl = p[len(r):].lstrip("/\\")
+        else:
+            tbl = p.strip("/\\").split("/")[-1]
+    if not tbl:
+        raise HTTPException(status_code=400, detail="table or target_path is required")
+    if not payload.keys:
+        raise HTTPException(status_code=400, detail="keys are required")
+    result = _delta_adapter.merge(tbl, rows=payload.rows, keys=payload.keys, staging_path=payload.staging_path)
+    return result
 
 
 class ExportRequest(BaseModel):

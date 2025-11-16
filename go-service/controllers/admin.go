@@ -4,6 +4,9 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
@@ -142,4 +145,44 @@ func AdminUsersDelete(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"ok": true})
+}
+
+// AdminDeltaList lists folders and Delta tables under DELTA_DATA_ROOT. Query param: path (optional, relative).
+// Response: { root: string, path: string, items: [ { name, path, type: "dir"|"file"|"delta_table" } ] }
+func AdminDeltaList(c *gin.Context) {
+	root := strings.TrimRight(os.Getenv("DELTA_DATA_ROOT"), "/\\")
+	if root == "" { root = "/data/delta" }
+	rel := strings.TrimLeft(strings.TrimSpace(c.Query("path")), "/\\")
+	target := root
+	if rel != "" { target = filepath.Join(root, rel) }
+
+	// Stat target
+	info, err := os.Stat(target)
+	if err != nil || !info.IsDir() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_path", "message": "Path not found or not a directory"})
+		return
+	}
+	entries, err := os.ReadDir(target)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "read_dir_failed"})
+		return
+	}
+	type Item struct { Name, Path, Type string }
+	items := make([]Item, 0, len(entries))
+	for _, e := range entries {
+		name := e.Name()
+		p := filepath.Join(target, name)
+		t := "file"
+		if e.IsDir() {
+			t = "dir"
+			// detect delta table by _delta_log
+			if _, err := os.Stat(filepath.Join(p, "_delta_log")); err == nil {
+				t = "delta_table"
+			}
+		}
+		// For files, you could also detect parquet as part of delta fragments; keep as file
+		items = append(items, Item{Name: name, Path: p, Type: t})
+	}
+	sort.Slice(items, func(i, j int) bool { return strings.ToLower(items[i].Name) < strings.ToLower(items[j].Name) })
+	c.JSON(http.StatusOK, gin.H{"root": root, "path": target, "items": items})
 }

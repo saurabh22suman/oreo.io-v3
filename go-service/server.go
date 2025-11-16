@@ -14,6 +14,7 @@ import (
 	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
 	"github.com/oreo-io/oreo.io-v2/go-service/models"
 	"github.com/oreo-io/oreo.io-v2/go-service/services"
+	"github.com/oreo-io/oreo.io-v2/go-service/storage"
 )
 
 // SetupRouter configures the Gin engine. Exposed for tests.
@@ -45,6 +46,12 @@ func SetupRouter() *gin.Engine {
 		}
 		c.Next()
 	})
+
+	// Initialize storage adapter (DEFAULT_STORAGE_BACKEND="delta" or "postgres") once and inject into context
+	backendName := strings.ToLower(strings.TrimSpace(os.Getenv("DEFAULT_STORAGE_BACKEND")))
+	if backendName == "" { backendName = "postgres" }
+	adapter := storage.NewAdapter(backendName)
+	r.Use(func(c *gin.Context) { c.Set("storage_adapter", adapter); c.Next() })
 	gdb := dbpkg.Get()
 	if gdb == nil {
 		if _, err := dbpkg.Init(); err == nil {
@@ -97,6 +104,38 @@ func SetupRouter() *gin.Engine {
 			c.JSON(http.StatusOK, gin.H{"message": "pong"})
 		})
 
+		// Introspection: report active storage backend (used in tests & ops diagnostics)
+		api.GET("/storage/backend", func(c *gin.Context) {
+			a, _ := c.Get("storage_adapter")
+			name := "unknown"
+			switch a.(type) {
+			case *storage.DeltaAdapter:
+				name = "delta"
+			case *storage.PostgresAdapter:
+				name = "postgres"
+			}
+			c.JSON(http.StatusOK, gin.H{"backend": name})
+		})
+
+		// Adapter-backed query endpoint (minimal example for T001)
+		api.POST("/query/adapter", func(c *gin.Context) {
+			var payload struct {
+				SQL   string `json:"sql"`
+				Limit int    `json:"limit"`
+			}
+			if err := c.ShouldBindJSON(&payload); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json"})
+				return
+			}
+			a := storage.GetAdapter(c)
+			res, err := a.Query(c.Request.Context(), storage.QueryRequest{SQL: payload.SQL, Limit: payload.Limit})
+			if err != nil {
+				c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"columns": res.Columns, "rows": res.Rows})
+		})
+
 		// Auth
 		api.POST("/auth/register", controllers.Register)
 		api.POST("/auth/login", controllers.Login)
@@ -126,6 +165,8 @@ func SetupRouter() *gin.Engine {
 			admin.POST("/users", controllers.AdminUsersCreate)
 			admin.PUT("/users/:userId", controllers.AdminUsersUpdate)
 			admin.DELETE("/users/:userId", controllers.AdminUsersDelete)
+			// Delta maintenance utilities
+			admin.GET("/delta/ls", controllers.AdminDeltaList)
 		}
 
 		// Utility: check if a physical table exists

@@ -171,6 +171,12 @@ func datasetPhysicalTable(ds *models.Dataset) string {
 	s := strings.TrimSpace(ds.TargetSchema)
 	t := strings.TrimSpace(ds.TargetTable)
 	if s != "" && t != "" {
+		// If using sqlite (dev metadata), emulate schema by joining with underscore
+		gdb := dbpkg.Get()
+		if gdb != nil && strings.EqualFold(dialect(gdb), "sqlite") {
+			return fmt.Sprintf("%s_%s", s, t)
+		}
+		// For postgres (and others that support schemas), use schema.table
 		return fmt.Sprintf("%s.%s", s, t)
 	}
 	return dsMainTable(ds.ID)
@@ -236,13 +242,13 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 	// Count rows
 	var rows int64
 	tbl := datasetPhysicalTable(ds)
-	if strings.TrimSpace(tbl) != "" {
-		// Attempt count; ignore errors
+	// For delta backend we cannot count via SQL; leave zero unless we later enrich.
+	if !strings.EqualFold(ds.StorageBackend, "delta") && strings.TrimSpace(tbl) != "" {
 		_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", tbl)).Row().Scan(&rows)
 	}
 	// Sample one row to infer columns count
 	cols := 0
-	if rows > 0 {
+	if rows > 0 && !strings.EqualFold(ds.StorageBackend, "delta") {
 		if r1, err := gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT 1", tbl)).Rows(); err == nil {
 			defer r1.Close()
 			if r1.Next() {
@@ -277,13 +283,22 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 	s := strings.TrimSpace(ds.TargetSchema)
 	t := strings.TrimSpace(ds.TargetTable)
 	d := strings.TrimSpace(ds.TargetDatabase)
-	switch {
-	case d != "" && s != "" && t != "":
-		tableLoc = fmt.Sprintf("%s.%s.%s", d, s, t)
-	case s != "" && t != "":
-		tableLoc = fmt.Sprintf("%s.%s", s, t)
-	default:
-		tableLoc = datasetPhysicalTable(ds)
+	if strings.EqualFold(ds.StorageBackend, "delta") {
+		// Map to Delta path root/<datasetID>
+		root := strings.TrimRight(os.Getenv("DELTA_DATA_ROOT"), "/\\")
+		if root == "" {
+			root = "/data/delta"
+		}
+		tableLoc = fmt.Sprintf("%s/%d", root, ds.ID)
+	} else {
+		switch {
+		case d != "" && s != "" && t != "":
+			tableLoc = fmt.Sprintf("%s.%s.%s", d, s, t)
+		case s != "" && t != "":
+			tableLoc = fmt.Sprintf("%s.%s", s, t)
+		default:
+			tableLoc = datasetPhysicalTable(ds)
+		}
 	}
 	var meta models.DatasetMeta
 	if err := gdb.Where("dataset_id = ?", ds.ID).First(&meta).Error; err != nil {
@@ -297,6 +312,42 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 		meta.TableLocation = tableLoc
 		_ = gdb.Save(&meta).Error
 	}
+}
+
+// ensureDeltaTable calls the Python service to create an empty Delta table for this dataset.
+func ensureDeltaTable(ds *models.Dataset) error {
+	if ds == nil { return fmt.Errorf("nil dataset") }
+	pyBase := os.Getenv("PYTHON_SERVICE_URL")
+	if strings.TrimSpace(pyBase) == "" { pyBase = "http://python-service:8000" }
+	// Build schema object from ds.Schema if JSON; if empty or invalid use {} to satisfy pydantic Dict expectation
+	var schemaObj any
+	s := strings.TrimSpace(ds.Schema)
+	if s != "" {
+		if err := json.Unmarshal([]byte(s), &schemaObj); err != nil {
+			// fall back to empty map if unmarshalling fails
+			schemaObj = map[string]any{}
+		}
+	} else {
+		schemaObj = map[string]any{}
+	}
+	payload := map[string]any{
+		"table":  fmt.Sprintf("%d", ds.ID),
+		"schema": schemaObj,
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, pyBase+"/delta/ensure", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp == nil { return fmt.Errorf("python_unreachable") }
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Attempt to read error body for diagnostic surface
+		b, _ := io.ReadAll(resp.Body)
+		msg := strings.TrimSpace(string(b))
+		if msg == "" { msg = resp.Status }
+		return fmt.Errorf("ensure_failed: %s", msg)
+	}
+	return nil
 }
 
 func ingestCSVToTable(gdb *gorm.DB, filePath, table string) error {
@@ -427,13 +478,29 @@ func DatasetsCreate(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid_payload"})
 		return
 	}
-	ds := models.Dataset{ProjectID: uint(pid), Name: in.Name, Schema: in.Schema}
+	// Capture default storage backend (env driven) for dataset row
+	backend := strings.ToLower(strings.TrimSpace(os.Getenv("DEFAULT_STORAGE_BACKEND")))
+	if backend == "" {
+		backend = "postgres"
+	}
+	ds := models.Dataset{ProjectID: uint(pid), Name: in.Name, Schema: in.Schema, StorageBackend: backend}
 	if err := gdb.Create(&ds).Error; err != nil {
 		c.JSON(409, gin.H{"error": "name_conflict"})
 		return
 	}
-	// Create an empty physical table immediately so downstream flows can rely on its existence
-	_ = ensureDatasetTable(gdb, &ds)
+	// Backend-specific ensure logic
+	if strings.EqualFold(ds.StorageBackend, "delta") {
+		// Call python /delta/ensure to create empty delta table (using dataset ID as table name)
+		if err := ensureDeltaTable(&ds); err != nil {
+			// Surface failure to client; delete the just-created dataset row to avoid dangling metadata
+			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+			c.JSON(500, gin.H{"error": "delta_ensure_failed", "message": err.Error()})
+			return
+		}
+	} else {
+		// Legacy SQL path
+		_ = ensureDatasetTable(gdb, &ds)
+	}
 	// Initialize metadata row with zero counts
 	upsertDatasetMeta(gdb, &ds)
 	c.JSON(201, ds)
@@ -536,6 +603,8 @@ func DatasetsCreateTop(c *gin.Context) {
 			return
 		}
 	}
+	backend := strings.ToLower(strings.TrimSpace(os.Getenv("DEFAULT_STORAGE_BACKEND")))
+	if backend == "" { backend = "postgres" }
 	ds := models.Dataset{
 		ProjectID:      body.ProjectID,
 		Name:           dsName,
@@ -545,13 +614,22 @@ func DatasetsCreateTop(c *gin.Context) {
 		TargetDatabase: dbName,
 		TargetSchema:   schemaName,
 		TargetTable:    tableName,
+		StorageBackend: backend,
 	}
 	if err := gdb.Create(&ds).Error; err != nil {
 		c.JSON(409, gin.H{"error": "name_conflict"})
 		return
 	}
-	// Ensure physical storage table exists on creation
-	_ = ensureDatasetTable(gdb, &ds)
+	// Ensure physical storage depending on backend
+	if strings.EqualFold(ds.StorageBackend, "delta") {
+		if err := ensureDeltaTable(&ds); err != nil {
+			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+			c.JSON(500, gin.H{"error": "delta_ensure_failed", "message": err.Error()})
+			return
+		}
+	} else {
+		_ = ensureDatasetTable(gdb, &ds)
+	}
 	upsertDatasetMeta(gdb, &ds)
 	c.JSON(201, ds)
 }
@@ -602,7 +680,9 @@ func DatasetsPrepare(c *gin.Context) {
 			return
 		}
 	}
-	ds := models.Dataset{ProjectID: uint(pid), Name: name, Source: source, TargetSchema: schemaName, TargetTable: tableName}
+	backend := strings.ToLower(strings.TrimSpace(os.Getenv("DEFAULT_STORAGE_BACKEND")))
+	if backend == "" { backend = "postgres" }
+	ds := models.Dataset{ProjectID: uint(pid), Name: name, Source: source, TargetSchema: schemaName, TargetTable: tableName, StorageBackend: backend}
 	if err := gdb.Create(&ds).Error; err != nil {
 		c.JSON(409, gin.H{"error": "name_conflict"})
 		return
@@ -614,16 +694,76 @@ func DatasetsPrepare(c *gin.Context) {
 	if err == nil && file != nil && header != nil {
 		defer file.Close()
 		if header.Size > maxUploadBytes {
-			// cleanup the just-created dataset
 			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
 			respondTooLarge(c)
 			return
 		}
-		// Ensure physical table exists
-		if err := ensureDatasetTable(gdb, &ds); err != nil {
+		// Read full content once for schema inference + ingest reuse
+		contentBytes, rerr := io.ReadAll(file)
+		if rerr != nil {
 			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
-			c.JSON(500, gin.H{"error": "table_create_failed"})
+			c.JSON(400, gin.H{"error": "invalid_file"})
 			return
+		}
+		// Ensure physical table or delta path, with CSV header-based schema inference if delta
+		if strings.EqualFold(ds.StorageBackend, "delta") {
+			if strings.TrimSpace(ds.Schema) == "" && strings.HasSuffix(strings.ToLower(header.Filename), ".csv") {
+				csvr := csv.NewReader(bytes.NewReader(contentBytes))
+				headers, herr := csvr.Read()
+				if herr == nil && len(headers) > 0 {
+					// Sample up to 50 rows to infer primitive types (integer, number, string, boolean)
+					samples := make([]string, len(headers))
+					for i := range samples { samples[i] = "unknown" }
+					for i := 0; i < 50; i++ {
+						rec, rerr := csvr.Read()
+						if rerr != nil { break }
+						for j := 0; j < len(headers) && j < len(rec); j++ {
+							v := strings.TrimSpace(rec[j])
+							if v == "" { continue }
+							// Try boolean
+							if strings.EqualFold(v, "true") || strings.EqualFold(v, "false") {
+								if samples[j] == "unknown" { samples[j] = "boolean" }
+								continue
+							}
+							// Try integer
+							if _, ierr := strconv.ParseInt(v, 10, 64); ierr == nil {
+								if samples[j] == "unknown" || samples[j] == "integer" { samples[j] = "integer" } else if samples[j] != "integer" { samples[j] = "string" }
+								continue
+							}
+							// Try float
+							if _, ferr := strconv.ParseFloat(v, 64); ferr == nil {
+								if samples[j] == "unknown" || samples[j] == "integer" || samples[j] == "number" { samples[j] = "number" } else { samples[j] = "string" }
+								continue
+							}
+							// Fallback string
+							samples[j] = "string"
+						}
+					}
+					props := map[string]any{}
+					for idx, h := range headers {
+						col := strings.TrimSpace(h)
+						if col == "" { continue }
+						t := samples[idx]
+						if t == "unknown" { t = "string" }
+						props[col] = map[string]string{"type": t}
+					}
+					schemaMap := map[string]any{"properties": props}
+					bSchema, _ := json.Marshal(schemaMap)
+					ds.Schema = string(bSchema)
+					_ = gdb.Model(&ds).Update("schema", ds.Schema).Error
+				}
+			}
+			if err := ensureDeltaTable(&ds); err != nil {
+				_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+				c.JSON(500, gin.H{"error": "delta_ensure_failed", "message": err.Error()})
+				return
+			}
+		} else {
+			if err := ensureDatasetTable(gdb, &ds); err != nil {
+				_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+				c.JSON(500, gin.H{"error": "table_create_failed"})
+				return
+			}
 		}
 		// Sanity: ensure main table is empty so this is truly the first ingest
 		var existing int64
@@ -636,22 +776,43 @@ func DatasetsPrepare(c *gin.Context) {
 			c.JSON(403, gin.H{"error": "append_only", "message": "Modifications are not allowed. Use append flow."})
 			return
 		}
-		// Read all bytes and ingest according to extension (csv/json)
-		content, rerr := io.ReadAll(file)
-		if rerr != nil {
-			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
-			c.JSON(400, gin.H{"error": "invalid_file"})
-			return
-		}
-		if err2 := ingestBytesToTable(gdb, content, header.Filename, tbl); err2 != nil {
-			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
-			// Unsupported format or ingest error
-			if err2.Error() == "unsupported_format" {
-				c.JSON(400, gin.H{"error": "unsupported_format", "message": "Only .csv and .json are supported."})
-			} else {
-				c.JSON(500, gin.H{"error": "ingest_failed"})
+		// Perform initial ingest
+		if strings.EqualFold(ds.StorageBackend, "delta") {
+			pyBase := os.Getenv("PYTHON_SERVICE_URL")
+			if strings.TrimSpace(pyBase) == "" { pyBase = "http://python-service:8000" }
+			var mpBuf bytes.Buffer
+			mw := multipart.NewWriter(&mpBuf)
+			_ = mw.WriteField("table", fmt.Sprintf("%d", ds.ID))
+			fw, _ := mw.CreateFormFile("file", header.Filename)
+			_, _ = fw.Write(contentBytes)
+			mw.Close()
+			req, _ := http.NewRequest(http.MethodPost, pyBase+"/delta/append-file", &mpBuf)
+			req.Header.Set("Content-Type", mw.FormDataContentType())
+			resp, perr := http.DefaultClient.Do(req)
+			if perr != nil || resp == nil {
+				_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+				c.JSON(502, gin.H{"error": "python_unreachable"})
+				return
 			}
-			return
+			defer resp.Body.Close()
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				b, _ := io.ReadAll(resp.Body)
+				msg := strings.TrimSpace(string(b))
+				if msg == "" { msg = resp.Status }
+				_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+				c.JSON(500, gin.H{"error": "ingest_failed", "message": msg})
+				return
+			}
+		} else {
+			if err2 := ingestBytesToTable(gdb, contentBytes, header.Filename, tbl); err2 != nil {
+				_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+				if err2.Error() == "unsupported_format" {
+					c.JSON(400, gin.H{"error": "unsupported_format", "message": "Only .csv and .json are supported."})
+				} else {
+					c.JSON(500, gin.H{"error": "ingest_failed"})
+				}
+				return
+			}
 		}
 		// Update metadata after initial ingest
 		upsertDatasetMeta(gdb, &ds)
@@ -957,10 +1118,13 @@ func DatasetStats(c *gin.Context) {
 		"table_location": meta.TableLocation,
 	}
 	if stats["row_count"] == nil || stats["row_count"] == int64(0) {
-		var total int64
-		// Attempt to count directly from the dataset's physical table (schema.table or ds_<id>)
-		_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", datasetPhysicalTable(ds))).Row().Scan(&total)
-		stats["row_count"] = total
+		// For delta backend we skip direct SQL count
+		if !strings.EqualFold(ds.StorageBackend, "delta") {
+			var total int64
+			// Attempt to count directly from the dataset's physical table (schema.table or ds_<id>)
+			_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", datasetPhysicalTable(ds))).Row().Scan(&total)
+			stats["row_count"] = total
+		}
 	}
 	var pending int64
 	_ = gdb.Model(&models.ChangeRequest{}).Where("dataset_id = ? AND status = ?", ds.ID, "pending").Count(&pending)

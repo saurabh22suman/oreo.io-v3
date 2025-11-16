@@ -26,6 +26,12 @@ python-service/.ruff_cache/
 # Docker
 *.local.yml
 \n# npm cache\nfrontend/.npm-cache/\n
+## Local data artifacts (do not commit)
+delta-data/
+metadata/*.db
+metadata/*.sqlite
+metadata/*.sqlite3
+
 ## Playwright artifacts (root)
 frontend/test-results/
 frontend/playwright-report/
@@ -36,3 +42,7 @@ frontend/**/trace.zip
 .playwright-mcp/
 cookies.txt
 
+
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md

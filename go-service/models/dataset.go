@@ -13,6 +13,8 @@ type Dataset struct {
 	TargetDatabase string     `json:"target_database" gorm:"size:200"`
 	TargetSchema   string     `json:"target_schema" gorm:"size:200"`
 	TargetTable    string     `json:"target_table" gorm:"size:200"`
+	// New: choose storage backend per dataset ("postgres" or "delta")
+	StorageBackend string     `json:"storage_backend" gorm:"size:50"`
 	Schema         string     `json:"schema" gorm:"type:text"`
 	Rules          string     `json:"rules" gorm:"type:text"`
 	LastUploadPath string     `json:"last_upload_path" gorm:"size:500"`

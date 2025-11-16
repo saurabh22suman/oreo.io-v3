@@ -16,9 +16,16 @@ var globalDB *gorm.DB
 
 func Init() (*gorm.DB, error) {
 	dsn := os.Getenv("DATABASE_URL")
+	metaPath := os.Getenv("METADATA_DB")
 	var gdb *gorm.DB
 	var err error
-	if dsn != "" {
+	if metaPath != "" {
+		// Prefer a file-based SQLite metadata store if provided (migration step away from Postgres)
+		gdb, err = gorm.Open(sqlite.Open(metaPath), &gorm.Config{})
+		if err != nil {
+			return nil, fmt.Errorf("sqlite connect (%s): %w", metaPath, err)
+		}
+	} else if dsn != "" {
 		// Retry connect to Postgres to handle container startup races
 		const maxAttempts = 30
 		for i := 1; i <= maxAttempts; i++ {

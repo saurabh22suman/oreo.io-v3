@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: oreo
       POSTGRES_PASSWORD: oreo
@@ -14,16 +15,25 @@ services:
   go-service:
     build:
       context: ./go-service
+    restart: unless-stopped
     ports:
       - "8081:8080"
     environment:
       - PYTHON_SERVICE_URL=http://python-service:8000
-      - DATABASE_URL=postgres://oreo:oreo@db:5432/oreo?sslmode=disable
+      # During migration, prefer SQLite metadata DB; DATABASE_URL remains for legacy runs
+      - METADATA_DB=/data/meta/oreo.db
+      # Point Go admin delta tools at the same root as python-service
+      - DELTA_DATA_ROOT=/data/delta
+      # Default to Delta backend for data operations (adapter selection)
+      - DEFAULT_STORAGE_BACKEND=delta
+      # - DATABASE_URL=postgres://oreo:oreo@db:5432/oreo?sslmode=disable
       - JWT_SECRET=dev-secret
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     depends_on:
-      - python-service
-      - db
+      python-service:
+        condition: service_healthy
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 30s
@@ -38,17 +48,25 @@ services:
             - vendor/
         - action: rebuild
           path: ./go-service/go.mod
+    volumes:
+      - ./metadata:/data/meta
+      - ./delta-data:/data/delta
 
   python-service:
     build:
       context: ./python-service
+    restart: unless-stopped
     ports:
       - "8000:8000"
+    environment:
+      - DELTA_DATA_ROOT=/data/delta
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 3s
       retries: 3
+    volumes:
+      - ./delta-data:/data/delta
     develop:
       watch:
         - action: sync
@@ -62,13 +80,15 @@ services:
   frontend:
     build:
       context: ./frontend
+    restart: unless-stopped
     ports:
       - "5173:80"
     environment:
       - VITE_API_BASE=http://go-service:8080/api
       - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     depends_on:
-      - go-service
+      go-service:
+        condition: service_healthy
 
   go-dev:
     image: golang:1.22

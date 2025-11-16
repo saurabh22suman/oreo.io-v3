@@ -24,6 +24,10 @@ export default function AdminBasePage(){
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<'user'|'contributor'|'editor'|'approver'|'owner'>('user')
   const [error, setError] = useState('')
+  // simple admin command line: supports `delta ls [path]`
+  const [cmd, setCmd] = useState('')
+  const [cmdOut, setCmdOut] = useState('')
+  const [cmdBusy, setCmdBusy] = useState(false)
 
   async function load(){
     setError('')
@@ -43,6 +47,27 @@ export default function AdminBasePage(){
       load() 
     }
   }, [pwd])
+
+  async function runCmd(){
+    const raw = (cmd||'').trim()
+    if(!raw) return
+    setCmdBusy(true); setCmdOut('')
+    try{
+      const parts = raw.split(/\s+/)
+      if(parts[0] === 'delta' && parts[1] === 'ls'){
+        const path = parts.slice(2).join(' ').trim()
+        const q = path ? `?path=${encodeURIComponent(path)}` : ''
+        const res = await fetchAdminRaw(`/admin/delta/ls${q}`, pwd)
+        setCmdOut(formatDeltaLs(res))
+      } else {
+        setCmdOut(`Unknown command: ${raw}\n\nSupported:\n  delta ls [path]`)
+      }
+    }catch(e:any){
+      setCmdOut(String(e?.message || e))
+    } finally {
+      setCmdBusy(false)
+    }
+  }
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -81,6 +106,20 @@ export default function AdminBasePage(){
                 try{ await fetchAdmin('/admin/users', { method:'POST', body: JSON.stringify({ email, password, role }) }, pwd); setStatus('User created'); setEmail(''); setPassword(''); load() }catch(e:any){ setError(e.message) }
               }}>Create</button>
             </div>
+          </div>
+
+          <div className="border border-gray-200 bg-white rounded-md p-3 mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-medium">Admin command line</div>
+              <div className="text-xs text-gray-500">Try: <code>delta ls</code> or <code>delta ls sub/folder</code></div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input className="flex-1 border border-gray-300 rounded-md px-3 py-2" placeholder="delta ls [path]" value={cmd} onChange={e=>setCmd(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ runCmd() } }} />
+              <button className="btn-primary px-3 py-2 text-sm" disabled={cmdBusy} onClick={runCmd}>{cmdBusy? 'Running...' : 'Run'}</button>
+            </div>
+            {cmdOut && (
+              <pre className="mt-3 text-xs bg-gray-50 border border-gray-200 rounded-md p-2 overflow-auto max-h-80 whitespace-pre-wrap">{cmdOut}</pre>
+            )}
           </div>
 
           <div className="border border-gray-200 bg-white rounded-md p-3">
@@ -147,3 +186,37 @@ function UserRow({ u, pwd, onChanged, onError }: { u:any; pwd: string; onChanged
     </tr>
   )
 }
+
+// helper within module scope
+async function fetchAdminRaw(path: string, adminPassword?: string){
+  const API_BASE = import.meta.env.VITE_API_BASE || '/api'
+  const r = await fetch(`${API_BASE}${path}`, {
+    headers: { 'X-Admin-Password': adminPassword || '' },
+  })
+  if(!r.ok){ throw new Error(await r.text()) }
+  return r.json()
+}
+
+function formatDeltaLs(res: any): string{
+  try{
+    const lines: string[] = []
+    const rel = res.path?.replace(res.root, '') || ''
+    lines.push(`# Delta root: ${res.root}`)
+    lines.push(`# Path: ${rel || '/'}\n`)
+    const items = (res.items||[]) as Array<any>
+    if(items.length === 0){ lines.push('(empty)'); return lines.join('\n') }
+    // columns: TYPE NAME PATH
+    const rows = items.map((it:any)=>[it.type, it.name, it.path])
+    const colWidths = [4, 4, 4]
+    rows.forEach(r=>{ r.forEach((cell:string,i:number)=>{ colWidths[i] = Math.max(colWidths[i], String(cell||'').length) }) })
+    const header = ['TYPE','NAME','PATH']
+    const pad = (s:string,w:number)=> (s||'').padEnd(w)
+    lines.push(`${pad(header[0], colWidths[0])}  ${pad(header[1], colWidths[1])}  ${pad(header[2], colWidths[2])}`)
+    lines.push(`${'-'.repeat(colWidths[0])}  ${'-'.repeat(colWidths[1])}  ${'-'.repeat(colWidths[2])}`)
+    rows.forEach(r=> lines.push(`${pad(String(r[0]), colWidths[0])}  ${pad(String(r[1]), colWidths[1])}  ${String(r[2])}`))
+    return lines.join('\n')
+  }catch(e:any){
+    return String(e?.message || e)
+  }
+}
+

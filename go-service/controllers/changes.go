@@ -1,9 +1,12 @@
 package controllers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -149,7 +152,7 @@ func ChangeApprove(c *gin.Context) {
 		return
 	}
 
-	// Apply according to type. For append, prefer DB staging -> main append; fallback to durable file update.
+	// Apply according to type. For append, prefer backend-specific path.
 	if cr.Type == "append" {
 		var ds models.Dataset
 		if err := gdb.Where("project_id = ?", pid).First(&ds, cr.DatasetID).Error; err != nil {
@@ -171,6 +174,61 @@ func ChangeApprove(c *gin.Context) {
 			c.JSON(404, gin.H{"error": "upload_not_found"})
 			return
 		}
+		// Delta backend: stream upload directly to python /delta/append-file
+		if strings.EqualFold(ds.StorageBackend, "delta") {
+			pyBase := os.Getenv("PYTHON_SERVICE_URL")
+			if strings.TrimSpace(pyBase) == "" { pyBase = "http://python-service:8000" }
+			var mpBuf bytes.Buffer
+			mw := multipart.NewWriter(&mpBuf)
+			_ = mw.WriteField("table", fmt.Sprintf("%d", ds.ID))
+			fw, _ := mw.CreateFormFile("file", payload.Filename)
+			_, _ = fw.Write(up.Content)
+			_ = mw.Close()
+			req, _ := http.NewRequest(http.MethodPost, pyBase+"/delta/append-file", &mpBuf)
+			req.Header.Set("Content-Type", mw.FormDataContentType())
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil || resp == nil {
+				c.JSON(502, gin.H{"error": "python_unreachable"})
+				return
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				c.JSON(500, gin.H{"error": "append_failed"})
+				return
+			}
+			// Update timestamps and meta
+			now := time.Now()
+			ds.LastUploadAt = &now
+			_ = gdb.Save(&ds).Error
+			upsertDatasetMeta(gdb, &ds)
+			// Record version snapshot (delta path reference)
+			root := strings.TrimRight(os.Getenv("DELTA_DATA_ROOT"), "/\\")
+			if root == "" { root = "/data/delta" }
+			main := fmt.Sprintf("%s/%d", root, ds.ID)
+			var rowCount int64 = 0
+			verData := map[string]any{
+				"table":      main,
+				"row_count":  rowCount,
+				"change_id":  cr.ID,
+				"applied_at": time.Now().Format(time.RFC3339),
+			}
+			if b, err := json.Marshal(verData); err == nil {
+				approvers := cr.ReviewerStates
+				if strings.TrimSpace(approvers) == "" { approvers = cr.Reviewers }
+				_ = gdb.Create(&models.DatasetVersion{ DatasetID: ds.ID, Data: string(b), EditedBy: cr.UserID, EditedAt: time.Now(), Status: "approved", Approvers: approvers }).Error
+			}
+			cr.Status = "completed"
+			cr.Summary = "Applied append at " + time.Now().Format(time.RFC3339)
+			if err := gdb.Save(&cr).Error; err != nil {
+				c.JSON(500, gin.H{"error": "db"})
+				return
+			}
+			// Notify requester
+			if cr.UserID != 0 { _ = AddNotification(cr.UserID, "Your append request has been applied successfully", models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID}) }
+			c.JSON(200, gin.H{"ok": true, "change_request": cr})
+			return
+		}
+
 		// DB path: append staging table rows to main PHYSICAL table, then drop staging (transactional)
 		stg := dsStagingTable(ds.ID, cr.ID)
 		main := datasetPhysicalTable(&ds)

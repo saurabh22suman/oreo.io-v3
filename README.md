@@ -41,3 +41,47 @@ GitHub Actions run Go and Python tests on push/PR (see .github/workflows/ci.yml)
 
 ## License
 MIT (TBD)
+
+## Delta Lake Migration (Experimental v4)
+The repository contains early work to migrate dataset storage from Postgres to Delta Lake.
+
+Components:
+- Python service exposes `/delta/append`, `/delta/query`, `/delta/history/{table}` and `/delta/restore/{table}/{version}` backed by delta-rs and DuckDB.
+- Data root mounted at `./delta-data` → container path `/data/delta` (configurable via `DELTA_DATA_ROOT`).
+- Go service can be pointed to a file-based metadata DB with `METADATA_DB=/data/meta/oreo.db` (see compose) while Postgres remains for legacy paths.
+
+Export existing Postgres tables to Delta (one-off):
+```
+pip install -r scripts/requirements-migrate.txt
+python scripts/export_postgres_to_delta.py \
+  --dsn postgresql://USER:PASS@HOST:5432/DB \
+  --tables projects,datasets,users \
+  --delta-root ./delta-data
+```
+
+Quick query of a Delta table via Python service:
+```
+curl -X POST http://localhost:8000/delta/query -H "Content-Type: application/json" \
+  -d '{"table":"projects","limit":5}'
+```
+
+See `docs/delta_migration.md` for the overall plan and next steps.
+
+## Admin
+
+Admin base UI: `/admin_base` (password `ADMIN_PASSWORD`, default `admin123`).
+
+### Admin Command Line (Delta Utilities)
+Inside the Admin page, use the command box to inspect Delta storage:
+
+Supported command:
+
+`delta ls [path]` – Lists folders and Delta tables under `DELTA_DATA_ROOT` (default `/data/delta`). A directory is classified as `delta_table` if it contains a `_delta_log` subfolder.
+
+Examples:
+```
+delta ls
+delta ls project_42
+```
+
+Output columns: TYPE, NAME, PATH.
