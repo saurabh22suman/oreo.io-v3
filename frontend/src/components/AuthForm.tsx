@@ -1,9 +1,25 @@
-import { useState } from 'react'
-import { Eye, EyeOff, Info } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Eye, EyeOff, Check, X } from 'lucide-react'
 
 export default function AuthForm({ type, onSubmit, switchForm }: { type: 'login' | 'register'; onSubmit: (data: any) => void; switchForm: () => void }) {
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '', remember: false })
   const [showPw, setShowPw] = useState(false)
+  const [passwordTouched, setPasswordTouched] = useState(false)
+
+  // Password validation rules
+  const passwordValidation = useMemo(() => {
+    const pw = form.password
+    return {
+      minLength: pw.length >= 8,
+      hasUppercase: /[A-Z]/.test(pw),
+      hasLowercase: /[a-z]/.test(pw),
+      hasNumber: /[0-9]/.test(pw),
+      hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(pw)
+    }
+  }, [form.password])
+
+  const isPasswordValid = Object.values(passwordValidation).every(v => v)
+  const canSubmit = type === 'login' || (isPasswordValid && form.password === form.confirm)
 
   return (
     <form
@@ -48,25 +64,6 @@ export default function AuthForm({ type, onSubmit, switchForm }: { type: 'login'
       />
 
       <div>
-        {type === 'register' && (
-          <div className="flex items-center gap-2 mb-1 text-xs text-gray-600">
-            <span>Password</span>
-            <div className="group relative inline-block">
-              <Info size={14} className="text-gray-400 cursor-help" />
-              <div className="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity absolute z-10 left-0 top-6 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg w-64">
-                <div className="font-semibold mb-2">Password Requirements:</div>
-                <ul className="space-y-1 list-disc list-inside">
-                  <li>At least 8 characters long</li>
-                  <li>1 uppercase letter (A-Z)</li>
-                  <li>1 lowercase letter (a-z)</li>
-                  <li>1 number (0-9)</li>
-                  <li>1 special character (!@#$%^&*)</li>
-                </ul>
-                <div className="absolute -top-1 left-2 w-2 h-2 bg-gray-900 transform rotate-45"></div>
-              </div>
-            </div>
-          </div>
-        )}
         <div className="relative">
           <input
             type={showPw ? 'text' : 'password'}
@@ -78,27 +75,61 @@ export default function AuthForm({ type, onSubmit, switchForm }: { type: 'login'
             className="border rounded-xl px-4 py-2 w-full"
             value={form.password}
             onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+            onBlur={() => setPasswordTouched(true)}
             required
           />
           <button type="button" className="absolute right-3 top-2.5 text-gray-500" onClick={() => setShowPw(s => !s)} aria-label="Toggle password">
             {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
         </div>
+        
+        {type === 'register' && passwordTouched && form.password && (
+          <div className="mt-2 text-xs space-y-1">
+            <div className={`flex items-center gap-2 ${passwordValidation.minLength ? 'text-green-600' : 'text-red-600'}`}>
+              {passwordValidation.minLength ? <Check size={14} /> : <X size={14} />}
+              <span>At least 8 characters</span>
+            </div>
+            <div className={`flex items-center gap-2 ${passwordValidation.hasUppercase ? 'text-green-600' : 'text-red-600'}`}>
+              {passwordValidation.hasUppercase ? <Check size={14} /> : <X size={14} />}
+              <span>1 uppercase letter (A-Z)</span>
+            </div>
+            <div className={`flex items-center gap-2 ${passwordValidation.hasLowercase ? 'text-green-600' : 'text-red-600'}`}>
+              {passwordValidation.hasLowercase ? <Check size={14} /> : <X size={14} />}
+              <span>1 lowercase letter (a-z)</span>
+            </div>
+            <div className={`flex items-center gap-2 ${passwordValidation.hasNumber ? 'text-green-600' : 'text-red-600'}`}>
+              {passwordValidation.hasNumber ? <Check size={14} /> : <X size={14} />}
+              <span>1 number (0-9)</span>
+            </div>
+            <div className={`flex items-center gap-2 ${passwordValidation.hasSpecial ? 'text-green-600' : 'text-red-600'}`}>
+              {passwordValidation.hasSpecial ? <Check size={14} /> : <X size={14} />}
+              <span>1 special character (!@#$%^&*)</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {type === 'register' && (
-        <input
-          type="password"
-          id="confirm-password"
-          name="confirm"
-          placeholder="Confirm password"
-          autoComplete="new-password"
-          aria-label="Confirm password"
-          className="border rounded-xl px-4 py-2"
-          value={form.confirm}
-          onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))}
-          required
-        />
+        <div>
+          <input
+            type="password"
+            id="confirm-password"
+            name="confirm"
+            placeholder="Confirm password"
+            autoComplete="new-password"
+            aria-label="Confirm password"
+            className="border rounded-xl px-4 py-2 w-full"
+            value={form.confirm}
+            onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))}
+            required
+          />
+          {form.confirm && form.password !== form.confirm && (
+            <div className="mt-1 text-xs text-red-600 flex items-center gap-1">
+              <X size={14} />
+              <span>Passwords do not match</span>
+            </div>
+          )}
+        </div>
       )}
 
       <div className="flex items-center justify-between text-sm">
@@ -109,7 +140,11 @@ export default function AuthForm({ type, onSubmit, switchForm }: { type: 'login'
         <button type="button" className="text-xs text-indigo-600 hover:underline">Forgot password?</button>
       </div>
 
-  <button type="submit" className="btn-primary bold w-full">
+  <button 
+        type="submit" 
+        className={`btn-primary bold w-full ${!canSubmit && type === 'register' ? 'opacity-50 cursor-not-allowed' : ''}`}
+        disabled={!canSubmit && type === 'register'}
+      >
         {type === 'login' ? 'Sign in' : 'Create account'}
       </button>
 
