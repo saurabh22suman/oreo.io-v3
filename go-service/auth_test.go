@@ -1,4 +1,5 @@
 package main
+import "github.com/oreo-io/oreo.io-v2/go-service/internal/handlers"
 
 import (
 	"bytes"
@@ -8,8 +9,8 @@ import (
 	"os"
 	"testing"
 
-	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
-	"github.com/oreo-io/oreo.io-v2/go-service/models"
+	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
+	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
 	sqlite "github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
@@ -30,7 +31,7 @@ func TestAuthFlow(t *testing.T) {
 	os.Setenv("JWT_SECRET", "test-secret")
 	defer os.Unsetenv("JWT_SECRET")
 	setupTestDB(t)
-	r := SetupRouter()
+	r := handlers.SetupRouter()
 
 	// Register
 	reg := map[string]string{"email": "user@test.local", "password": "pass1234"}

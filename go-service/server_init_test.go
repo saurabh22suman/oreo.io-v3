@@ -1,4 +1,5 @@
 package main
+import "github.com/oreo-io/oreo.io-v2/go-service/internal/handlers"
 
 import (
     "net/http/httptest"
@@ -9,7 +10,7 @@ import (
 // Test that DEFAULT_STORAGE_BACKEND env influences /api/storage/backend introspection route.
 func TestStorageBackendIntrospectionDelta(t *testing.T) {
     os.Setenv("DEFAULT_STORAGE_BACKEND", "delta")
-    r := SetupRouter()
+    r := handlers.SetupRouter()
     req := httptest.NewRequest("GET", "/api/storage/backend", nil)
     w := httptest.NewRecorder()
     r.ServeHTTP(w, req)
@@ -20,7 +21,7 @@ func TestStorageBackendIntrospectionDelta(t *testing.T) {
 
 func TestStorageBackendIntrospectionPostgres(t *testing.T) {
     os.Setenv("DEFAULT_STORAGE_BACKEND", "postgres")
-    r := SetupRouter()
+    r := handlers.SetupRouter()
     req := httptest.NewRequest("GET", "/api/storage/backend", nil)
     w := httptest.NewRecorder()
     r.ServeHTTP(w, req)

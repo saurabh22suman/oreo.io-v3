@@ -1,4 +1,5 @@
 package main
+import "github.com/oreo-io/oreo.io-v2/go-service/internal/handlers"
 
 import (
 	"bytes"
@@ -8,8 +9,8 @@ import (
 	"testing"
 
 	sqlite "github.com/glebarez/sqlite"
-	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
-	"github.com/oreo-io/oreo.io-v2/go-service/models"
+	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
+	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
 	"gorm.io/gorm"
 )
 
@@ -18,7 +19,7 @@ func TestRBAC_ProjectRoles(t *testing.T) {
 	_ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.ProjectRole{})
 	dbpkg.Set(gdb)
 
-	r := SetupRouter()
+	r := handlers.SetupRouter()
 
 	// user1 (owner)
 	tok1 := tokenFor(t, r, "u1@test.local")

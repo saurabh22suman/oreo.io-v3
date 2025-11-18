@@ -8,7 +8,7 @@ import (
     "os"
     "testing"
 
-    "github.com/oreo-io/oreo.io-v2/go-service/storage"
+    "github.com/oreo-io/oreo.io-v2/go-service/internal/storage"
 )
 
 // These are pseudo end-to-end tests: we mock the Python service but exercise the DeltaAdapter

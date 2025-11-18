@@ -1,4 +1,5 @@
 package main
+import "github.com/oreo-io/oreo.io-v2/go-service/internal/handlers"
 
 import (
     "net/http/httptest"
@@ -8,7 +9,7 @@ import (
 
 func TestHealthEndpoints(t *testing.T) {
     os.Setenv("DEFAULT_STORAGE_BACKEND", "postgres")
-    r := SetupRouter()
+    r := handlers.SetupRouter()
 
     // /healthz
     w := httptest.NewRecorder()

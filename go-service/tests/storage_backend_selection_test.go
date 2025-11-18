@@ -2,8 +2,8 @@ package tests
 
 import (
     "testing"
-    "github.com/oreo-io/oreo.io-v2/go-service/models"
-    "github.com/oreo-io/oreo.io-v2/go-service/storage"
+    "github.com/oreo-io/oreo.io-v2/go-service/internal/models"
+    "github.com/oreo-io/oreo.io-v2/go-service/internal/storage"
 )
 
 func TestBackendSelection_DatasetOverride(t *testing.T) {

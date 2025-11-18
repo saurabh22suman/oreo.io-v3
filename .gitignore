@@ -1,8 +1,22 @@
 # General
 .DS_Store
 Thumbs.db
+
+# Environment & Secrets (NEVER COMMIT)
 .env
 .env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets/
+config/secrets.yaml
+
+# Docker Compose with real secrets
+docker-compose.dev.yml
+docker-compose.override.yml
+
+# Python
 .venv/
 venv/
 env/

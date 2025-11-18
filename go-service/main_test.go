@@ -1,4 +1,5 @@
 package main
+import "github.com/oreo-io/oreo.io-v2/go-service/internal/handlers"
 
 import (
 	"bytes"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestHealthz(t *testing.T) {
-	r := SetupRouter()
+	r := handlers.SetupRouter()
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	r.ServeHTTP(w, req)
@@ -19,7 +20,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestPing(t *testing.T) {
-	r := SetupRouter()
+	r := handlers.SetupRouter()
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/ping", nil)
 	r.ServeHTTP(w, req)
@@ -43,7 +44,7 @@ func TestProxyValidate(t *testing.T) {
 	os.Setenv("PYTHON_SERVICE_URL", fake.URL)
 	defer os.Unsetenv("PYTHON_SERVICE_URL")
 
-	r := SetupRouter()
+	r := handlers.SetupRouter()
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/data/validate", bytes.NewBufferString(`{"data": [], "json_schema": {}}`))
 	req.Header.Set("Content-Type", "application/json")
