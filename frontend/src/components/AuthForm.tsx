@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Info } from 'lucide-react'
 
 export default function AuthForm({ type, onSubmit, switchForm }: { type: 'login' | 'register'; onSubmit: (data: any) => void; switchForm: () => void }) {
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '', remember: false })
@@ -47,22 +47,43 @@ export default function AuthForm({ type, onSubmit, switchForm }: { type: 'login'
         required
       />
 
-      <div className="relative">
-        <input
-          type={showPw ? 'text' : 'password'}
-          id="password"
-          name="password"
-          placeholder="Password"
-          autoComplete={type === 'login' ? 'current-password' : 'new-password'}
-          aria-label="Password"
-          className="border rounded-xl px-4 py-2 w-full"
-          value={form.password}
-          onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-          required
-        />
-        <button type="button" className="absolute right-3 top-2.5 text-gray-500" onClick={() => setShowPw(s => !s)} aria-label="Toggle password">
-          {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
-        </button>
+      <div>
+        {type === 'register' && (
+          <div className="flex items-center gap-2 mb-1 text-xs text-gray-600">
+            <span>Password</span>
+            <div className="group relative inline-block">
+              <Info size={14} className="text-gray-400 cursor-help" />
+              <div className="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity absolute z-10 left-0 top-6 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg w-64">
+                <div className="font-semibold mb-2">Password Requirements:</div>
+                <ul className="space-y-1 list-disc list-inside">
+                  <li>At least 8 characters long</li>
+                  <li>1 uppercase letter (A-Z)</li>
+                  <li>1 lowercase letter (a-z)</li>
+                  <li>1 number (0-9)</li>
+                  <li>1 special character (!@#$%^&*)</li>
+                </ul>
+                <div className="absolute -top-1 left-2 w-2 h-2 bg-gray-900 transform rotate-45"></div>
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="relative">
+          <input
+            type={showPw ? 'text' : 'password'}
+            id="password"
+            name="password"
+            placeholder="Password"
+            autoComplete={type === 'login' ? 'current-password' : 'new-password'}
+            aria-label="Password"
+            className="border rounded-xl px-4 py-2 w-full"
+            value={form.password}
+            onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+            required
+          />
+          <button type="button" className="absolute right-3 top-2.5 text-gray-500" onClick={() => setShowPw(s => !s)} aria-label="Toggle password">
+            {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        </div>
       </div>
 
       {type === 'register' && (
