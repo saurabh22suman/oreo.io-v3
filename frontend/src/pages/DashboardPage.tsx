@@ -1,165 +1,198 @@
-import PageHeader from '../components/PageHeader'
-import Card from '../components/Card'
-import { useEffect, useMemo, useState } from 'react'
-import { listProjects } from '../api'
-import { useUser } from '../context/UserContext'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { listProjects, getInboxUnreadCount } from '../api'
+import Card from '../components/Card'
+import ProjectModal from '../components/ProjectModal'
+import { Plus, Activity, ArrowRight, Clock, CheckCircle2, AlertCircle } from 'lucide-react'
 
 export default function DashboardPage() {
-  const navigate = useNavigate()
   const [projects, setProjects] = useState<any[]>([])
+  const [recentActivities, setRecentActivities] = useState<any[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [sortBy, setSortBy] = useState<'name'|'datasets'|'updated_at'>('name')
-  const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc')
-
-  const { user } = useUser()
-  const [username, setUsername] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
+  const navigate = useNavigate()
 
   useEffect(() => {
     let mounted = true
-    listProjects()
-      .then(p => { if (mounted) setProjects(p || []) })
-      .catch(() => { if (mounted) setProjects([]) })
-      .finally(() => { if (mounted) setLoading(false) })
-    if (mounted && user?.email) setUsername(user.email.split('@')[0])
-    return () => { mounted = false }
-  }, [user])
+    const load = async () => {
+      try {
+        const [projs, unread] = await Promise.all([
+          listProjects(),
+          getInboxUnreadCount()
+        ])
+        if (mounted) {
+          setProjects(projs || [])
+          setUnreadCount(unread)
 
-  // Aggregate counts for cards and use a normalized field for table (supports API keys datasetCount or datasets_count)
-  const totalDatasets = useMemo(() => {
-    try {
-      return projects.reduce((sum, p:any) => sum + (p.datasets_count ?? p.datasetCount ?? 0), 0)
-    } catch { return 0 }
-  }, [projects])
+          // Mock activities for now, but using real project names if available
+          const activities = [
+            { id: 1, type: 'update', message: 'Dataset "Q3 Sales" updated', project: projs?.[0]?.name || 'Marketing Analytics', time: '2h ago' },
+            { id: 2, type: 'create', message: 'New project created', project: projs?.[1]?.name || 'Customer Churn', time: '5h ago' },
+            { id: 3, type: 'alert', message: 'Data validation warning', project: projs?.[0]?.name || 'Marketing Analytics', time: '1d ago' },
+          ]
+          setRecentActivities(activities)
+        }
+      } catch (err) {
+        console.error(err)
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+    load()
+    return () => { mounted = false }
+  }, [])
 
   return (
-    <>
-          <PageHeader title={<>Welcome, <span className="text-indigo-700">{username || 'User'}</span> 👋</>} subtitle={"Here's what's happening with your workspace today."} actions={<> 
-            <button onClick={() => navigate('/projects')} className="btn-primary bold px-4 py-2">Create New Project</button>
-          </>} />
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Header Section with Mascot */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 text-white shadow-2xl shadow-slate-900/20">
+        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-bold border border-white/10 text-blue-200">
+                v0.3.1
+              </span>
+              <span className="text-slate-300 text-sm font-medium">Welcome back!</span>
+            </div>
+            <h1 className="text-4xl font-bold mb-3 tracking-tight">Dashboard</h1>
+            <p className="text-slate-400 max-w-md text-sm leading-relaxed">
+              Here's what's happening in your data universe today. Manage your projects, check alerts, and collaborate with your team.
+            </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            <Card><div className="text-3xl font-bold text-indigo-700">{projects.length}</div><div className="text-sm text-gray-500">Projects</div></Card>
-            <Card><div className="text-3xl font-bold text-indigo-700">{totalDatasets}</div><div className="text-sm text-gray-500">Datasets</div></Card>
-            <Card><div className="text-3xl font-bold text-indigo-700">5</div><div className="text-sm text-gray-500">Pending Approvals</div></Card>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button
+                onClick={() => setOpen(true)}
+                className="group flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:scale-105 transition-all duration-300"
+              >
+                <Plus className="w-5 h-5" />
+                Create Project
+              </button>
+              <button
+                onClick={() => navigate('/projects')}
+                className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl backdrop-blur-md border border-white/10 transition-all duration-300"
+              >
+                View All Projects
+              </button>
+            </div>
           </div>
 
-          <div className="mt-8">
-            {loading ? (
-              <div className="text-gray-500">Loading projects...</div>
-            ) : projects.length === 0 ? (
-              <Card className="text-center">
-                <h3 className="text-lg font-semibold">You have no projects yet</h3>
-                <p className="text-sm text-gray-500 mt-2">Create your first project to get started.</p>
-                <div className="mt-4">
-                  <button onClick={() => navigate('/projects')} className="bg-indigo-600 text-white px-4 py-2 rounded-xl">Create New Project</button>
+          {/* Mascot Image */}
+          <div className="hidden md:block relative w-64 h-64 -mr-8 -mb-12">
+            <img
+              src="/images/oreo_rabbit.png"
+              alt="Oreo Mascot"
+              className="w-full h-full object-contain drop-shadow-2xl transform hover:scale-105 transition-transform duration-500 opacity-90"
+            />
+          </div>
+        </div>
+
+        {/* Decorative background elements */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left Column: Stats & Quick Actions */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div
+              onClick={() => navigate('/inbox')}
+              className="group cursor-pointer p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-300"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+                  <AlertCircle className="w-6 h-6" />
                 </div>
-              </Card>
-            ) : (
-              <>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold">Your Projects</h3>
-                  <div className="text-sm text-gray-500">{projects.length} projects</div>
+                <span className="flex items-center gap-1 text-xs font-medium text-slate-400 group-hover:text-blue-500 transition-colors">
+                  View Inbox <ArrowRight className="w-3 h-3" />
+                </span>
+              </div>
+              <h3 className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{unreadCount}</h3>
+              <p className="text-slate-500 dark:text-slate-400 font-medium">Pending Approvals</p>
+            </div>
+
+            <div
+              onClick={() => navigate('/projects')}
+              className="group cursor-pointer p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none hover:shadow-2xl hover:shadow-purple-500/10 transition-all duration-300"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
+                  <Activity className="w-6 h-6" />
                 </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left table-auto">
-                        <thead>
-                          <tr className="text-sm text-gray-600">
-                            <th className="py-3 px-4">
-                              <button
-                                className="inline-flex items-center gap-2"
-                                onClick={() => {
-                                  if (sortBy === 'name') setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-                                  else { setSortBy('name'); setSortDir('asc') }
-                                }}
-                                aria-label={`Sort by name ${sortBy === 'name' ? sortDir : ''}`}
-                              >
-                                Name
-                                <span className="text-xs text-gray-400">{sortBy === 'name' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}</span>
-                              </button>
-                            </th>
-                            <th className="py-3 px-4">
-                              <button
-                                className="inline-flex items-center gap-2"
-                                onClick={() => {
-                                  if (sortBy === 'datasets') setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-                                  else { setSortBy('datasets'); setSortDir('desc') }
-                                }}
-                                aria-label={`Sort by dataset count ${sortBy === 'datasets' ? sortDir : ''}`}
-                              >
-                                Datasets
-                                <span className="text-xs text-gray-400">{sortBy === 'datasets' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}</span>
-                              </button>
-                            </th>
-                            <th className="py-3 px-4">
-                              <button
-                                className="inline-flex items-center gap-2"
-                                onClick={() => {
-                                  if (sortBy === 'updated_at') setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-                                  else { setSortBy('updated_at'); setSortDir('desc') }
-                                }}
-                                aria-label={`Sort by last modified ${sortBy === 'updated_at' ? sortDir : ''}`}
-                              >
-                                Last Modified
-                                <span className="text-xs text-gray-400">{sortBy === 'updated_at' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}</span>
-                              </button>
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {/** sort projects client-side for the dashboard table */}
-                          {(() => {
-              const sorted = [...projects]
-                            sorted.sort((a: any, b: any) => {
-                              if (sortBy === 'name') {
-                                const an = (a.name || '').toLowerCase()
-                                const bn = (b.name || '').toLowerCase()
-                                if (an < bn) return sortDir === 'asc' ? -1 : 1
-                                if (an > bn) return sortDir === 'asc' ? 1 : -1
-                                return 0
-                              }
-                              if (sortBy === 'datasets') {
-                const av = (a.datasets_count ?? a.datasetCount ?? 0) as number
-                const bv = (b.datasets_count ?? b.datasetCount ?? 0) as number
-                                return sortDir === 'asc' ? av - bv : bv - av
-                              }
-                              // updated_at
-                              const at = a.updated_at ? new Date(a.updated_at).getTime() : 0
-                              const bt = b.updated_at ? new Date(b.updated_at).getTime() : 0
-                              return sortDir === 'asc' ? at - bt : bt - at
-                            })
-                            return sorted.map((p: any) => (
-                              <tr
-                                key={p.id}
-                                className="border-t cursor-pointer hover:bg-gray-50"
-                                onClick={() => navigate(`/projects/${p.id}`)}
-                                tabIndex={0}
-                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/projects/${p.id}`) } }}
-                              >
-                                <td className="py-3 px-4">
-                                  <div className="max-w-[420px] truncate font-semibold text-gray-800" title={p.name}>{p.name}</div>
-                                </td>
-                                <td className="py-3 px-4 text-sm text-gray-500">{p.datasets_count ?? p.datasetCount ?? 0}</td>
-                                <td className="py-3 px-4 text-sm text-gray-500">{p.updated_at ? new Date(p.updated_at).toLocaleDateString() : ''}</td>
-                              </tr>
-                            ))
-                          })()}
-                        </tbody>
-                      </table>
-                    </div>
-              </>
-            )}
+                <span className="flex items-center gap-1 text-xs font-medium text-slate-400 group-hover:text-purple-500 transition-colors">
+                  View Projects <ArrowRight className="w-3 h-3" />
+                </span>
+              </div>
+              <h3 className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{projects.length}</h3>
+              <p className="text-slate-500 dark:text-slate-400 font-medium">Active Projects</p>
+            </div>
           </div>
 
+          {/* Recent Activities */}
+          <Card className="border-0 shadow-xl shadow-slate-200/50 dark:shadow-none overflow-hidden">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-white dark:bg-slate-800/50">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Clock className="w-5 h-5 text-slate-500" />
+                Recent Activity
+              </h2>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+              {recentActivities.map((activity) => (
+                <div key={activity.id} className="p-4 flex items-start gap-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+                  <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${activity.type === 'alert' ? 'bg-red-500 shadow-lg shadow-red-500/50' :
+                      activity.type === 'create' ? 'bg-blue-500 shadow-lg shadow-blue-500/50' :
+                        'bg-emerald-500 shadow-lg shadow-emerald-500/50'
+                    }`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate group-hover:text-primary transition-colors">
+                      {activity.message}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {activity.project}
+                    </p>
+                  </div>
+                  <span className="text-xs text-slate-400 whitespace-nowrap">{activity.time}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
 
-          <div className="mt-8">
-            <Card className="text-center">
-              <h2 className="text-xl font-bold mb-4">Charts</h2>
-              <div className="h-48 flex items-center justify-center text-gray-400">[Chart Placeholder]</div>
-            </Card>
+        {/* Right Column: Quick Tips / Mascot Info */}
+        <div className="lg:col-span-1 space-y-6">
+          <div className="rounded-2xl bg-gradient-to-b from-slate-900 to-slate-800 p-6 text-white shadow-xl relative overflow-hidden">
+            <div className="relative z-10">
+              <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                Pro Tips
+              </h3>
+              <ul className="space-y-3 text-sm text-slate-300">
+                <li className="flex gap-2">
+                  <span className="text-emerald-400">•</span>
+                  Use the "Danger Zone" in project settings with caution.
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-emerald-400">•</span>
+                  Invite team members to collaborate on datasets.
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-emerald-400">•</span>
+                  Check your inbox daily for approval requests.
+                </li>
+              </ul>
+            </div>
+            {/* Subtle background pattern */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
           </div>
-    </>
+        </div>
+      </div>
+
+      <ProjectModal open={open} onClose={() => setOpen(false)} onCreate={() => {
+        // Reload projects
+        listProjects().then(setProjects)
+      }} />
+    </div>
   )
 }
- 

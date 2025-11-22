@@ -2,297 +2,318 @@
 @tailwind components;
 @tailwind utilities;
 
-/* App base styles */
-.bg-primary { background-color: rgb(99 102 241); }
+/* Azure / Fluent Design System Overrides */
 
-html, body, #root { height: 100%; }
-
-/* Design language overrides: sharp, materialized, flat */
-:root{
+:root {
   --bg-surface: #ffffff;
-  --bg-page: #f7f7fb;
-  --divider: #e6e6ef;
-  --primary: #3B82F6; /* brand blue */
-  --muted: #6b7280;
-  --text: #111827;     /* default text color */
-  --text-muted: #6b7280;
-}
-/* Dark theme variables (enabled via .dark on html) */
-.dark{
-  /* Lighter dark theme (less black, more slate) */
-  --bg-page: #111827;    /* slate-900 */
-  --bg-surface: #1f2937; /* slate-800 */
-  --divider: #334155;    /* slate-700 */
-  --primary: #a78bfa;    /* lighter violet */
-  --muted: #cbd5e1;      /* slate-300 */
-  --text: #e5e7eb;       /* slate-200 */
-  --text-muted: #cbd5e1; /* slate-300 */
+  --bg-page: #F3F2F1;
+  /* Azure light gray background */
+  --divider: #EDEBE9;
+  --primary: #0078D4;
+  /* Azure Blue */
+  --primary-hover: #106EBE;
+  --primary-pressed: #005A9E;
+  --text: #201F1E;
+  /* Neutral Primary */
+  --text-secondary: #605E5C;
+  --text-muted: #8A8886;
+  --focus-border: #605E5C;
 }
 
-/* Apply page colors and improve contrast automatically */
-body { background-color: var(--bg-page); color: var(--text); font-weight: 500 }
+/* Dark theme variables */
+.dark {
+  --bg-page: #11100F;
+  --bg-surface: #201F1E;
+  --divider: #323130;
+  --primary: #2899F5;
+  --primary-hover: #3AA0F3;
+  --text: #ffffff;
+  --text-secondary: #C8C6C4;
+  --text-muted: #A19F9D;
+  --focus-border: #A19F9D;
+}
 
-/* Remove soft shadows used across app and prefer flat borders */
-.shadow, .shadow-sm, .shadow-md, .shadow-lg { box-shadow: none !important }
+html,
+body,
+#root {
+  height: 100%;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
 
-/* Replace rounded corners with straight edges for material-like UI */
-.rounded, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-full, .rounded-md { border-radius: 0 !important }
+body {
+  background-color: var(--bg-page);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 20px;
+}
 
-/* Card style: flat, bold header, clear divider */
-.card {
+/* Reset rounded corners to Azure style (2px-4px) */
+.rounded,
+.rounded-md,
+.rounded-lg,
+.rounded-xl,
+.rounded-2xl {
+  border-radius: 2px !important;
+}
+
+.rounded-full {
+  border-radius: 9999px !important;
+}
+
+/* Shadows */
+.shadow-sm,
+.shadow {
+  box-shadow: 0 1.6px 3.6px 0 rgba(0, 0, 0, 0.132), 0 0.3px 0.9px 0 rgba(0, 0, 0, 0.108) !important;
+}
+
+.shadow-md,
+.shadow-lg {
+  box-shadow: 0 3.2px 7.2px 0 rgba(0, 0, 0, 0.132), 0 0.6px 1.8px 0 rgba(0, 0, 0, 0.108) !important;
+}
+
+.shadow-none {
+  box-shadow: none !important;
+}
+
+/* Cards */
+.card,
+.project-card {
   background: var(--bg-surface);
   border: 1px solid var(--divider);
-  padding: 1rem;
+  border-radius: 2px;
+  box-shadow: 0 1.6px 3.6px 0 rgba(0, 0, 0, 0.132), 0 0.3px 0.9px 0 rgba(0, 0, 0, 0.108);
+  transition: box-shadow 0.2s ease;
 }
 
-.card-title { font-weight: 700; color: var(--text) }
-
-/* Sidebar styling: stronger contrast and flat divider */
-.sidebar { background: var(--bg-surface); border-right: 2px solid var(--divider); color: var(--text) }
-
-/* Navbar: flat and bold */
-.topbar { background: var(--bg-surface); border-bottom: 2px solid var(--divider); color: var(--text) }
-
-/* Buttons: material flat style */
-.btn-primary { background: #4f46e5; color: white; border: none }
-.btn-primary.bold { font-weight: 700; padding: 0.5rem 0.75rem; }
-.btn-ghost { background: transparent; border: 1px solid transparent }
-
-/* Theme palette additions */
-:root{
-  --mauve: #E0B0FF;
-  --goodtax: #C9A0FF;
-  --lilac: #B65FCF;
-  --brand-blue: #3B82F6;
+.card:hover,
+.project-card:hover {
+  box-shadow: 0 3.2px 7.2px 0 rgba(0, 0, 0, 0.132), 0 0.6px 1.8px 0 rgba(0, 0, 0, 0.108);
+  transform: none;
+  /* Disable lift effect for cleaner look */
 }
 
-/* Apply primary/brand globally for links only */
-a, .link { color: var(--brand-blue) }
-
-/* Sidebar collapse animation */
-.sidebar{ transition: width 260ms cubic-bezier(.22,.9,.3,1), transform 180ms ease }
-
-/* Responsive layout helper: use CSS grid for sidebar + main content */
-:root { --sidebar-width: 16rem /* 256px default */; --sidebar-collapsed: 5rem /* 80px */ }
-.layout-with-sidebar {
-  display: grid;
-  grid-template-columns: var(--sidebar-width) 1fr;
-  gap: 0;
-  transition: grid-template-columns 260ms cubic-bezier(.22,.9,.3,1);
-}
-.layout-with-sidebar.collapsed {
-  grid-template-columns: var(--sidebar-collapsed) 1fr;
-}
-.layout-with-sidebar .sidebar { height: calc(100vh - 64px); /* leave room for topbar */ overflow: auto }
-.layout-with-sidebar .main { min-height: calc(100vh - 64px); background: var(--bg-page); color: var(--text) }
-
-/* Ensure main content reflects dark theme even if Tailwind light classes are present */
-.dark .bg-white { background-color: var(--bg-surface) !important }
-.dark .text-gray-900 { color: #f1f5f9 !important }
-.dark .text-gray-800 { color: #e5e7eb !important }
-.dark .text-gray-700 { color: #d1d5db !important }
-.dark .text-gray-600, .dark .text-gray-500 { color: #9ca3af !important }
-/* Brand indigo text on dark should map to primary variable */
-.dark .text-indigo-700, .dark .text-indigo-600 { color: var(--primary) !important }
-
-/* More dark-mode mappings for common Tailwind utility classes used across pages */
-/* Backgrounds */
-.dark .bg-gray-50 { background-color: #111827 !important }      /* use page bg for zebra */
-.dark .bg-gray-100 { background-color: #1f2937 !important }     /* surface-ish */
-.dark .bg-gray-200, .dark .bg-gray-300 { background-color: #1f2937 !important }
-/* Translucent overlays */
-.dark .bg-white\/60 { background-color: rgba(255,255,255,0.08) !important }
-
-/* Borders */
-.dark .border-gray-100, .dark .border-gray-200, .dark .border-gray-300 { border-color: var(--divider) !important }
-
-/* Hover variants frequently used in buttons/rows */
-.dark .hover\:bg-gray-50:hover { background-color: #334155 !important } /* slate-700 */
-.dark .row-clickable:hover { background: rgba(255,255,255,0.04) !important }
-
-/* Slate text class mappings */
-.dark .text-slate-900, .dark .text-slate-800 { color: #e5e7eb !important }
-.dark .text-slate-700, .dark .text-slate-600 { color: #cbd5e1 !important }
-.dark .text-slate-500, .dark .text-slate-400 { color: #94a3b8 !important }
-.dark .text-gray-400 { color: #9ca3af !important }
-
-/* Status badge tints (used in change details lists) */
-.dark .bg-green-50 { background-color: rgba(34,197,94,0.15) !important }
-.dark .border-green-200 { border-color: rgba(34,197,94,0.35) !important }
-.dark .text-green-800 { color: #86efac !important }
-.dark .bg-red-50 { background-color: rgba(239,68,68,0.15) !important }
-.dark .border-red-200 { border-color: rgba(239,68,68,0.35) !important }
-.dark .text-red-800 { color: #fca5a5 !important }
-
-/* Projects table header gradient in dark */
-.dark .projects-table thead tr { background: linear-gradient(90deg, rgba(30,41,59,1), rgba(15,23,42,1)) !important }
-
-/* Global straight-edge form controls */
-input, textarea, select, button {
-  border-radius: 0 !important;
+/* Typography */
+h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 12px;
 }
 
-/* Keep small pill badges rounded intentionally */
-.badge-pill { border-radius: 9999px }
-.text-xxs { font-size: 0.65rem; line-height: 0.9rem }
-
-/* subtle hover shadow for landing visuals */
-.hover-shadow { transition: box-shadow 160ms ease, transform 160ms ease }
-.hover-shadow:hover { box-shadow: 0 6px 18px rgba(11,11,11,0.08); transform: translateY(-4px) }
-
-/* Stronger typography and spacing to match enterprise dashboards */
-h1, h2, h3 { font-weight: 700 }
-.muted-small { color: var(--muted); font-size: 0.875rem }
-
-
-/* Accessible visually-hidden text helper */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
 }
 
-/* Mascot bounce animation */
+h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+p,
+.text-base {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.text-sm {
+  font-size: 12px;
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+/* Buttons */
+button {
+  font-family: 'Segoe UI', sans-serif;
+  font-weight: 600;
+  transition: all 0.1s ease;
+}
+
+.btn-primary,
+.create-cta {
+  background-color: var(--primary) !important;
+  color: white !important;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  padding: 6px 20px;
+  font-size: 14px;
+  box-shadow: none !important;
+  /* Flat buttons */
+}
+
+.btn-primary:hover,
+.create-cta:hover {
+  background-color: var(--primary-hover) !important;
+  transform: none !important;
+}
+
+.btn-primary:active {
+  background-color: var(--primary-pressed) !important;
+}
+
+/* Inputs */
+input,
+select,
+textarea {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--text-muted);
+  /* Rest state */
+  border-radius: 2px !important;
+  padding: 6px 12px;
+  font-size: 14px;
+  color: var(--text);
+  transition: border-color 0.1s;
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: var(--text-secondary);
+  /* Hover state */
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary);
+  outline: 1px solid var(--primary);
+  /* Focus state */
+  border-bottom-width: 2px;
+  /* Azure underline effect hint */
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--divider);
+}
+
+td {
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--text);
+  border-bottom: 1px solid var(--divider);
+}
+
+tr:hover td {
+  background-color: #F3F2F1;
+  /* Hover row color */
+}
+
+.dark tr:hover td {
+  background-color: #252423;
+}
+
+/* Sidebar */
+.sidebar {
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--divider);
+}
+
+/* Topbar */
+.topbar {
+  background-color: var(--primary);
+  color: white;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+}
+
+/* Links */
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+  color: var(--primary-hover);
+}
+
+/* Utilities */
+.bg-white {
+  background-color: var(--bg-surface) !important;
+}
+
+.text-slate-900 {
+  color: var(--text) !important;
+}
+
+.text-slate-600 {
+  color: var(--text-secondary) !important;
+}
+
+.border-gray-200 {
+  border-color: var(--divider) !important;
+}
+
+/* Remove mascot and gradients */
 .mascot-bounce {
-  animation: mascot-bounce 680ms cubic-bezier(.22,.9,.3,1);
+  display: none;
 }
 
-@keyframes mascot-bounce {
-  0% { transform: translateY(18px) scale(.98); opacity: 0 }
-  30% { transform: translateY(-6px) scale(1.02); opacity: 1 }
-  60% { transform: translateY(2px) scale(0.995) }
-  100% { transform: translateY(0) scale(1) }
+.hero-gradient {
+  display: none;
 }
 
-/* Project card glassmorphism / rounded design */
-.project-card {
-  /* more subtle glass effect */
-  background: linear-gradient(180deg, rgba(255,255,255,0.90), rgba(250,250,255,0.85));
-  border: 1px solid rgba(255,255,255,0.5);
-  transition: transform 240ms cubic-bezier(.22,.9,.3,1), box-shadow 240ms ease, opacity 180ms ease;
-}
-.project-card:hover { transform: translateY(-4px); box-shadow: 0 8px 18px rgba(13,16,60,0.06) }
-
-.project-card .header {
-  /* softened blue gradient */
-  background: linear-gradient(90deg, rgba(75,85,240,0.88), rgba(59,130,246,0.86));
+/* Layout - Fixed sidebar, flexible main */
+.layout-with-sidebar {
+  display: flex;
+  height: 100vh;
 }
 
-.avatar-placeholder { font-weight: 700; background: rgba(255,255,255,0.18) }
-
-/* CTA button with subtle glass gradient and hover lift */
-.cta-btn {
-  background: linear-gradient(90deg, rgba(59,130,246,0.9), rgba(99,102,241,0.8));
-  color: white; border: none; box-shadow: 0 6px 14px rgba(59,130,246,0.08);
-  transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
-}
-.cta-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(59,130,246,0.08) }
-
-/* Create CTA more prominent */
-.create-cta { background: linear-gradient(90deg, rgba(91,33,182,0.92), rgba(59,130,246,0.88)); color: white; font-weight: 700 }
-.create-cta:hover { transform: translateY(-3px) }
-
-/* Entrance animation for project cards */
-@keyframes cardFadeIn {
-  from { opacity: 0; transform: translateY(6px) scale(.998) }
-  to { opacity: 1; transform: translateY(0) scale(1) }
+.layout-with-sidebar .sidebar {
+  flex-shrink: 0;
+  transition: width 0.3s ease-in-out;
 }
 
-/* Responsive tweaks */
-@media (max-width: 640px) {
-  .layout-with-sidebar { grid-template-columns: 1fr }
-  .project-card { padding: 14px }
+.layout-with-sidebar .main {
+  flex: 1;
+  background-color: var(--bg-page);
+  padding: 24px;
+  overflow-y: auto;
+  transition: margin-left 0.3s ease-in-out;
 }
 
-/* Projects table style */
-.projects-table table { border-collapse: collapse }
-.projects-table thead tr { background: linear-gradient(90deg, rgba(245,247,250,1), rgba(250,251,255,1)); }
-.projects-table tbody tr:hover { background: rgba(59,130,246,0.03) }
-.sort-btn { background: transparent; border: none; cursor: pointer; color: var(--brand-blue); font-weight: 600 }
+/* Collapsed state adjustments */
+.layout-with-sidebar.collapsed .main {
+  /* Main expands automatically due to flex: 1 */
+}
 
-/* Compact table rows */
-.projects-table td.p-2, .projects-table th.p-3 { padding-top: 0.5rem; padding-bottom: 0.5rem }
-.projects-table td.compact { padding-top: 0.4rem; padding-bottom: 0.4rem }
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
 
-/* Make entire row clickable */
-.row-clickable { cursor: pointer }
-.row-clickable:hover { background: rgba(59,130,246,0.04) }
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 
-/* Truncate long project names in table and provide keyboard focus outline */
-.projects-table .name-cell.truncate {
-  max-width: 320px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+::-webkit-scrollbar-thumb {
+  background: #C8C6C4;
+  border-radius: 4px;
 }
-.row-clickable:focus { outline: 2px solid rgba(59,130,246,0.24); outline-offset: 2px }
 
-/* Column resizer handle */
-.resizer { width: 10px; height: 28px; display: inline-block; cursor: col-resize; margin-left: 8px; background: transparent }
-.projects-table th { position: relative }
-.resizer { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
-
-/* Column percentage widths for Projects table */
-.projects-table .name-col { width: 50%; max-width: 50%; }
-.projects-table th[style] { /* inline widths allowed - keep for explicit per-column overrides */ outline: none; }
-.projects-table th:nth-child(1) { width: 50% }
-.projects-table th:nth-child(2) { width: 15% }
-.projects-table th:nth-child(3) { width: 35% }
-
-/* Layout with sidebar adjustments when included on pages */
-.layout-with-sidebar { display: grid; grid-template-columns: 16rem 1fr; gap: 0 }
-.layout-with-sidebar > main { padding-left: 1.5rem }
-
-/* Landing animations and helpers (from ui_sample) */
-.hero-gradient{
-  background:
-    radial-gradient(1200px 600px at 10% 10%, rgba(99,102,241,.20), transparent 55%),
-    radial-gradient(800px 500px at 90% 20%, rgba(56,189,248,.15), transparent 55%),
-    radial-gradient(900px 600px at 40% 90%, rgba(168,85,247,.10), transparent 60%);
-}
-@keyframes floatY {
-  0% { transform: translateY(0) }
-  50% { transform: translateY(-10px) }
-  100% { transform: translateY(0) }
-}
-@keyframes blob {
-  0% { border-radius: 38% 62% 40% 60% / 38% 40% 60% 62% }
-  50% { border-radius: 62% 38% 60% 40% / 58% 42% 58% 42% }
-  100% { border-radius: 38% 62% 40% 60% / 38% 40% 60% 62% }
-}
-@keyframes orbit {
-  0% { transform: rotate(0deg) translateX(110px) rotate(0deg) }
-  50% { transform: rotate(180deg) translateX(110px) rotate(-180deg) }
-  100% { transform: rotate(360deg) translateX(110px) rotate(-360deg) }
-}
-@keyframes shine {
-  0% { transform: translateX(-150%) }
-  100% { transform: translateX(150%) }
-}
-@keyframes spinSlow {
-  from { transform: translate(-50%, -50%) rotate(0deg) }
-  to { transform: translate(-50%, -50%) rotate(360deg) }
-}
-@keyframes gridMove {
-  0% { background-position: 0 0, 0 0 }
-  100% { background-position: 120px 0, 0 120px }
-}
-@keyframes drift {
-  0% { transform: translateY(0) scale(1) }
-  50% { transform: translateY(-6px) scale(1.02) }
-  100% { transform: translateY(0) scale(1) }
-}
-.reveal { opacity: 0; transform: translateY(12px); transition: all .7s cubic-bezier(.21,1,.21,1) }
-.reveal.show { opacity: 1; transform: translateY(0) }
-.btn-shine{ position: relative; overflow: hidden }
-.btn-shine::after{
-  content: ""; position: absolute; inset: 0; border-radius: inherit;
-  background: linear-gradient(115deg, transparent 0%, rgba(255,255,255,.2) 50%, transparent 100%);
-  transform: translateX(-150%); animation: shine 2.8s infinite;
+::-webkit-scrollbar-thumb:hover {
+  background: #8A8886;
 }
