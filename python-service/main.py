@@ -313,12 +313,40 @@ def delta_history(table: str):
     return {"history": _delta_adapter.history(table)}
 
 
-@app.post("/delta/restore/{table}/{version}")
-def delta_restore(table: str, version: int):
+class RestoreRequest(BaseModel):
+    """Request model for Delta table restore operation."""
+    model_config = ConfigDict(extra="ignore")
+    project_id: int
+    dataset_id: int
+    version: int
+
+
+@app.post("/delta/restore")
+def delta_restore_new(payload: RestoreRequest):
+    """Restore a Delta table to a specific version using delta-rs.
+    
+    This endpoint uses the native DeltaTable.restore() method which creates
+    a new commit restoring the state to the specified version.
+    
+    Safety checks:
+    - Validates version exists
+    - Returns error if files were deleted by VACUUM
+    """
     if _delta_adapter is None:
         raise HTTPException(status_code=500, detail="Delta adapter not available")
-    _delta_adapter.restore(table, version)
-    return {"ok": True}
+    
+    try:
+        result = _delta_adapter.restore(payload.project_id, payload.dataset_id, payload.version)
+        return {
+            "status": "ok",
+            "restored_to_version": result["restored_to"],
+            "method": result.get("method", "delta-rs")
+        }
+    except ValueError as e:
+        # Version doesn't exist or files were vacuumed
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
 
 
 class DeltaMergePayload(BaseModel):
