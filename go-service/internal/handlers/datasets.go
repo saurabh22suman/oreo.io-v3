@@ -262,13 +262,45 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 	// Count rows
 	var rows int64
 	tbl := datasetPhysicalTable(ds)
-	// For delta backend we cannot count via SQL; leave zero unless we later enrich.
-	if !strings.EqualFold(ds.StorageBackend, "delta") && strings.TrimSpace(tbl) != "" {
+	// For delta backend, try to get stats from Python service
+	if strings.EqualFold(ds.StorageBackend, "delta") {
+		// Attempt to get Delta table stats from Python service
+		pyBase := getPythonServiceURL()
+		reqBody := map[string]any{
+			"table": fmt.Sprintf("%d", ds.ID),
+		}
+		bodyBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequest(http.MethodPost, pyBase+"/delta/stats", bytes.NewBuffer(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil && resp != nil && resp.StatusCode == 200 {
+			defer resp.Body.Close()
+			var statsResp struct {
+				NumRows int64 `json:"num_rows"`
+				NumCols int   `json:"num_cols"`
+			}
+			if json.NewDecoder(resp.Body).Decode(&statsResp) == nil {
+				rows = statsResp.NumRows
+				// We'll set cols from schema below
+			}
+		}
+	} else if strings.TrimSpace(tbl) != "" {
 		_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", tbl)).Row().Scan(&rows)
 	}
-	// Sample one row to infer columns count
+	
+	// Infer columns count from schema
 	cols := 0
-	if rows > 0 && !strings.EqualFold(ds.StorageBackend, "delta") {
+	if strings.TrimSpace(ds.Schema) != "" {
+		var schemaObj map[string]any
+		if err := json.Unmarshal([]byte(ds.Schema), &schemaObj); err == nil {
+			if props, ok := schemaObj["properties"].(map[string]any); ok {
+				cols = len(props)
+			}
+		}
+	}
+	
+	// Fallback: for non-delta, sample one row to infer columns count if schema failed
+	if cols == 0 && rows > 0 && !strings.EqualFold(ds.StorageBackend, "delta") {
 		if r1, err := gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT 1", tbl)).Rows(); err == nil {
 			defer r1.Close()
 			if r1.Next() {
@@ -288,6 +320,7 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 			}
 		}
 	}
+	
 	// Resolve owner name
 	ownerName := ""
 	var proj models.Project
@@ -298,29 +331,24 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 		}
 	}
 	now := time.Now()
-	// Compose table location string from dataset target fields when available
+	
+	// Compose table location string - always show schema.table format
 	tableLoc := ""
 	s := strings.TrimSpace(ds.TargetSchema)
 	t := strings.TrimSpace(ds.TargetTable)
 	d := strings.TrimSpace(ds.TargetDatabase)
-	if strings.EqualFold(ds.StorageBackend, "delta") {
-		// Map to Delta path root/<datasetID>
-		cfg := config.Get()
-		root := strings.TrimRight(cfg.DeltaDataRoot, "/\\")
-		if root == "" {
-			root = "/data/delta"
-		}
-		tableLoc = fmt.Sprintf("%s/%d", root, ds.ID)
-	} else {
-		switch {
-		case d != "" && s != "" && t != "":
-			tableLoc = fmt.Sprintf("%s.%s.%s", d, s, t)
-		case s != "" && t != "":
-			tableLoc = fmt.Sprintf("%s.%s", s, t)
-		default:
-			tableLoc = datasetPhysicalTable(ds)
-		}
+	
+	// Always use schema.table format for user-facing display
+	switch {
+	case d != "" && s != "" && t != "":
+		tableLoc = fmt.Sprintf("%s.%s.%s", d, s, t)
+	case s != "" && t != "":
+		tableLoc = fmt.Sprintf("%s.%s", s, t)
+	default:
+		// Fallback to physical table if target fields not set
+		tableLoc = datasetPhysicalTable(ds)
 	}
+	
 	var meta models.DatasetMeta
 	if err := gdb.Where("dataset_id = ?", ds.ID).First(&meta).Error; err != nil {
 		meta = models.DatasetMeta{ProjectID: ds.ProjectID, DatasetID: ds.ID, OwnerName: ownerName, RowCount: rows, ColumnCount: cols, LastUpdateAt: now, TableLocation: tableLoc}

@@ -8,6 +8,12 @@ try:
 except Exception:  # optional dependency guard
     pd = None
 
+try:
+    from delta_adapter import DeltaStorageAdapter
+    _delta_adapter = DeltaStorageAdapter()
+except Exception:
+    _delta_adapter = None
+
 app = FastAPI(title="Oreo.io-v2 Python Service")
 
 
@@ -278,8 +284,8 @@ class DeltaQueryPayload(BaseModel):
     offset: int = 0
 
 
-@app.post("/delta/query")
-def delta_query(payload: DeltaQueryPayload):
+@app.post("/delta/query/legacy")
+def delta_query_legacy(payload: DeltaQueryPayload):
     if _delta_adapter is None:
         raise HTTPException(status_code=500, detail="Delta adapter not available")
     # accept either table or full path
@@ -719,3 +725,185 @@ def validate_merge_endpoint(req: MergeValidationRequest):
         return result.dict()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Merge validation failed: {str(e)}")
+
+
+# ==================== Delta Table Stats ====================
+
+class DeltaStatsRequest(BaseModel):
+    table: str  # dataset ID as string for legacy compatibility
+
+
+@app.post("/delta/stats")
+def delta_stats(req: DeltaStatsRequest):
+    """Get statistics about a Delta table (row count, column count)."""
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    
+    try:
+        # Parse table as dataset_id (legacy format uses dataset_id as the table identifier)
+        dataset_id = int(req.table)
+        # For now, we'll use project_id = 0 for legacy tables, or parse from extended format later
+        # The delta adapter's _table_path method will use the legacy /data/delta/<id> path
+        # We need to use the new format with project and dataset IDs
+        
+        # Since we're transitioning, try to call get_stats with reasonable defaults
+        # Check if table contains "/" which would indicate new format
+        if "/" in req.table:
+            # New format might be "project_id/dataset_id" but for now we'll use legacy
+            parts = req.table.split("/")
+            if len(parts) >= 2:
+                project_id = int(parts[0])
+                dataset_id = int(parts[1])
+                stats = _delta_adapter.get_stats(project_id, dataset_id)
+            else:
+                raise ValueError("Invalid table format")
+        else:
+            # Legacy format: table is just the dataset_id, assume project_id from structure
+            # For the legacy _table_path, we can call get_stats with dummy project_id
+            # But actually, let's check the actual path structure
+            # The Go service sends just the dataset ID, so we need to handle that
+            # Let's use 0 as project_id for now or check actual file structure
+            # Actually, we should use the new path structure: projects/<project_id>/datasets/<dataset_id>/main
+            # But without project_id, we need to scan or default
+            
+            # Simplest approach: since Go service only sends dataset_id, 
+            # we should update the call to use the legacy _table_path directly
+            # But get_stats uses _main_path which requires project_id
+            
+            # Work-around: read from legacy path /data/delta/<dataset_id>
+            from delta_adapter import DeltaTable
+            import os
+            from deltalake import DeltaTable
+            
+            legacy_path = f"/data/delta/{dataset_id}"
+            if not os.path.exists(os.path.join(legacy_path, "_delta_log")):
+                return {"num_rows": 0, "num_cols": 0}
+            
+            dt = DeltaTable(legacy_path)
+            at = dt.to_pyarrow_table()
+            stats = {
+                "num_rows": len(at),
+                "num_cols": len(at.schema)
+            }
+        
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+
+# ==================== Delta SQL Query ====================
+
+class DeltaQueryRequest(BaseModel):
+    sql: str
+    table_mappings: Dict[str, str]  # {"schema.table": "project_id/dataset_id"}
+    limit: int = 250
+    offset: int = 0
+
+
+@app.post("/delta/query")
+def delta_query(req: DeltaQueryRequest):
+    """Execute SQL queries against Delta tables using DuckDB.
+    
+    This endpoint allows SQL queries to run against Delta Lake tables.
+    The table_mappings parameter maps SQL table references (schema.table) to Delta paths.
+    """
+    print(f"DEBUG: delta_query called with sql={req.sql} mappings={req.table_mappings}")
+    
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    
+    try:
+        import duckdb
+        from deltalake import DeltaTable
+        import os
+        
+        # Create DuckDB connection
+        con = duckdb.connect()
+        con.execute("INSTALL delta;")
+        con.execute("LOAD delta;")
+        
+        # Register each Delta table as a view in DuckDB
+        for table_ref, path_info in req.table_mappings.items():
+            # path_info can be "project_id/dataset_id" or just "dataset_id"
+            delta_path = None
+            
+            if "/" in path_info:
+                parts = path_info.split("/")
+                project_id = int(parts[0])
+                dataset_id = int(parts[1])
+                
+                # Try new hierarchical path first
+                new_path = _delta_adapter._main_path(project_id, dataset_id)
+                if os.path.exists(os.path.join(new_path, "_delta_log")):
+                    delta_path = new_path
+                else:
+                    # Fall back to legacy path
+                    legacy_path = f"/data/delta/{dataset_id}"
+                    if os.path.exists(os.path.join(legacy_path, "_delta_log")):
+                        delta_path = legacy_path
+            else:
+                # Legacy format - just dataset_id
+                dataset_id = int(path_info)
+                legacy_path = f"/data/delta/{dataset_id}"
+                if os.path.exists(os.path.join(legacy_path, "_delta_log")):
+                    delta_path = legacy_path
+            
+            # Check if we found a valid Delta table
+            if delta_path is None or not os.path.exists(os.path.join(delta_path, "_delta_log")):
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"Delta table not found for {table_ref}. Tried paths: new={_delta_adapter._main_path(int(parts[0]), int(parts[1])) if '/' in path_info else 'N/A'}, legacy=/data/delta/{dataset_id}"
+                )
+            
+            # Normalize path for DuckDB (replace backslashes with forward slashes to avoid escape sequence issues)
+            duckdb_path = delta_path.replace("\\", "/")
+            print(f"DEBUG: delta_query table_ref={table_ref} original_path={delta_path} duckdb_path={duckdb_path}")
+            
+            # Create view with the table reference name
+            # Replace dots with underscores for DuckDB view names, but keep original in SELECT
+            view_name = table_ref.replace(".", "_")
+            try:
+                con.execute(f"CREATE OR REPLACE VIEW {view_name} AS SELECT * FROM delta_scan('{duckdb_path}')")
+                print(f"DEBUG: Created view {view_name}")
+            except Exception as e:
+                print(f"DEBUG: Failed to create view {view_name}: {e}")
+                raise
+            
+            # Also create a version with schema.table format if it contains a dot
+            if "." in table_ref:
+                # DuckDB supports schema.table format
+                schema_name, table_name = table_ref.split(".", 1)
+                try:
+                    con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
+                    con.execute(f"CREATE OR REPLACE VIEW {schema_name}.{table_name} AS SELECT * FROM delta_scan('{duckdb_path}')")
+                    print(f"DEBUG: Created schema view {schema_name}.{table_name}")
+                except Exception as e:
+                    print(f"DEBUG: Failed to create schema view {schema_name}.{table_name}: {e}")
+                    raise
+        
+        # Execute the query with pagination
+        # Wrap user query to apply limit/offset
+        full_query = f"SELECT * FROM ({req.sql}) AS subquery LIMIT {req.limit} OFFSET {req.offset}"
+        
+        result = con.execute(full_query).fetch_arrow_table()
+        
+        # Convert to Python native types for JSON serialization
+        columns = result.column_names
+        rows = []
+        for i in range(len(result)):
+            row = []
+            for col_name in columns:
+                val = result[col_name][i].as_py()
+                row.append(val)
+            rows.append(row)
+        
+        return {
+            "columns": columns,
+            "rows": rows,
+            "total": len(rows)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Query execution failed: {str(e)}")

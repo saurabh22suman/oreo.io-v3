@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -19,6 +21,9 @@ import (
 // positive check: query must start with SELECT or WITH ... SELECT
 var selectRe = regexp.MustCompile(`(?i)^\s*(with\b[\s\S]+select\b|select\b)`)
 
+// Regex to find schema.table references in SQL
+var twoPartRe = regexp.MustCompile(`(?i)\b([a-z_][a-z0-9_]*)\s*\.\s*([a-z_][a-z0-9_]*)`)
+
 type QueryExecuteRequest struct {
 	SQL       string      `json:"sql"`
 	Params    interface{} `json:"params,omitempty"`
@@ -31,6 +36,81 @@ type QueryExecuteResponse struct {
 	Columns []string        `json:"columns"`
 	Rows    [][]interface{} `json:"rows"`
 	Total   int64           `json:"total"`
+}
+
+// detectDeltaTables scans SQL for table references and maps them to Delta datasets
+func detectDeltaTables(db *gorm.DB, sqlText string, projectID uint) (map[string]string, bool) {
+	if projectID == 0 || db == nil {
+		return nil, false
+	}
+
+	mappings := make(map[string]string)
+	hasDelta := false
+
+	// Find all schema.table references
+	matches := twoPartRe.FindAllStringSubmatch(sqlText, -1)
+	for _, match := range matches {
+		if len(match) < 3 {
+			continue
+		}
+		schema := strings.ToLower(strings.TrimSpace(match[1]))
+		table := strings.ToLower(strings.TrimSpace(match[2]))
+		tableRef := fmt.Sprintf("%s.%s", schema, table)
+
+		// Check if this is a Delta dataset
+		var ds models.Dataset
+		err := db.Where("project_id = ? AND LOWER(target_schema) = ? AND LOWER(target_table) = ? AND storage_backend = 'delta'",
+			projectID, schema, table).First(&ds).Error
+
+		if err == nil {
+			// Found a matching Delta dataset
+			mappings[tableRef] = fmt.Sprintf("%d/%d", ds.ProjectID, ds.ID)
+			hasDelta = true
+		}
+	}
+
+	return mappings, hasDelta
+}
+
+// executeDeltaQuery sends query to Python service for DuckDB execution
+func executeDeltaQuery(sqlText string, tableMappings map[string]string, limit, page int) (*QueryExecuteResponse, error) {
+	pyBase := getPythonServiceURL()
+	
+	reqBody := map[string]interface{}{
+		"sql":            sqlText,
+		"table_mappings": tableMappings,
+		"limit":          limit,
+		"offset":         (page - 1) * limit,
+	}
+	
+	bodyBytes, _ := json.Marshal(reqBody)
+	req, err := http.NewRequest(http.MethodPost, pyBase+"/delta/query", bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != 200 {
+		var errResp map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if detail, ok := errResp["detail"].(string); ok {
+			return nil, fmt.Errorf(detail)
+		}
+		return nil, fmt.Errorf("python service returned %d", resp.StatusCode)
+	}
+	
+	var result QueryExecuteResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	
+	return &result, nil
 }
 
 // ExecuteQueryHandler returns a gin handler that runs a read-only SELECT query with pagination
@@ -58,6 +138,30 @@ func ExecuteQueryHandler(db *gorm.DB) gin.HandlerFunc {
 		}
 		if req.Page <= 0 {
 			req.Page = 1
+		}
+
+		// Check if query references Delta tables and route to Python service if needed
+		tableMappings, isDelta := detectDeltaTables(db, req.SQL, req.ProjectID)
+		if isDelta {
+			// Ensure we have mappings
+			if len(tableMappings) == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": "No Delta tables found for this query. Check that your table references match existing Delta datasets in this project.",
+				})
+				return
+			}
+			
+			// Route to Python service for DuckDB-based execution
+			resp, err := executeDeltaQuery(req.SQL, tableMappings, req.Limit, req.Page)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error":   "delta query failed: " + err.Error(),
+					"details": fmt.Sprintf("Tables found: %v", tableMappings),
+				})
+				return
+			}
+			c.JSON(http.StatusOK, resp)
+			return
 		}
 
 		// Determine dialect and current database (for Postgres)
@@ -254,7 +358,7 @@ func RegisterQueryRoutes(r *gin.Engine, db *gorm.DB) {
 }
 
 // --- helpers for identifier planning ---
-var threePartRe = regexp.MustCompile(`(?i)(?:\b|\W)("[^"]+"|[a-zA-Z_][\w$]*)\s*\.\s*("[^"]+"|[a-zA-Z_][\w$]*)\s*\.\s*("[^"]+"|[a-zA-Z_][\w$]*)`)
+var threePartRe = regexp.MustCompile(`(?i)(?:\b|\W)("[\^"]+"|[a-zA-Z_][\w$]*)\s*\.\s*("[\^"]+"|[a-zA-Z_][\w$]*)\s*\.\s*("[\^"]+"|[a-zA-Z_][\w$]*)`)
 
 func unquoteIdent(s string) string {
 	s = strings.TrimSpace(s)

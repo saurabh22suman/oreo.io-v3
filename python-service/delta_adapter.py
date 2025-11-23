@@ -492,6 +492,30 @@ class DeltaStorageAdapter:
         
         return {"columns": rel.column_names, "rows": rows, "count": len(rows)}
 
+    def get_stats(self, project_id: int, dataset_id: int) -> Dict[str, Any]:
+        """Get statistics about a Delta table.
+        
+        Returns:
+            num_rows: Total number of rows in the table
+            num_cols: Number of columns in the table
+        """
+        path = self._main_path(project_id, dataset_id)
+        
+        if not os.path.exists(os.path.join(path, "_delta_log")):
+            return {"num_rows": 0, "num_cols": 0}
+        
+        try:
+            dt = DeltaTable(path)
+            at = dt.to_pyarrow_table()
+            
+            return {
+                "num_rows": len(at),
+                "num_cols": len(at.schema)
+            }
+        except Exception as e:
+            logger.warn(f"Failed to get stats for {path}: {e}")
+            return {"num_rows": 0, "num_cols": 0}
+
     # ==================== History & Versioning ====================
 
     def history(self, project_id: int, dataset_id: int) -> List[Dict[str, Any]]:
