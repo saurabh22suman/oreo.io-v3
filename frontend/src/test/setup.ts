@@ -26,10 +26,10 @@ const localStorageMock = {
     removeItem: jest.fn(),
     clear: jest.fn(),
 };
-global.localStorage = localStorageMock as any;
+(globalThis as any).localStorage = localStorageMock;
 
 // Mock console methods to reduce noise in tests
-global.console = {
+(globalThis as any).console = {
     ...console,
     log: jest.fn(),
     warn: jest.fn(),
