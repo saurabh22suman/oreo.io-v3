@@ -725,52 +725,35 @@ func DatasetsPrepare(c *gin.Context) {
 			c.JSON(400, gin.H{"error": "invalid_file"})
 			return
 		}
-		// Ensure physical table or delta path, with CSV header-based schema inference if delta
+		// Ensure physical table or delta path, with schema inference via Python service if delta
 		if strings.EqualFold(ds.StorageBackend, "delta") {
-			if strings.TrimSpace(ds.Schema) == "" && strings.HasSuffix(strings.ToLower(header.Filename), ".csv") {
-				csvr := csv.NewReader(bytes.NewReader(contentBytes))
-				headers, herr := csvr.Read()
-				if herr == nil && len(headers) > 0 {
-					// Sample up to 50 rows to infer primitive types (integer, number, string, boolean)
-					samples := make([]string, len(headers))
-					for i := range samples { samples[i] = "unknown" }
-					for i := 0; i < 50; i++ {
-						rec, rerr := csvr.Read()
-						if rerr != nil { break }
-						for j := 0; j < len(headers) && j < len(rec); j++ {
-							v := strings.TrimSpace(rec[j])
-							if v == "" { continue }
-							// Try boolean
-							if strings.EqualFold(v, "true") || strings.EqualFold(v, "false") {
-								if samples[j] == "unknown" { samples[j] = "boolean" }
-								continue
-							}
-							// Try integer
-							if _, ierr := strconv.ParseInt(v, 10, 64); ierr == nil {
-								if samples[j] == "unknown" || samples[j] == "integer" { samples[j] = "integer" } else if samples[j] != "integer" { samples[j] = "string" }
-								continue
-							}
-							// Try float
-							if _, ferr := strconv.ParseFloat(v, 64); ferr == nil {
-								if samples[j] == "unknown" || samples[j] == "integer" || samples[j] == "number" { samples[j] = "number" } else { samples[j] = "string" }
-								continue
-							}
-							// Fallback string
-							samples[j] = "string"
-						}
+			if strings.TrimSpace(ds.Schema) == "" {
+				// Call python /infer-schema
+				pyBase := getPythonServiceURL()
+				var mpBuf bytes.Buffer
+				mw := multipart.NewWriter(&mpBuf)
+				fw, _ := mw.CreateFormFile("file", header.Filename)
+				fw.Write(contentBytes)
+				mw.Close()
+
+				req, _ := http.NewRequest(http.MethodPost, pyBase+"/infer-schema", &mpBuf)
+				req.Header.Set("Content-Type", mw.FormDataContentType())
+				resp, err := http.DefaultClient.Do(req)
+				if err == nil && resp != nil && resp.StatusCode == 200 {
+					defer resp.Body.Close()
+					var result struct {
+						Schema any `json:"schema"`
 					}
-					props := map[string]any{}
-					for idx, h := range headers {
-						col := strings.TrimSpace(h)
-						if col == "" { continue }
-						t := samples[idx]
-						if t == "unknown" { t = "string" }
-						props[col] = map[string]string{"type": t}
+					if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && result.Schema != nil {
+						bSchema, _ := json.Marshal(result.Schema)
+						ds.Schema = string(bSchema)
+						_ = gdb.Model(&ds).Update("schema", ds.Schema).Error
 					}
-					schemaMap := map[string]any{"properties": props}
-					bSchema, _ := json.Marshal(schemaMap)
-					ds.Schema = string(bSchema)
-					_ = gdb.Model(&ds).Update("schema", ds.Schema).Error
+				} else {
+					// Log warning but proceed (will use empty schema)
+					if resp != nil {
+						resp.Body.Close()
+					}
 				}
 			}
 			if err := ensureDeltaTable(&ds); err != nil {
