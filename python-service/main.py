@@ -198,8 +198,12 @@ except Exception as e:
 class DeltaAppendPayload(BaseModel):
     table: str
     rows: List[Dict[str, Any]]
+
 class DeltaEnsurePayload(BaseModel):
-    table: str
+    model_config = ConfigDict(extra="ignore")
+    project_id: Optional[int] = None
+    dataset_id: Optional[int] = None
+    table: Optional[str] = None  # Legacy support
     schema: Dict[str, Any]
 
 
@@ -207,13 +211,23 @@ class DeltaEnsurePayload(BaseModel):
 def delta_ensure(payload: DeltaEnsurePayload):
     if _delta_adapter is None:
         raise HTTPException(status_code=500, detail="Delta adapter not available")
-    if not payload.table:
-        raise HTTPException(status_code=400, detail="table is required")
-    try:
-        _delta_adapter.ensure_empty_table(payload.table, payload.schema or {})
-        return {"ok": True}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    
+    # Prefer hierarchical path
+    if payload.project_id is not None and payload.dataset_id is not None:
+        try:
+            _delta_adapter.ensure_main_table(payload.project_id, payload.dataset_id, payload.schema or {})
+            return {"ok": True}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    elif payload.table:
+        # Legacy support
+        try:
+            _delta_adapter.ensure_empty_table(payload.table, payload.schema or {})
+            return {"ok": True}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    else:
+        raise HTTPException(status_code=400, detail="Either (project_id + dataset_id) or table is required")
 
 
 
@@ -228,11 +242,22 @@ def delta_append(payload: DeltaAppendPayload):
 
 
 @app.post("/delta/append-file")
-def delta_append_file(table: str = Form(...), file: UploadFile = File(...)):
+def delta_append_file(
+    file: UploadFile = File(...),
+    project_id: Optional[int] = Form(None),
+    dataset_id: Optional[int] = Form(None),
+    table: Optional[str] = Form(None)  # Legacy support
+):
     if _delta_adapter is None:
         raise HTTPException(status_code=500, detail="Delta adapter not available")
-    if not table:
-        raise HTTPException(status_code=400, detail="table is required")
+    
+    # Prefer hierarchical path with project_id/dataset_id
+    if project_id is not None and dataset_id is not None:
+        use_hierarchical = True
+    elif table:
+        use_hierarchical = False
+    else:
+        raise HTTPException(status_code=400, detail="Either (project_id + dataset_id) or table is required")
     content = file.file.read()
     # Try CSV, JSON, Excel
     rows: List[Dict[str, Any]] = []
@@ -268,7 +293,12 @@ def delta_append_file(table: str = Form(...), file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail=f"Unsupported or invalid file: {e}")
     if not isinstance(rows, list):
         raise HTTPException(status_code=400, detail="invalid rows")
-    _delta_adapter.append_rows(table, rows or [])
+    
+    if use_hierarchical:
+        _delta_adapter.append_rows_to_main(project_id, dataset_id, rows or [])
+    else:
+        _delta_adapter.append_rows(table, rows or [])  # Legacy
+    
     return {"ok": True, "inserted": len(rows)}
 
 
@@ -789,6 +819,65 @@ def delta_stats(req: DeltaStatsRequest):
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+
+@app.get("/delta/table-info")
+def delta_table_info(
+    project_id: Optional[int] = None,
+    dataset_id: Optional[int] = None,
+    table: Optional[str] = None
+):
+    """Get statistics about a Delta table using query parameters.
+    
+    Accepts either:
+    - project_id + dataset_id (hierarchical path)
+    - table (legacy format)
+    """
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    
+    try:
+        import os
+        from deltalake import DeltaTable
+        
+        # Determine which path to use
+        if project_id is not None and dataset_id is not None:
+            # Use hierarchical path
+            delta_path = _delta_adapter._main_path(project_id, dataset_id)
+        elif table:
+            # Legacy path - table can be dataset_id or other legacy format
+            if "/" in table:
+                # Format: project_id/dataset_id
+                parts = table.split("/")
+                if len(parts) >= 2:
+                    delta_path = _delta_adapter._main_path(int(parts[0]), int(parts[1]))
+                else:
+                    raise ValueError("Invalid table format")
+            else:
+                # Legacy flat path
+                delta_path = f"/data/delta/{table}"
+        else:
+            raise HTTPException(
+                status_code=400, 
+                detail="Either (project_id + dataset_id) or table is required"
+            )
+        
+        # Check if Delta table exists
+        if not os.path.exists(os.path.join(delta_path, "_delta_log")):
+            return {"num_rows": 0, "num_cols": 0}
+        
+        # Read Delta table and get stats
+        dt = DeltaTable(delta_path)
+        at = dt.to_pyarrow_table()
+        
+        return {
+            "num_rows": len(at),
+            "num_cols": len(at.schema)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get table info: {str(e)}")
 
 
 # ==================== Delta SQL Query ====================

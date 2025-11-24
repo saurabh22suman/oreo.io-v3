@@ -264,15 +264,10 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 	tbl := datasetPhysicalTable(ds)
 	// For delta backend, try to get stats from Python service
 	if strings.EqualFold(ds.StorageBackend, "delta") {
-		// Attempt to get Delta table stats from Python service
+		// Attempt to get Delta table stats from Python service using hierarchical path
 		pyBase := getPythonServiceURL()
-		reqBody := map[string]any{
-			"table": fmt.Sprintf("%d", ds.ID),
-		}
-		bodyBytes, _ := json.Marshal(reqBody)
-		req, _ := http.NewRequest(http.MethodPost, pyBase+"/delta/stats", bytes.NewBuffer(bodyBytes))
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := http.DefaultClient.Do(req)
+		url := fmt.Sprintf("%s/delta/table-info?project_id=%d&dataset_id=%d", pyBase, ds.ProjectID, ds.ID)
+		resp, err := http.Get(url)
 		if err == nil && resp != nil && resp.StatusCode == 200 {
 			defer resp.Body.Close()
 			var statsResp struct {
@@ -812,7 +807,9 @@ func DatasetsPrepare(c *gin.Context) {
 			pyBase := getPythonServiceURL()
 			var mpBuf bytes.Buffer
 			mw := multipart.NewWriter(&mpBuf)
-			_ = mw.WriteField("table", fmt.Sprintf("%d", ds.ID))
+			// Send project_id and dataset_id for hierarchical path structure
+			_ = mw.WriteField("project_id", fmt.Sprintf("%d", ds.ProjectID))
+			_ = mw.WriteField("dataset_id", fmt.Sprintf("%d", ds.ID))
 			fw, _ := mw.CreateFormFile("file", header.Filename)
 			_, _ = fw.Write(contentBytes)
 			mw.Close()
@@ -1029,6 +1026,104 @@ func DatasetDataGet(c *gin.Context) {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
+	
+	// Handle Delta storage backend
+	if strings.EqualFold(ds.StorageBackend, "delta") {
+		nStr := c.Query("limit")
+		if nStr == "" {
+			nStr = "50"
+		}
+		offStr := c.Query("offset")
+		if offStr == "" {
+			offStr = "0"
+		}
+		n, _ := strconv.Atoi(nStr)
+		off, _ := strconv.Atoi(offStr)
+		
+		// Get the table location from metadata
+		gdb := dbpkg.Get()
+		if gdb == nil {
+			if _, err := dbpkg.Init(); err == nil {
+				gdb = dbpkg.Get()
+			}
+		}
+		
+		var meta models.DatasetMeta
+		if err := gdb.Where("dataset_id = ?", ds.ID).First(&meta).Error; err != nil {
+			c.JSON(500, gin.H{"error": "metadata_not_found"})
+			return
+		}
+		
+		tableLocation := meta.TableLocation
+		if tableLocation == "" {
+			// Fallback to dataset physical table
+			tableLocation = datasetPhysicalTable(ds)
+		}
+		
+		// Query Delta table via Python service
+		pyBase := getPythonServiceURL()
+		if pyBase == "" {
+			pyBase = "http://python-service:8000"
+		}
+		
+		// Build query request
+		queryReq := map[string]any{
+			"sql": fmt.Sprintf("SELECT * FROM %s", tableLocation),
+			"table_mappings": map[string]string{
+				tableLocation: fmt.Sprintf("%d/%d", ds.ProjectID, ds.ID),
+			},
+			"limit":  n,
+			"offset": off,
+		}
+		
+		body, _ := json.Marshal(queryReq)
+		req, _ := http.NewRequest(http.MethodPost, pyBase+"/delta/query", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil || resp == nil {
+			c.JSON(502, gin.H{"error": "python_unreachable"})
+			return
+		}
+		defer resp.Body.Close()
+		
+		if resp.StatusCode != 200 {
+			b, _ := io.ReadAll(resp.Body)
+			c.JSON(resp.StatusCode, gin.H{"error": "delta_query_failed", "details": string(b)})
+			return
+		}
+		
+		// Parse Python service response
+		var deltaResp struct {
+			Columns []string        `json:"columns"`
+			Rows    [][]interface{} `json:"rows"`
+			Total   int             `json:"total"`
+		}
+		
+		if err := json.NewDecoder(resp.Body).Decode(&deltaResp); err != nil {
+			c.JSON(500, gin.H{"error": "invalid_response"})
+			return
+		}
+		
+		// Convert rows to map format expected by frontend
+		dataRows := make([]map[string]interface{}, 0, len(deltaResp.Rows))
+		for _, row := range deltaResp.Rows {
+			rowMap := make(map[string]interface{})
+			for i, col := range deltaResp.Columns {
+				if i < len(row) {
+					rowMap[col] = row[i]
+				}
+			}
+			dataRows = append(dataRows, rowMap)
+		}
+		
+		c.JSON(200, gin.H{
+			"data":    dataRows,
+			"columns": deltaResp.Columns,
+		})
+		return
+	}
+	
 	gdb := dbpkg.Get()
 	if gdb == nil {
 		if _, err := dbpkg.Init(); err == nil {
@@ -1148,8 +1243,15 @@ func DatasetStats(c *gin.Context) {
 		"table_location": meta.TableLocation,
 	}
 	if stats["row_count"] == nil || stats["row_count"] == int64(0) {
-		// For delta backend we skip direct SQL count
-		if !strings.EqualFold(ds.StorageBackend, "delta") {
+		// For delta backend, try to refresh metadata
+		if strings.EqualFold(ds.StorageBackend, "delta") {
+			fmt.Printf("DEBUG DatasetStats: row_count is 0 for Delta dataset, refreshing metadata\n")
+			upsertDatasetMeta(gdb, ds)
+			// Re-fetch metadata after update
+			_ = gdb.Where("dataset_id = ?", ds.ID).First(&meta).Error
+			stats["row_count"] = meta.RowCount
+			stats["column_count"] = meta.ColumnCount
+		} else {
 			var total int64
 			// Attempt to count directly from the dataset's physical table (schema.table or ds_<id>)
 			_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", datasetPhysicalTable(ds))).Row().Scan(&total)
