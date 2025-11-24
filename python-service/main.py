@@ -14,6 +14,13 @@ try:
 except Exception:
     _delta_adapter = None
 
+try:
+    from merge_executor import get_merge_executor, MergeConflict, MergeValidationError
+    _merge_executor = get_merge_executor()
+except Exception as e:
+    _merge_executor = None
+    print(f"Warning: Merge executor not available: {e}")
+
 app = FastAPI(title="Oreo.io-v2 Python Service")
 
 
@@ -417,6 +424,104 @@ def delta_merge(payload: DeltaMergePayload):
         raise HTTPException(status_code=400, detail="keys are required")
     result = _delta_adapter.merge(tbl, rows=payload.rows, keys=payload.keys, staging_path=payload.staging_path)
     return result
+
+
+# Enhanced merge endpoint for Change Requests (per merge_execution_spec.md)
+class MergeChangeRequestPayload(BaseModel):
+    """
+    Payload for Change Request merge operations
+    
+    Spec: /docs/merge_execution_spec.md section 4.1
+    """
+    model_config = ConfigDict(extra="ignore")
+    
+    project_id: int
+    dataset_id: int
+    cr_id: str
+    primary_keys: List[str]
+    delta_version_before: Optional[int] = None
+    current_delta_version: Optional[int] = None
+    merge_schema: bool = True
+    requested_by: str = "system"
+    skip_conflict_check: bool = False
+    force_merge: bool = False
+
+
+@app.post("/delta/merge-cr")
+def delta_merge_change_request(payload: MergeChangeRequestPayload):
+    """
+    Execute Change Request merge with full validation and conflict detection
+    
+    Implements merge_execution_spec.md section 3: High-Level Merge Flow
+    
+    Returns:
+        - 200: Merge successful
+        - 409: Conflicts detected
+        - 422: Validation failed
+        - 500: Merge failed
+    """
+    if _merge_executor is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Merge executor not available. Check merge_executor.py dependencies."
+        )
+    
+    try:
+        # Execute full merge workflow
+        result = _merge_executor.full_merge(
+            project_id=payload.project_id,
+            dataset_id=payload.dataset_id,
+            cr_id=payload.cr_id,
+            primary_keys=payload.primary_keys,
+            delta_version_before=payload.delta_version_before,
+            current_delta_version=payload.current_delta_version,
+            merge_schema=payload.merge_schema,
+            requested_by=payload.requested_by,
+            skip_conflict_check=payload.skip_conflict_check or payload.force_merge,
+            cleanup_after=True
+        )
+        
+        # Check result and return appropriate response
+        if result.get("error") == "merge_conflict":
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "merge_conflict",
+                    "message": f"Merge conflicts detected: {len(result.get('conflicts', []))} rows",
+                    "conflicts": result.get("conflicts", [])
+                }
+            )
+        
+        if not result.get("ok"):
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "merge_failed",
+                    "message": result.get("error", "Unknown error"),
+                    "details": result
+                }
+            )
+        
+        # Success - return structured response per spec
+        return {
+            "status": "ok",
+            "merged_version": result.get("merge", {}).get("merged_version"),
+            "commit_id": result.get("merge", {}).get("commit_id"),
+            "rows_affected": result.get("merge", {}).get("rows_affected"),
+            "diff": result.get("diff"),
+            "cleanup": result.get("cleanup", False)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "merge_error",
+                "message": str(e)
+            }
+        )
 
 
 class ExportRequest(BaseModel):

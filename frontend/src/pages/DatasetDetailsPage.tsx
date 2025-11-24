@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getDataset, getDatasetStatsTop, getProject, listDatasetApprovalsTop, myProjectRole, subscribeNotifications } from '../api'
 import Alert from '../components/Alert'
-import { Database, Eye, Plus, Terminal, Settings, Clock, Table2, BarChart3, FileCheck, ArrowRight } from 'lucide-react'
+import { Database, Eye, Plus, Atom, Settings, Clock, Table2, BarChart3, FileCheck, ArrowRight } from 'lucide-react'
 
 type Dataset = { id: number; name: string; schema?: string; rules?: string; last_upload_path?: string; last_upload_at?: string }
 
@@ -135,9 +135,9 @@ export default function DatasetDetailsPage() {
 
         <ActionCard
           to={`/projects/${projectId}/query?dataset=${dsId}`}
-          icon={<Terminal className="w-8 h-8" />}
-          title="SQL Query"
-          description="Run queries and analyze"
+          icon={<Atom className="w-8 h-8" />}
+          title="Oreo Labs"
+          description="Experimental features"
         />
 
         <ActionCard
@@ -225,8 +225,8 @@ function ActionCard({ to, icon, title, description, disabled }: {
     <Cmp
       to={disabled ? undefined : to}
       className={`group relative overflow-hidden rounded-2xl bg-white shadow-lg border border-slate-200 p-6 transition-all duration-300 ${disabled
-          ? 'opacity-50 cursor-not-allowed'
-          : 'hover:shadow-xl hover:-translate-y-1 hover:border-slate-300'
+        ? 'opacity-50 cursor-not-allowed'
+        : 'hover:shadow-xl hover:-translate-y-1 hover:border-slate-300'
         }`}
       title={disabled ? description : undefined}
       aria-disabled={disabled}

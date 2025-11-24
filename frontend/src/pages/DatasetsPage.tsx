@@ -6,7 +6,7 @@ import Card from '../components/Card'
 import Alert from '../components/Alert'
 import { Database, Search, LayoutDashboard, FileText, Plus, ArrowRight, Clock } from 'lucide-react'
 
-type Dataset = { id: number; name: string; schema?: string; rules?: string; last_upload_at?: string; last_upload_path?: string }
+type Dataset = { id: number; public_id?: string; name: string; schema?: string; rules?: string; last_upload_at?: string; last_upload_path?: string }
 
 export default function DatasetsPage() {
   const { id } = useParams()
@@ -157,7 +157,7 @@ export default function DatasetsPage() {
                   .map((d) => (
                     <tr
                       key={d.id}
-                      onClick={() => navigate(`/projects/${projectId}/datasets/${d.id}`)}
+                      onClick={() => navigate(`/projects/${projectId}/datasets/${d.public_id || d.id}`)}
                       className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
                     >
                       <td className="py-4 px-6">
