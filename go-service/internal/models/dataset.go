@@ -4,7 +4,6 @@ import "time"
 
 type Dataset struct {
 	ID         uint   `json:"id" gorm:"primaryKey"`
-	PublicID   string `json:"public_id" gorm:"size:16;uniqueIndex"` // Hash-based public identifier
 	ProjectID  uint   `json:"project_id" gorm:"not null;uniqueIndex:uniq_project_name"`
 	Name       string `json:"name" gorm:"size:200;not null;uniqueIndex:uniq_project_name"`
 	Source     string `json:"source" gorm:"size:50"`      // local | s3 | azure | gcs

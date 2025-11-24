@@ -511,12 +511,8 @@ func DatasetsCreate(c *gin.Context) {
 	if pidStr == "" {
 		pidStr = c.Param("id")
 	}
-	pid, ok := ResolveProjectID(pidStr)
-	if !ok {
-		c.JSON(404, gin.H{"error": "project_not_found"})
-		return
-	}
-	if !HasProjectRole(c, pid, "owner", "contributor") {
+	pid, _ := strconv.Atoi(pidStr)
+	if !HasProjectRole(c, uint(pid), "owner", "contributor") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -530,28 +526,7 @@ func DatasetsCreate(c *gin.Context) {
 	if backend == "" {
 		backend = "postgres"
 	}
-	
-	// Generate unique PublicID
-	var publicID string
-	for i := 0; i < 10; i++ {
-		publicID = utils.GeneratePublicID()
-		var count int64
-		if err := gdb.Model(&models.Dataset{}).Where("public_id = ?", publicID).Count(&count).Error; err == nil && count == 0 {
-			break
-		}
-		if i == 9 {
-			c.JSON(500, gin.H{"error": "failed_to_generate_id"})
-			return
-		}
-	}
-	
-	ds := models.Dataset{
-		ProjectID:      pid,
-		PublicID:       publicID,
-		Name:           in.Name,
-		Schema:         in.Schema,
-		StorageBackend: backend,
-	}
+	ds := models.Dataset{ProjectID: uint(pid), Name: in.Name, Schema: in.Schema, StorageBackend: backend}
 	if err := gdb.Create(&ds).Error; err != nil {
 		c.JSON(409, gin.H{"error": "name_conflict"})
 		return

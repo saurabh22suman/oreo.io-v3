@@ -6,7 +6,6 @@ import (
 	"github.com/gin-gonic/gin"
 	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
-	"github.com/oreo-io/oreo.io-v2/go-service/internal/utils"
 	"gorm.io/gorm"
 )
 
@@ -119,27 +118,7 @@ func ProjectsCreate(c *gin.Context) {
 			ownerID = v
 		}
 	}
-	
-	// Generate unique PublicID
-	var publicID string
-	for i := 0; i < 10; i++ {
-		publicID = utils.GeneratePublicID()
-		var count int64
-		if err := gdb.Model(&models.Project{}).Where("public_id = ?", publicID).Count(&count).Error; err == nil && count == 0 {
-			break
-		}
-		if i == 9 {
-			c.JSON(500, gin.H{"error": "failed_to_generate_id"})
-			return
-		}
-	}
-	
-	p := models.Project{
-		Name:        in.Name,
-		Description: in.Description,
-		OwnerID:     ownerID,
-		PublicID:    publicID,
-	}
+	p := models.Project{Name: in.Name, Description: in.Description, OwnerID: ownerID}
 	if err := gdb.Create(&p).Error; err != nil {
 		c.JSON(409, gin.H{"error": "name_conflict"})
 		return
@@ -160,11 +139,7 @@ func ProjectsGet(c *gin.Context) {
 		gdb = dbpkg.Get()
 	}
 	idStr := c.Param("id")
-	id, ok := ResolveProjectID(idStr)
-	if !ok {
-		c.JSON(404, gin.H{"error": "not_found"})
-		return
-	}
+	id, _ := strconv.Atoi(idStr)
 	var p models.Project
 	if err := gdb.First(&p, id).Error; err != nil {
 		c.JSON(404, gin.H{"error": "not_found"})
@@ -188,11 +163,7 @@ func ProjectsUpdate(c *gin.Context) {
 		gdb = dbpkg.Get()
 	}
 	idStr := c.Param("id")
-	id, ok := ResolveProjectID(idStr)
-	if !ok {
-		c.JSON(404, gin.H{"error": "not_found"})
-		return
-	}
+	id, _ := strconv.Atoi(idStr)
 	var p models.Project
 	if err := gdb.First(&p, id).Error; err != nil {
 		c.JSON(404, gin.H{"error": "not_found"})
@@ -227,11 +198,7 @@ func ProjectsDelete(c *gin.Context) {
 		gdb = dbpkg.Get()
 	}
 	idStr := c.Param("id")
-	id, ok := ResolveProjectID(idStr)
-	if !ok {
-		c.JSON(404, gin.H{"error": "not_found"})
-		return
-	}
+	id, _ := strconv.Atoi(idStr)
 	var p models.Project
 	if err := gdb.First(&p, id).Error; err != nil {
 		c.JSON(404, gin.H{"error": "not_found"})

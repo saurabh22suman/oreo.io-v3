@@ -7,7 +7,6 @@ import { FolderOpen, Plus, Search, Clock, Database, ArrowRight, User } from 'luc
 
 type Project = {
   id: string
-  public_id?: string
   name: string
   description?: string
   role?: string
@@ -174,7 +173,7 @@ export default function ProjectsPage() {
                   filteredAndSorted.map((p) => (
                     <tr
                       key={p.id}
-                      onClick={() => navigate(`/projects/${p.public_id || p.id}`)}
+                      onClick={() => navigate(`/projects/${p.id}`)}
                       className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
                     >
                       <td className="py-4 px-6">
