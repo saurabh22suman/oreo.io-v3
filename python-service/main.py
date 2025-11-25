@@ -3,6 +3,8 @@ from pydantic import BaseModel, field_validator, ConfigDict
 from typing import List, Dict, Any, Optional
 from jsonschema import Draft202012Validator, exceptions as js_exceptions
 import io
+import json
+import os
 try:
     import pandas as pd
 except Exception:  # optional dependency guard
@@ -112,6 +114,118 @@ def infer_schema(file: UploadFile = File(...)):
         schema["required"] = required
 
     return {"schema": schema, "columns": list(df.columns)}
+
+
+class SchemaCompareRequest(BaseModel):
+    """Request to compare uploaded file schema against expected schema"""
+    model_config = ConfigDict(extra="ignore")
+    expected_schema: Dict[str, Any]  # JSON Schema with properties
+
+
+@app.post("/compare-schema")
+def compare_schema(
+    file: UploadFile = File(...),
+    expected_schema: str = Form(...)
+):
+    """
+    Compare the schema of an uploaded file against the expected dataset schema.
+    
+    Returns detailed information about:
+    - Missing columns (in file but expected in schema)
+    - Extra columns (in file but not in schema)
+    - Type mismatches
+    
+    This provides user-friendly feedback when appending data.
+    """
+    if pd is None:
+        raise HTTPException(status_code=500, detail="pandas not available for schema comparison")
+    
+    # Parse expected schema
+    try:
+        expected = json.loads(expected_schema)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid expected_schema JSON")
+    
+    # Read uploaded file
+    content = file.file.read()
+    try:
+        df = pd.read_csv(io.BytesIO(content))
+    except Exception:
+        try:
+            df = pd.read_excel(io.BytesIO(content))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Unsupported file format")
+    
+    # Get columns from uploaded file
+    file_columns = set(df.columns.tolist())
+    
+    # Get expected columns from schema
+    expected_properties = expected.get("properties", {})
+    expected_columns = set(expected_properties.keys())
+    
+    # Find mismatches
+    missing_columns = list(expected_columns - file_columns)  # Expected but not in file
+    extra_columns = list(file_columns - expected_columns)    # In file but not expected
+    matching_columns = list(file_columns & expected_columns)
+    
+    # Check type mismatches for matching columns
+    type_map = {
+        'int64': 'integer',
+        'Int64': 'integer',
+        'float64': 'number',
+        'boolean': 'boolean',
+        'bool': 'boolean',
+        'datetime64[ns]': 'string',
+        'object': 'string',
+        'string': 'string',
+    }
+    
+    type_mismatches = []
+    for col in matching_columns:
+        file_dtype = str(df[col].dtype)
+        file_json_type = type_map.get(file_dtype, 'string')
+        expected_type = expected_properties.get(col, {}).get("type", "string")
+        
+        # Allow some flexibility: number can match integer, string matches most things
+        compatible = (
+            file_json_type == expected_type or
+            (file_json_type == "integer" and expected_type == "number") or
+            (file_json_type == "number" and expected_type == "integer") or
+            (expected_type == "string")  # string accepts anything
+        )
+        
+        if not compatible:
+            type_mismatches.append({
+                "column": col,
+                "expected_type": expected_type,
+                "actual_type": file_json_type,
+                "message": f"Column '{col}' has type '{file_json_type}' but expected '{expected_type}'"
+            })
+    
+    # Determine if schema matches
+    is_compatible = len(missing_columns) == 0 and len(type_mismatches) == 0
+    # Note: extra columns are allowed (will be ignored during append)
+    
+    # Build user-friendly messages
+    messages = []
+    if missing_columns:
+        messages.append(f"Missing columns: {', '.join(sorted(missing_columns))}")
+    if extra_columns:
+        messages.append(f"Extra columns (will be ignored): {', '.join(sorted(extra_columns))}")
+    if type_mismatches:
+        for tm in type_mismatches:
+            messages.append(tm["message"])
+    
+    return {
+        "compatible": is_compatible,
+        "file_columns": sorted(list(file_columns)),
+        "expected_columns": sorted(list(expected_columns)),
+        "missing_columns": sorted(missing_columns),
+        "extra_columns": sorted(extra_columns),
+        "type_mismatches": type_mismatches,
+        "messages": messages,
+        "summary": "Schema matches" if is_compatible else "Schema mismatch detected"
+    }
 
 
 # ---------- Data Operations ----------
@@ -305,6 +419,191 @@ def delta_append_file(
         _delta_adapter.append_to_main(project_id, dataset_id, rows or [])
     else:
         _delta_adapter.append_rows(table, rows or [])  # Legacy
+    
+    return {"ok": True, "inserted": len(rows)}
+
+
+# --------- Staging Upload for Dataset Creation ---------
+# These endpoints support a two-step dataset creation flow:
+# 1. Upload file to staging (no dataset created yet)
+# 2. Finalize: create the Delta table from staging data
+
+@app.post("/staging/upload")
+def staging_upload(
+    file: UploadFile = File(...),
+):
+    """Upload a file to staging for later dataset creation.
+    
+    Returns a staging_id that can be used to finalize the dataset creation.
+    The staged file will be automatically cleaned up after 24 hours if not finalized.
+    """
+    import uuid
+    import time
+    
+    staging_id = str(uuid.uuid4())
+    staging_root = os.environ.get("DELTA_DATA_ROOT", "/data/delta")
+    staging_dir = os.path.join(staging_root, "pending_uploads", staging_id)
+    os.makedirs(staging_dir, exist_ok=True)
+    
+    # Save the raw file
+    file_path = os.path.join(staging_dir, file.filename or "upload.csv")
+    content = file.file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+    
+    # Save metadata for cleanup
+    meta_path = os.path.join(staging_dir, "_meta.json")
+    import json
+    with open(meta_path, "w") as f:
+        json.dump({
+            "staging_id": staging_id,
+            "filename": file.filename,
+            "created_at": time.time(),
+            "file_path": file_path
+        }, f)
+    
+    # Also parse and validate the file, infer schema
+    rows = []
+    schema = None
+    if pd is not None:
+        try:
+            import io as _io
+            bio = _io.BytesIO(content)
+            name = (file.filename or "").lower()
+            df = None
+            if name.endswith(".csv"):
+                df = pd.read_csv(bio)
+            elif name.endswith(".xlsx") or name.endswith(".xls"):
+                df = pd.read_excel(bio)
+            elif name.endswith(".json"):
+                import json as _json
+                arr = _json.loads(content.decode("utf-8"))
+                if isinstance(arr, list):
+                    rows = [r for r in arr if isinstance(r, dict)]
+            if df is not None:
+                rows = df.to_dict(orient="records")
+                # Infer schema from DataFrame
+                schema = {"type": "object", "properties": {}}
+                for col in df.columns:
+                    dtype = str(df[col].dtype)
+                    if "int" in dtype:
+                        schema["properties"][col] = {"type": "integer"}
+                    elif "float" in dtype:
+                        schema["properties"][col] = {"type": "number"}
+                    elif "bool" in dtype:
+                        schema["properties"][col] = {"type": "boolean"}
+                    elif "datetime" in dtype:
+                        schema["properties"][col] = {"type": "datetime"}
+                    else:
+                        schema["properties"][col] = {"type": "string"}
+        except Exception as e:
+            # Don't fail, just skip schema inference
+            pass
+    
+    return {
+        "staging_id": staging_id,
+        "filename": file.filename,
+        "row_count": len(rows),
+        "schema": schema
+    }
+
+
+@app.get("/staging/{staging_id}")
+def staging_get(staging_id: str):
+    """Get information about a staged upload."""
+    import json
+    staging_root = os.environ.get("DELTA_DATA_ROOT", "/data/delta")
+    staging_dir = os.path.join(staging_root, "pending_uploads", staging_id)
+    meta_path = os.path.join(staging_dir, "_meta.json")
+    
+    if not os.path.exists(meta_path):
+        raise HTTPException(status_code=404, detail="Staging not found")
+    
+    with open(meta_path, "r") as f:
+        meta = json.load(f)
+    
+    return meta
+
+
+@app.delete("/staging/{staging_id}")
+def staging_delete(staging_id: str):
+    """Delete a staged upload (cleanup)."""
+    import shutil
+    staging_root = os.environ.get("DELTA_DATA_ROOT", "/data/delta")
+    staging_dir = os.path.join(staging_root, "pending_uploads", staging_id)
+    
+    if os.path.exists(staging_dir):
+        shutil.rmtree(staging_dir, ignore_errors=True)
+    
+    return {"ok": True}
+
+
+@app.post("/staging/{staging_id}/finalize")
+def staging_finalize(
+    staging_id: str,
+    project_id: int = Form(...),
+    dataset_id: int = Form(...),
+):
+    """Finalize a staged upload by writing data to the Delta table.
+    
+    This creates the actual Delta table with the data from staging.
+    """
+    import json
+    import shutil
+    
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    
+    staging_root = os.environ.get("DELTA_DATA_ROOT", "/data/delta")
+    staging_dir = os.path.join(staging_root, "pending_uploads", staging_id)
+    meta_path = os.path.join(staging_dir, "_meta.json")
+    
+    if not os.path.exists(meta_path):
+        raise HTTPException(status_code=404, detail="Staging not found")
+    
+    with open(meta_path, "r") as f:
+        meta = json.load(f)
+    
+    file_path = meta.get("file_path")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Staged file not found")
+    
+    # Read and parse the file
+    with open(file_path, "rb") as f:
+        content = f.read()
+    
+    rows = []
+    if pd is not None:
+        try:
+            import io as _io
+            bio = _io.BytesIO(content)
+            name = (meta.get("filename") or "").lower()
+            df = None
+            if name.endswith(".csv"):
+                df = pd.read_csv(bio)
+            elif name.endswith(".xlsx") or name.endswith(".xls"):
+                df = pd.read_excel(bio)
+            elif name.endswith(".json"):
+                import json as _json
+                arr = _json.loads(content.decode("utf-8"))
+                if isinstance(arr, list):
+                    rows = [r for r in arr if isinstance(r, dict)]
+            if df is not None:
+                rows = df.to_dict(orient="records")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to parse staged file: {e}")
+    
+    if not rows:
+        raise HTTPException(status_code=400, detail="No data in staged file")
+    
+    # Write to Delta table
+    try:
+        _delta_adapter.append_to_main(project_id, dataset_id, rows)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to write to Delta: {e}")
+    
+    # Clean up staging
+    shutil.rmtree(staging_dir, ignore_errors=True)
     
     return {"ok": True, "inserted": len(rows)}
 

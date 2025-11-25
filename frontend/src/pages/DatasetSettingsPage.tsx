@@ -61,7 +61,7 @@ export default function DatasetSettingsPage() {
       {/* Content */}
       <div className="max-w-[95%] mx-auto px-6 py-8">
         {error && <Alert type="error" message={error} onClose={() => setError('')} />}
-        {toast && <Alert type="success" message={toast} onClose={() => setToast('')} />}
+        {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss={true} />}
 
         <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">

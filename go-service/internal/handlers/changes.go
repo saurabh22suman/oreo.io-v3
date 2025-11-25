@@ -180,7 +180,9 @@ func ChangeApprove(c *gin.Context) {
 			if strings.TrimSpace(pyBase) == "" { pyBase = "http://python-service:8000" }
 			var mpBuf bytes.Buffer
 			mw := multipart.NewWriter(&mpBuf)
-			_ = mw.WriteField("table", fmt.Sprintf("%d", ds.ID))
+			// Use hierarchical path (project_id + dataset_id) for proper main table location
+			_ = mw.WriteField("project_id", fmt.Sprintf("%d", pid))
+			_ = mw.WriteField("dataset_id", fmt.Sprintf("%d", ds.ID))
 			fw, _ := mw.CreateFormFile("file", payload.Filename)
 			_, _ = fw.Write(up.Content)
 			_ = mw.Close()

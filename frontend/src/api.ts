@@ -286,6 +286,48 @@ export async function prepareDataset(projectId: number, fields: { name: string; 
   }
   return r.json()
 }
+
+// Stage upload - first step of two-step dataset creation
+export async function stageUpload(projectId: number, file: File): Promise<{ staging_id: string; filename: string; row_count: number; schema: any }> {
+  const form = new FormData()
+  form.append('project_id', String(projectId))
+  form.append('file', file)
+  const r = await fetch(`${API_BASE}/datasets/stage-upload`, { method: 'POST', headers: { ...authHeaders() }, body: form })
+  if (!r.ok) {
+    try { const b = await r.json(); throw new Error(b?.message || b?.error || 'Stage upload failed') } catch (e: any) { throw new Error(e?.message || 'Stage upload failed') }
+  }
+  return r.json()
+}
+
+// Finalize dataset - second step of two-step dataset creation
+export async function finalizeDataset(params: { 
+  project_id: number; 
+  staging_id: string; 
+  name: string; 
+  schema: string; 
+  table: string; 
+  target_schema: string; 
+  source: string 
+}): Promise<{ id: number; project_id: number; name: string }> {
+  const r = await fetch(`${API_BASE}/datasets/finalize`, { 
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json', ...authHeaders() }, 
+    body: JSON.stringify(params) 
+  })
+  if (!r.ok) {
+    try { const b = await r.json(); throw new Error(b?.message || b?.error || 'Finalize failed') } catch (e: any) { throw new Error(e?.message || 'Finalize failed') }
+  }
+  return r.json()
+}
+
+// Delete staged upload
+export async function deleteStagedUpload(stagingId: string): Promise<void> {
+  const r = await fetch(`${API_BASE}/datasets/staging/${stagingId}`, { method: 'DELETE', headers: { ...authHeaders() } })
+  if (!r.ok) {
+    console.warn('Failed to delete staged upload:', stagingId)
+  }
+}
+
 export async function getDatasetSchemaTop(datasetId: number) {
   const r = await fetch(`${API_BASE}/datasets/${datasetId}/schema`, { headers: { ...authHeaders() } })
   if (!r.ok) throw new Error(await r.text()); return r.json()

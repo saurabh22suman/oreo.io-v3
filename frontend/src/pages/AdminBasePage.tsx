@@ -88,7 +88,7 @@ export default function AdminBasePage(){
             <button className="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50" onClick={()=>{ setPwd(''); sessionStorage.removeItem('adminPwd'); setUsers([]) }}>Clear password</button>
           </div>
           {error && <Alert type="error" message={error} onClose={()=>setError('')} />}
-          {status && <Alert type="success" message={status} onClose={()=>setStatus('')} />}
+          {status && <Alert type="success" message={status} onClose={()=>setStatus('')} autoDismiss={true} />}
 
           <div className="border border-gray-200 bg-white rounded-md p-3 mb-3">
             <div className="text-sm font-medium mb-2">Create user</div>

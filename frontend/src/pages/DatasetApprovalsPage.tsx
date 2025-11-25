@@ -87,7 +87,7 @@ export default function DatasetApprovalsPage() {
       </div>
 
       {error && <Alert type="error" message={error} onClose={() => setError('')} />}
-      {toast && <Alert type="success" message={toast} onClose={() => setToast('')} />}
+      {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss={true} />}
 
       <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-white dark:bg-slate-800/50">

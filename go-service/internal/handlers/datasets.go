@@ -879,6 +879,240 @@ func DatasetsPrepare(c *gin.Context) {
 	c.JSON(201, gin.H{"id": ds.ID, "project_id": ds.ProjectID, "name": ds.Name})
 }
 
+// DatasetsStageUpload uploads a file to staging without creating a dataset.
+// This is the first step of a two-step dataset creation flow.
+// Returns a staging_id that can be used with DatasetsFinalize.
+func DatasetsStageUpload(c *gin.Context) {
+	pidStr := strings.TrimSpace(c.PostForm("project_id"))
+	pid, _ := strconv.Atoi(pidStr)
+	if pid == 0 {
+		c.JSON(400, gin.H{"error": "project_required"})
+		return
+	}
+	if !HasProjectRole(c, uint(pid), "owner", "contributor") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+
+	file, header, err := c.Request.FormFile("file")
+	if err != nil || file == nil || header == nil {
+		c.JSON(400, gin.H{"error": "file_required", "message": "Please upload a file"})
+		return
+	}
+	defer file.Close()
+
+	if header.Size > maxUploadBytes {
+		respondTooLarge(c)
+		return
+	}
+
+	// Read file content
+	contentBytes, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid_file"})
+		return
+	}
+
+	// Forward to Python service staging endpoint
+	pyBase := getPythonServiceURL()
+	if pyBase == "" {
+		pyBase = "http://python-service:8000"
+	}
+
+	var mpBuf bytes.Buffer
+	mw := multipart.NewWriter(&mpBuf)
+	fw, _ := mw.CreateFormFile("file", header.Filename)
+	_, _ = fw.Write(contentBytes)
+	mw.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, pyBase+"/staging/upload", &mpBuf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp == nil {
+		c.JSON(502, gin.H{"error": "staging_service_unreachable"})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		c.JSON(resp.StatusCode, gin.H{"error": "staging_failed", "message": string(b)})
+		return
+	}
+
+	var stagingResp struct {
+		StagingID string         `json:"staging_id"`
+		Filename  string         `json:"filename"`
+		RowCount  int            `json:"row_count"`
+		Schema    map[string]any `json:"schema"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&stagingResp); err != nil {
+		c.JSON(500, gin.H{"error": "invalid_staging_response"})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"staging_id": stagingResp.StagingID,
+		"filename":   stagingResp.Filename,
+		"row_count":  stagingResp.RowCount,
+		"schema":     stagingResp.Schema,
+	})
+}
+
+// DatasetsFinalize creates a dataset from a staged upload.
+// This is the second step of the two-step dataset creation flow.
+func DatasetsFinalize(c *gin.Context) {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
+
+	var body struct {
+		ProjectID  int    `json:"project_id"`
+		StagingID  string `json:"staging_id"`
+		Name       string `json:"name"`
+		Schema     string `json:"schema"`       // JSON schema string
+		Table      string `json:"table"`        // Target table name
+		TargetSchema string `json:"target_schema"` // Target schema name (e.g., "public")
+		Source     string `json:"source"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": "invalid_payload"})
+		return
+	}
+
+	if body.ProjectID == 0 {
+		c.JSON(400, gin.H{"error": "project_required"})
+		return
+	}
+	if body.StagingID == "" {
+		c.JSON(400, gin.H{"error": "staging_id_required"})
+		return
+	}
+	if body.Name == "" {
+		c.JSON(400, gin.H{"error": "name_required"})
+		return
+	}
+	if !HasProjectRole(c, uint(body.ProjectID), "owner", "contributor") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+
+	// Create the dataset record
+	cfg := config.Get()
+	backend := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
+	if backend == "" {
+		backend = "postgres"
+	}
+
+	tableName := strings.ToLower(strings.TrimSpace(body.Table))
+	schemaName := strings.TrimSpace(body.TargetSchema)
+	if schemaName == "" {
+		schemaName = "public"
+	}
+
+	// Check for duplicate table
+	if schemaName != "" && tableName != "" {
+		var existing models.Dataset
+		if err := gdb.Where("project_id = ? AND LOWER(target_schema) = ? AND LOWER(target_table) = ?", 
+			body.ProjectID, strings.ToLower(schemaName), tableName).First(&existing).Error; err == nil {
+			c.JSON(409, gin.H{"error": "dataset_exists", "message": "A dataset for this schema.table already exists."})
+			return
+		}
+	}
+
+	ds := models.Dataset{
+		ProjectID:      uint(body.ProjectID),
+		Name:           body.Name,
+		Source:         body.Source,
+		TargetSchema:   schemaName,
+		TargetTable:    tableName,
+		StorageBackend: backend,
+		Schema:         body.Schema,
+	}
+	if err := gdb.Create(&ds).Error; err != nil {
+		log.Printf("DatasetsFinalize: create dataset record failed: %v", err)
+		c.JSON(409, gin.H{"error": "name_conflict"})
+		return
+	}
+
+	// Ensure Delta table structure
+	if strings.EqualFold(ds.StorageBackend, "delta") {
+		if err := ensureDeltaTable(&ds); err != nil {
+			log.Printf("DatasetsFinalize: ensureDeltaTable failed: %v", err)
+			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+			c.JSON(500, gin.H{"error": "delta_ensure_failed", "message": err.Error()})
+			return
+		}
+	}
+
+	// Finalize the staged data by calling Python service
+	pyBase := getPythonServiceURL()
+	if pyBase == "" {
+		pyBase = "http://python-service:8000"
+	}
+
+	var mpBuf bytes.Buffer
+	mw := multipart.NewWriter(&mpBuf)
+	_ = mw.WriteField("project_id", fmt.Sprintf("%d", ds.ProjectID))
+	_ = mw.WriteField("dataset_id", fmt.Sprintf("%d", ds.ID))
+	mw.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, pyBase+"/staging/"+body.StagingID+"/finalize", &mpBuf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp == nil {
+		_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+		c.JSON(502, gin.H{"error": "staging_service_unreachable"})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+		c.JSON(resp.StatusCode, gin.H{"error": "finalize_failed", "message": string(b)})
+		return
+	}
+
+	// Update metadata
+	upsertDatasetMeta(gdb, &ds)
+
+	c.JSON(201, gin.H{
+		"id":         ds.ID,
+		"project_id": ds.ProjectID,
+		"name":       ds.Name,
+	})
+}
+
+// DatasetsStageDelete deletes a staged upload (cleanup).
+func DatasetsStageDelete(c *gin.Context) {
+	stagingID := c.Param("staging_id")
+	if stagingID == "" {
+		c.JSON(400, gin.H{"error": "staging_id_required"})
+		return
+	}
+
+	pyBase := getPythonServiceURL()
+	if pyBase == "" {
+		pyBase = "http://python-service:8000"
+	}
+
+	req, _ := http.NewRequest(http.MethodDelete, pyBase+"/staging/"+stagingID, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp == nil {
+		c.JSON(502, gin.H{"error": "staging_service_unreachable"})
+		return
+	}
+	defer resp.Body.Close()
+
+	c.JSON(200, gin.H{"ok": true})
+}
+
 // Helper to load dataset and check project-scoped permission
 func datasetWithAccess(c *gin.Context, id uint, roles ...string) (*models.Dataset, bool) {
 	gdb := dbpkg.Get()
@@ -1961,7 +2195,70 @@ func AppendValidate(c *gin.Context) {
 	if pyBase == "" {
 		pyBase = "http://python-service:8000"
 	}
-	// Sample rows for validation
+
+	// Step 1: Check schema compatibility first (column matching)
+	var schemaMismatch *gin.H
+	if strings.TrimSpace(ds.Schema) != "" {
+		var cmpBuf bytes.Buffer
+		cmpWriter := multipart.NewWriter(&cmpBuf)
+		cmpFile, _ := cmpWriter.CreateFormFile("file", filepath.Base(header.Filename))
+		io.Copy(cmpFile, bytes.NewReader(up.Content))
+		_ = cmpWriter.WriteField("expected_schema", ds.Schema)
+		cmpWriter.Close()
+
+		cmpReq, _ := http.NewRequest(http.MethodPost, pyBase+"/compare-schema", &cmpBuf)
+		cmpReq.Header.Set("Content-Type", cmpWriter.FormDataContentType())
+		cmpResp, cmpErr := http.DefaultClient.Do(cmpReq)
+		if cmpErr == nil && cmpResp != nil {
+			defer cmpResp.Body.Close()
+			cmpBody, _ := io.ReadAll(cmpResp.Body)
+			var cmpResult struct {
+				Compatible     bool     `json:"compatible"`
+				MissingColumns []string `json:"missing_columns"`
+				ExtraColumns   []string `json:"extra_columns"`
+				TypeMismatches []struct {
+					Column       string `json:"column"`
+					ExpectedType string `json:"expected_type"`
+					ActualType   string `json:"actual_type"`
+					Message      string `json:"message"`
+				} `json:"type_mismatches"`
+				Messages []string `json:"messages"`
+				Summary  string   `json:"summary"`
+			}
+			if json.Unmarshal(cmpBody, &cmpResult) == nil && !cmpResult.Compatible {
+				// Schema mismatch detected - build user-friendly error
+				var userMessage string
+				if len(cmpResult.MissingColumns) > 0 {
+					userMessage = fmt.Sprintf("The data you are trying to upload does not match the destination schema. Missing columns: %s. Please contact your admin to review the data structure.", strings.Join(cmpResult.MissingColumns, ", "))
+				} else if len(cmpResult.TypeMismatches) > 0 {
+					userMessage = fmt.Sprintf("The data you are trying to upload has column type mismatches. %s. Please contact your admin to review the data format.", cmpResult.TypeMismatches[0].Message)
+				} else {
+					userMessage = "The data you are trying to upload does not match the destination schema. Please contact your admin to review."
+				}
+				schemaMismatch = &gin.H{
+					"ok":              false,
+					"upload_id":       up.ID,
+					"schema_mismatch": true,
+					"error":           "schema_mismatch",
+					"message":         userMessage,
+					"details": gin.H{
+						"missing_columns": cmpResult.MissingColumns,
+						"extra_columns":   cmpResult.ExtraColumns,
+						"type_mismatches": cmpResult.TypeMismatches,
+						"messages":        cmpResult.Messages,
+					},
+				}
+			}
+		}
+	}
+
+	// If schema mismatch found, return early with user-friendly message
+	if schemaMismatch != nil {
+		c.JSON(200, *schemaMismatch)
+		return
+	}
+
+	// Step 2: Sample rows for validation
 	var smBuf bytes.Buffer
 	smw := multipart.NewWriter(&smBuf)
 	sff, _ := smw.CreateFormFile("file", filepath.Base(header.Filename))
@@ -1981,7 +2278,7 @@ func AppendValidate(c *gin.Context) {
 	sb, _ := io.ReadAll(sresp.Body)
 	_ = json.Unmarshal(sb, &sampleResp)
 
-	// Validate against schema and rules if present
+	// Step 3: Validate against schema and rules if present
 	var schemaObj any
 	if strings.TrimSpace(ds.Schema) != "" {
 		_ = json.Unmarshal([]byte(ds.Schema), &schemaObj)
@@ -2414,14 +2711,62 @@ func AppendJSONValidate(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid_payload"})
 		return
 	}
-	// Validate via python
+
+	// Step 1: Check schema compatibility (column matching) for JSON rows
+	var schemaObj map[string]any
+	if strings.TrimSpace(ds.Schema) != "" {
+		_ = json.Unmarshal([]byte(ds.Schema), &schemaObj)
+	}
+	if schemaObj != nil {
+		// Extract expected columns from schema
+		expectedCols := make(map[string]bool)
+		if props, ok := schemaObj["properties"].(map[string]any); ok {
+			for col := range props {
+				expectedCols[col] = true
+			}
+		}
+		// Extract columns from uploaded JSON rows (check first row as sample)
+		fileCols := make(map[string]bool)
+		if len(body.Rows) > 0 {
+			for col := range body.Rows[0] {
+				fileCols[col] = true
+			}
+		}
+		// Find missing columns (expected but not in file)
+		var missingCols []string
+		for col := range expectedCols {
+			if !fileCols[col] {
+				missingCols = append(missingCols, col)
+			}
+		}
+		// Find extra columns (in file but not expected)
+		var extraCols []string
+		for col := range fileCols {
+			if !expectedCols[col] {
+				extraCols = append(extraCols, col)
+			}
+		}
+		// If there are missing columns, return schema mismatch error
+		if len(missingCols) > 0 {
+			userMessage := fmt.Sprintf("The data you are trying to upload does not match the destination schema. Missing columns: %s. Please contact your admin to review the data structure.", strings.Join(missingCols, ", "))
+			c.JSON(200, gin.H{
+				"ok":              false,
+				"schema_mismatch": true,
+				"error":           "schema_mismatch",
+				"message":         userMessage,
+				"details": gin.H{
+					"missing_columns": missingCols,
+					"extra_columns":   extraCols,
+				},
+			})
+			return
+		}
+	}
+
+	// Step 2: Validate via python
 	pyBase := getPythonServiceURL()
 	if pyBase == "" {
 		pyBase = "http://python-service:8000"
-	}
-	var schemaObj any
-	if strings.TrimSpace(ds.Schema) != "" {
-		_ = json.Unmarshal([]byte(ds.Schema), &schemaObj)
 	}
 	var rulesObj any
 	if strings.TrimSpace(ds.Rules) != "" {

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useParams } from 'react-router-dom'
-import { getDatasetDataTop, getDatasetStatsTop, getProject, getDataset } from '../api'
+import { getDatasetDataTop, getDatasetStatsTop, getProject, getDataset, getDatasetSchemaTop } from '../api'
 import Alert from '../components/Alert'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef, GridApi } from 'ag-grid-community'
@@ -164,6 +164,7 @@ export default function DatasetViewerPage() {
   const [stats, setStats] = useState<any>(null)
   const [rows, setRows] = useState<any[]>([])
   const [columns, setColumns] = useState<string[]>([])
+  const [columnMappings, setColumnMappings] = useState<Record<string, string>>({}) // originalName -> displayName
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(50)
   const [error, setError] = useState('')
@@ -203,6 +204,33 @@ export default function DatasetViewerPage() {
         setProject(await getProject(projectId))
         setDataset(await getDataset(projectId, dsId))
         setStats(await getDatasetStatsTop(dsId))
+        
+        // Fetch schema to get column mappings (originalName -> displayName)
+        try {
+          const schemaResp = await getDatasetSchemaTop(dsId)
+          if (schemaResp?.schema) {
+            const schemaObj = typeof schemaResp.schema === 'string' 
+              ? JSON.parse(schemaResp.schema) 
+              : schemaResp.schema
+            
+            // Check if schema has columnMappings or extract from properties
+            if (schemaObj.columnMappings) {
+              setColumnMappings(schemaObj.columnMappings)
+            } else if (schemaObj.properties) {
+              // Build mappings from properties.originalName -> propertyKey
+              const mappings: Record<string, string> = {}
+              Object.entries(schemaObj.properties).forEach(([key, prop]: [string, any]) => {
+                if (prop.originalName && prop.originalName !== key) {
+                  mappings[prop.originalName] = key
+                }
+              })
+              setColumnMappings(mappings)
+            }
+          }
+        } catch (schemaErr) {
+          console.warn('Could not fetch schema for column mappings:', schemaErr)
+        }
+        
         await loadData(0, 50)
       } catch (e: any) {
         setError(e.message)
@@ -242,20 +270,24 @@ export default function DatasetViewerPage() {
       }
     ];
 
-    return [...defs, ...columns.map((c) => ({
-      headerName: c,
-      field: c,
-      colId: c,
-      valueGetter: (p: any) => p?.data?.[c],
-      editable: false,
-      resizable: true,
-      sortable: true,
-      filter: true,
-      headerComponent: CustomHeader,
-      headerComponentParams: { columnType: columnTypes[c], setFilterColumn },
-      cellClass: 'text-sm text-slate-300 font-mono border-r border-slate-800',
-    }))]
-  }, [columns, columnTypes])
+    return [...defs, ...columns.map((c) => {
+      // Use display name from column mappings if available
+      const displayName = columnMappings[c] || c
+      return {
+        headerName: displayName,
+        field: c,
+        colId: c,
+        valueGetter: (p: any) => p?.data?.[c],
+        editable: false,
+        resizable: true,
+        sortable: true,
+        filter: true,
+        headerComponent: CustomHeader,
+        headerComponentParams: { columnType: columnTypes[c], setFilterColumn },
+        cellClass: 'text-sm text-slate-300 font-mono border-r border-slate-800',
+      }
+    })]
+  }, [columns, columnTypes, columnMappings])
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,

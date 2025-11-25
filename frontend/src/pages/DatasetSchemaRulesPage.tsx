@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { getDatasetSchemaTop, setDatasetRulesTop, setDatasetSchemaTop, getProject, myProjectRole } from '../api'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { getDatasetSchemaTop, setDatasetRulesTop, setDatasetSchemaTop, getProject, myProjectRole, finalizeDataset, deleteStagedUpload } from '../api'
 import Alert from '../components/Alert'
 import { Check, X, Edit2, Save } from 'lucide-react'
 
@@ -31,8 +31,23 @@ const VALIDATION_TYPES = [
 export default function DatasetSchemaRulesPage() {
   const { id, datasetId } = useParams()
   const projectId = Number(id)
-  const dsId = Number(datasetId)
+  const dsId = datasetId === 'new' ? 0 : Number(datasetId)
   const nav = useNavigate()
+  const location = useLocation()
+  
+  // Check if we're in staging mode (creating new dataset)
+  const stagingState = location.state as {
+    stagingId?: string
+    filename?: string
+    rowCount?: number
+    schema?: any
+    name?: string
+    targetSchema?: string
+    table?: string
+    source?: string
+  } | null
+  const isStagingMode = !!stagingState?.stagingId
+  
   const [project, setProject] = useState<any>(null)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
@@ -49,16 +64,22 @@ export default function DatasetSchemaRulesPage() {
 
   const [loading, setLoading] = useState(true)
 
+  // Cleanup staging on unmount if user leaves without creating
+  useEffect(() => {
+    return () => {
+      // If user navigates away from staging mode without creating, cleanup
+      // This is a best-effort cleanup; the server also has auto-cleanup
+    }
+  }, [])
+
   useEffect(() => {
     (async () => {
       try {
         setProject(await getProject(projectId))
-        const s = await getDatasetSchemaTop(dsId)
-
-        if (s?.schema) {
-          const schemaObj = typeof s.schema === 'string' ? JSON.parse(s.schema) : s.schema
-
-          // Extract columns from schema
+        
+        // If in staging mode, use the schema from state
+        if (isStagingMode && stagingState?.schema) {
+          const schemaObj = stagingState.schema
           if (schemaObj.properties) {
             const cols: ColumnSchema[] = Object.keys(schemaObj.properties).map(key => ({
               name: key,
@@ -66,10 +87,41 @@ export default function DatasetSchemaRulesPage() {
               type: schemaObj.properties[key].type || 'string'
             }))
             setColumns(cols)
+            const rules: ColumnRule[] = cols.map(col => ({
+              name: col.name,
+              required: false,
+              editable: true,
+              validationType: 'none'
+            }))
+            setColumnRules(rules)
+          }
+          setLoading(false)
+          try { const r = await myProjectRole(projectId); setRole(r.role) } catch { setRole(null) }
+          return
+        }
+        
+        // Normal mode - fetch schema from existing dataset
+        const s = await getDatasetSchemaTop(dsId)
+
+        if (s?.schema) {
+          const schemaObj = typeof s.schema === 'string' ? JSON.parse(s.schema) : s.schema
+
+          // Extract columns from schema
+          if (schemaObj.properties) {
+            const cols: ColumnSchema[] = Object.keys(schemaObj.properties).map(key => {
+              const prop = schemaObj.properties[key]
+              return {
+                name: key,
+                // Use stored originalName if available, otherwise use the key itself
+                originalName: prop.originalName || key,
+                type: prop.type || 'string'
+              }
+            })
+            setColumns(cols)
 
             // Initialize rules for each column
             const rules: ColumnRule[] = cols.map(col => ({
-              name: col.name,
+              name: col.originalName, // Use originalName for rule matching
               required: schemaObj.required?.includes(col.name) || false,
               editable: true,
               validationType: 'none'
@@ -115,15 +167,20 @@ export default function DatasetSchemaRulesPage() {
         try { const r = await myProjectRole(projectId); setRole(r.role) } catch { setRole(null) }
       } catch (e: any) { setError(e.message); setLoading(false) }
     })()
-  }, [projectId, dsId])
+  }, [projectId, dsId, isStagingMode])
 
   const handleSaveSchema = async () => {
     try {
       const properties: any = {}
       const requiredFields: string[] = []
+      const columnMappings: Record<string, string> = {} // originalName -> displayName
 
       columns.forEach(col => {
-        properties[col.name] = { type: col.type }
+        properties[col.name] = { type: col.type, originalName: col.originalName }
+        // Track column mappings for display purposes
+        if (col.name !== col.originalName) {
+          columnMappings[col.originalName] = col.name
+        }
         const rule = columnRules.find(r => r.name === col.originalName)
         if (rule?.required) requiredFields.push(col.name)
       })
@@ -131,7 +188,8 @@ export default function DatasetSchemaRulesPage() {
       const schemaObj = {
         type: 'object',
         properties,
-        ...(requiredFields.length > 0 && { required: requiredFields })
+        ...(requiredFields.length > 0 && { required: requiredFields }),
+        ...(Object.keys(columnMappings).length > 0 && { columnMappings })
       }
 
       await setDatasetSchemaTop(dsId, schemaObj)
@@ -187,15 +245,94 @@ export default function DatasetSchemaRulesPage() {
     setToast('')
     setCreating(true)
     try {
-      await handleSaveSchema()
-      await handleSaveRules()
-      setToast('Dataset created successfully')
-      setTimeout(() => nav(`/projects/${projectId}/datasets/${dsId}`), 1000)
+      // Build schema object
+      const properties: any = {}
+      const requiredFields: string[] = []
+      const columnMappings: Record<string, string> = {}
+
+      columns.forEach(col => {
+        properties[col.name] = { type: col.type, originalName: col.originalName }
+        if (col.name !== col.originalName) {
+          columnMappings[col.originalName] = col.name
+        }
+        const rule = columnRules.find(r => r.name === col.originalName)
+        if (rule?.required) requiredFields.push(col.name)
+      })
+
+      const schemaObj = {
+        type: 'object',
+        properties,
+        ...(requiredFields.length > 0 && { required: requiredFields }),
+        ...(Object.keys(columnMappings).length > 0 && { columnMappings })
+      }
+
+      if (isStagingMode && stagingState) {
+        // Finalize staging - create the actual dataset
+        const result = await finalizeDataset({
+          project_id: projectId,
+          staging_id: stagingState.stagingId!,
+          name: stagingState.name || 'Untitled Dataset',
+          schema: JSON.stringify(schemaObj),
+          table: stagingState.table || '',
+          target_schema: stagingState.targetSchema || 'public',
+          source: stagingState.source || 'local'
+        })
+        
+        // Save rules to the new dataset
+        const newDatasetId = result.id
+        try {
+          const rules: any[] = []
+          const requiredCols = columnRules.filter(r => r.required).map(r => r.name)
+          if (requiredCols.length > 0) {
+            rules.push({ type: 'required', columns: requiredCols })
+          }
+          columnRules.forEach(rule => {
+            if (rule.validationType && rule.validationType !== 'none') {
+              const ruleObj: any = { type: rule.validationType, column: rule.name }
+              if (rule.validationType === 'between') {
+                ruleObj.min = rule.validationValue
+                ruleObj.max = rule.validationValue2
+              } else {
+                ruleObj.value = rule.validationValue
+              }
+              rules.push(ruleObj)
+            }
+            if (!rule.editable) {
+              rules.push({ type: 'readonly', columns: [rule.name] })
+            }
+          })
+          await setDatasetRulesTop(newDatasetId, rules)
+        } catch (e) {
+          console.warn('Failed to save rules:', e)
+        }
+        
+        try { window.dispatchEvent(new CustomEvent('dataset:created', { detail: { projectId, datasetId: newDatasetId } })) } catch (e) { }
+        setToast('Dataset created successfully')
+        setTimeout(() => nav(`/projects/${projectId}/datasets/${newDatasetId}`), 1000)
+      } else {
+        // Normal mode - save schema and rules to existing dataset
+        await handleSaveSchema()
+        await handleSaveRules()
+        setToast('Schema and rules saved successfully')
+        setTimeout(() => nav(`/projects/${projectId}/datasets/${dsId}`), 1000)
+      }
     } catch (e: any) {
       setError(e.message || 'Failed to create dataset')
     } finally {
       setCreating(false)
     }
+  }
+
+  // Cancel staging and cleanup
+  const handleCancel = async () => {
+    if (isStagingMode && stagingState?.stagingId) {
+      try {
+        await deleteStagedUpload(stagingState.stagingId)
+      } catch (e) {
+        console.warn('Failed to cleanup staging:', e)
+      }
+    }
+    nav(`/projects/${projectId}`)
   }
 
   if (loading) {
@@ -211,21 +348,53 @@ export default function DatasetSchemaRulesPage() {
   return (
     <div className="max-w-7xl mx-auto py-8 px-4">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-[var(--text)]">Schema & Rules</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--text)]">
+            {isStagingMode ? 'Configure Schema & Rules' : 'Schema & Rules'}
+          </h1>
+          {isStagingMode && stagingState?.name && (
+            <p className="text-[var(--text-secondary)] mt-1">
+              Dataset: <span className="font-medium text-[var(--text)]">{stagingState.name}</span>
+              {stagingState.rowCount !== undefined && (
+                <span className="ml-2">({stagingState.rowCount} rows)</span>
+              )}
+            </p>
+          )}
+        </div>
         <div className="flex items-center gap-3">
-          <Link to={`/projects/${projectId}`} className="text-[var(--primary)] hover:underline text-sm">Back</Link>
-          <button
-            disabled={role === 'viewer' || creating}
-            className="btn-primary"
-            onClick={handleCreateDataset}
-          >
-            {creating ? 'Creating…' : 'Create Dataset'}
-          </button>
+          {isStagingMode ? (
+            <>
+              <button
+                onClick={handleCancel}
+                className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={role === 'viewer' || creating}
+                className="btn-primary"
+                onClick={handleCreateDataset}
+              >
+                {creating ? 'Creating…' : 'Create Dataset'}
+              </button>
+            </>
+          ) : (
+            <>
+              <Link to={`/projects/${projectId}`} className="text-[var(--primary)] hover:underline text-sm">Back</Link>
+              <button
+                disabled={role === 'viewer' || creating}
+                className="btn-primary"
+                onClick={handleCreateDataset}
+              >
+                {creating ? 'Saving…' : 'Save Changes'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {error && <Alert type="error" message={error} onClose={() => setError('')} />}
-      {toast && <Alert type="success" message={toast} onClose={() => setToast('')} />}
+      {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss={true} />}
 
       {/* Tabs */}
       <div className="border-b border-[var(--divider)] mb-6">

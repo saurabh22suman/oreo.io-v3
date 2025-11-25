@@ -79,6 +79,7 @@ export default function App() {
         <Route path="/projects/:id/datasets/:datasetId/settings" element={<DatasetSettingsPage />} />
         <Route path="/projects/:id/members" element={<MembersPage />} />
         <Route path="/projects/:id/datasets/new" element={<ProjectRoleGuard allow={['owner', 'contributor']}><DatasetCreatePage /></ProjectRoleGuard>} />
+        <Route path="/projects/:id/datasets/new/schema" element={<ProjectRoleGuard allow={['owner', 'contributor']}><DatasetSchemaRulesPage /></ProjectRoleGuard>} />
         <Route path="/projects/:id/datasets/:datasetId/schema" element={<DatasetSchemaRulesPage />} />
         <Route path="/projects/:id/datasets/:datasetId/append" element={<ProjectRoleGuard allow={['owner', 'contributor']}><DatasetAppendFlowPage /></ProjectRoleGuard>} />
         <Route path="/projects/:id/datasets/:datasetId/approvals" element={<DatasetApprovalsPage />} />

@@ -50,7 +50,7 @@ export default function DatasetDetailsPage() {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {error && <Alert type="error" message={error} onClose={() => setError('')} />}
-      {toast && <Alert type="success" message={toast} onClose={() => setToast('')} />}
+      {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss={true} />}
 
       {/* Header Section */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 text-white shadow-2xl shadow-slate-900/20">

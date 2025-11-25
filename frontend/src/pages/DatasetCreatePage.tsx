@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { checkTableExists, createDatasetTop, getProject, myProjectRole, prepareDataset, inferSchemaFromFile, setDatasetSchemaTop, getDatasetSchemaTop } from '../api'
+import { checkTableExists, createDatasetTop, getProject, myProjectRole, stageUpload, inferSchemaFromFile } from '../api'
 import Alert from '../components/Alert'
 import { Upload, File as FileIcon, X, Database, Cloud, Server, HardDrive, ArrowRight } from 'lucide-react'
 
@@ -156,25 +156,35 @@ export default function DatasetCreatePage() {
     try {
       let resp: any
       if (source === 'local') {
-        setCreatingStage(localFile ? 'uploading' : 'creating')
-        resp = await prepareDataset(projectId, { name, schema: s, table: tClean, source }, localFile || undefined)
-        const datasetId = resp?.id
-
-        if (datasetId && localFile) {
+        // Stage upload - don't create dataset yet, just upload to staging
+        setCreatingStage('uploading')
+        const stagingResp = await stageUpload(projectId, localFile!)
+        
+        // Infer schema from file
+        let schemaObj = stagingResp.schema
+        if (!schemaObj && localFile) {
           try {
             setCreatingStage('inferring')
             const inf = await inferSchemaFromFile(localFile)
-            const schemaObj = inf?.schema ?? inf
-            if (schemaObj) {
-              setCreatingStage('finalizing')
-              await setDatasetSchemaTop(datasetId, schemaObj)
-            }
+            schemaObj = inf?.schema ?? inf
           } catch (e) {
-            // Ignore inference errors, proceed
+            // Ignore inference errors
           }
         }
-        try { window.dispatchEvent(new CustomEvent('dataset:created', { detail: { projectId, datasetId } })) } catch (e) { }
-        nav(`/projects/${projectId}/datasets/${resp.id}/schema`)
+        
+        // Navigate to schema page with staging info
+        nav(`/projects/${projectId}/datasets/new/schema`, { 
+          state: { 
+            stagingId: stagingResp.staging_id,
+            filename: stagingResp.filename,
+            rowCount: stagingResp.row_count,
+            schema: schemaObj,
+            name,
+            targetSchema: s,
+            table: tClean,
+            source
+          } 
+        })
       } else {
         const sourceConfig: any = { type: source }
         if (source === 's3') sourceConfig.s3 = { ...s3Cfg }
@@ -305,7 +315,7 @@ export default function DatasetCreatePage() {
                 disabled={creating}
                 className="btn-primary"
               >
-                {creating ? 'Creating...' : 'Create Dataset'}
+                {creating ? 'Processing...' : 'Proceed'}
               </button>
             </div>
           </div>
@@ -427,7 +437,7 @@ export default function DatasetCreatePage() {
               <div className="flex justify-end gap-3 pt-6 border-t border-[var(--divider)]">
                 <button onClick={() => setShowConnectorModal(false)} className="px-5 py-2 text-sm font-medium text-[var(--text)] hover:bg-[var(--bg-page)] rounded-lg transition-colors">Cancel</button>
                 <button onClick={handleCreate} disabled={creating} className="btn-primary">
-                  {creating ? 'Creating...' : 'Create Dataset'}
+                  {creating ? 'Processing...' : 'Proceed'}
                 </button>
               </div>
             </div>

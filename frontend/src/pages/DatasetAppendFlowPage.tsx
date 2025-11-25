@@ -226,7 +226,7 @@ export default function DatasetAppendFlowPage() {
             onClose={() => setValidationDetails(null)}
           />
         )}
-        {toast && <Alert type="success" message={toast} onClose={() => setToast('')} />}
+        {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss={true} />}
 
         {!file ? (
           /* Drag and Drop Area */
@@ -453,6 +453,12 @@ export default function DatasetAppendFlowPage() {
                       const v = await validateEditedJSONTop(dsId, normalized, (file?.name?.replace(/\.[^.]+$/, '') || 'edited') + '.json')
                       if (!v?.ok) {
                         setSubmitDialog(false)
+                        // Check for schema mismatch (column structure issues)
+                        if (v?.schema_mismatch || v?.error === 'schema_mismatch') {
+                          setError(v?.message || 'The data you are trying to upload does not match the destination schema. Please contact your admin to review.')
+                          setValidationDetails({ schema_mismatch: true, ...v?.details })
+                          return
+                        }
                         setError('Validation failed. See details below.')
                         const details = { schema: v?.schema, rules: v?.rules }
                         setValidationDetails(details)
@@ -469,6 +475,12 @@ export default function DatasetAppendFlowPage() {
                       const v = await appendDatasetDataTop(dsId, file)
                       if (!v?.ok) {
                         setSubmitDialog(false)
+                        // Check for schema mismatch (column structure issues)
+                        if (v?.schema_mismatch || v?.error === 'schema_mismatch') {
+                          setError(v?.message || 'The data you are trying to upload does not match the destination schema. Please contact your admin to review.')
+                          setValidationDetails({ schema_mismatch: true, ...v?.details })
+                          return
+                        }
                         setError('Validation failed. See details below.')
                         const details = { schema: v?.schema, rules: v?.rules }
                         setValidationDetails(details)
@@ -499,6 +511,26 @@ export default function DatasetAppendFlowPage() {
 function formatValidationDetails(v: any): string {
   if (!v) return ''
   const parts: string[] = []
+  
+  // Handle schema mismatch (column structure issues)
+  if (v.schema_mismatch) {
+    if (v.missing_columns?.length) {
+      parts.push(`Missing columns: ${v.missing_columns.join(', ')}`)
+    }
+    if (v.extra_columns?.length) {
+      parts.push(`Extra columns (will be ignored): ${v.extra_columns.join(', ')}`)
+    }
+    if (v.type_mismatches?.length) {
+      const lines = v.type_mismatches.map((tm: any) => tm.message || `Column '${tm.column}' type mismatch`)
+      parts.push(lines.join('\n'))
+    }
+    if (v.messages?.length) {
+      parts.push(v.messages.join('\n'))
+    }
+    if (parts.length) return parts.join('\n')
+    return 'Schema mismatch detected. Please contact your admin to review.'
+  }
+  
   if (v.schema && typeof v.schema === 'object') {
     const se = (v.schema.errors || []) as Array<any>
     if (Array.isArray(se) && se.length) {

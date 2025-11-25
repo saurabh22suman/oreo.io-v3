@@ -242,6 +242,10 @@ func SetupRouter() *gin.Engine {
 		{
 			dsTop.POST("", DatasetsCreateTop)
 			dsTop.POST("/prepare", DatasetsPrepare)
+			// Staged upload flow (two-step creation)
+			dsTop.POST("/stage-upload", DatasetsStageUpload)
+			dsTop.POST("/finalize", DatasetsFinalize)
+			dsTop.DELETE("/staging/:staging_id", DatasetsStageDelete)
 			dsTop.GET(":id/schema", DatasetSchemaGet)
 			dsTop.POST(":id/schema", DatasetSchemaSet)
 			dsTop.POST(":id/rules", DatasetRulesSet)
