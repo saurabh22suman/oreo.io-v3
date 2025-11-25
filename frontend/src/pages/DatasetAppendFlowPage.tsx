@@ -29,6 +29,8 @@ export default function DatasetAppendFlowPage() {
   const [invalidCells, setInvalidCells] = useState<Array<{ row: number; column: string }>>([])
   const [role, setRole] = useState<'owner' | 'contributor' | 'viewer' | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [editedCells, setEditedCells] = useState<Array<{ rowIndex: number; column: string; oldValue: any; newValue: any }>>([])
+
 
   const typeMap = useMemo(() => {
     try {
@@ -231,8 +233,8 @@ export default function DatasetAppendFlowPage() {
           <div className="space-y-6">
             <div
               className={`border-2 border-dashed rounded-2xl p-16 text-center transition-all duration-300 cursor-pointer ${isDragging
-                  ? 'border-blue-500 bg-blue-500/5 scale-[1.01]'
-                  : 'border-slate-300 dark:border-slate-600 hover:border-blue-500 hover:bg-slate-100 dark:hover:bg-slate-800/50'
+                ? 'border-blue-500 bg-blue-500/5 scale-[1.01]'
+                : 'border-slate-300 dark:border-slate-600 hover:border-blue-500 hover:bg-slate-100 dark:hover:bg-slate-800/50'
                 }`}
               onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
               onDragLeave={() => setIsDragging(false)}
@@ -345,9 +347,11 @@ export default function DatasetAppendFlowPage() {
         compact={openMode === 'preview' || openMode === 'edit'}
         invalidRows={invalidRows}
         invalidCells={invalidCells}
-        onSave={openMode === 'edit' ? async (updated) => {
+        editedCells={editedCells}
+        onSave={openMode === 'edit' ? async (updated, edits) => {
           const normalized = normalizeRowsBySchema(updated);
           setRows(normalized);
+          setEditedCells(edits || []);
           setToast('Edits saved locally. They will be validated on Submit.');
           resetValidationMarks();
           setOpen(false)
@@ -458,7 +462,7 @@ export default function DatasetAppendFlowPage() {
                       }
                       const res = await fetch(`${(import.meta as any).env?.VITE_API_BASE || '/api'}/datasets/${dsId}/data/append/open`, {
                         method: 'POST', headers: { 'Content-Type': 'application/json', ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}) },
-                        body: JSON.stringify({ upload_id: v.upload_id, reviewer_ids: selectedReviewerIds, title, comment })
+                        body: JSON.stringify({ upload_id: v.upload_id, reviewer_ids: selectedReviewerIds, title, comment, edited_cells: editedCells })
                       })
                       if (res.ok) { setSubmitDialog(false); resetAppendState(); setToast('Change Request submitted') } else { setSubmitDialog(false); setError('Submit failed') }
                     } else {
@@ -474,7 +478,7 @@ export default function DatasetAppendFlowPage() {
                       }
                       const res = await fetch(`${(import.meta as any).env?.VITE_API_BASE || '/api'}/datasets/${dsId}/data/append/open`, {
                         method: 'POST', headers: { 'Content-Type': 'application/json', ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}) },
-                        body: JSON.stringify({ upload_id: v.upload_id, reviewer_ids: selectedReviewerIds, title, comment })
+                        body: JSON.stringify({ upload_id: v.upload_id, reviewer_ids: selectedReviewerIds, title, comment, edited_cells: editedCells })
                       })
                       if (res.ok) { setSubmitDialog(false); resetAppendState(); setToast('Change Request submitted') } else { setSubmitDialog(false); setError('Submit failed') }
                     }

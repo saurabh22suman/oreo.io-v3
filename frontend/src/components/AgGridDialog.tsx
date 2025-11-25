@@ -1,11 +1,18 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose, DialogDescription } from './ui/dialog'
 import { AgGridReact } from 'ag-grid-react'
-import type { ColDef, GridApi, CellValueChangedEvent } from 'ag-grid-community'
+import type { ColDef, GridApi, CellValueChangedEvent, ICellRendererParams } from 'ag-grid-community'
 import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community'
 ModuleRegistry.registerModules([AllCommunityModule])
 import 'ag-grid-community/styles/ag-theme-quartz.css'
 import { ChevronLeft, ChevronRight, Download, FileText, FileSpreadsheet, RotateCcw, Save } from 'lucide-react'
+
+type EditedCell = {
+  rowIndex: number
+  column: string
+  oldValue: any
+  newValue: any
+}
 
 type Props = {
   open: boolean
@@ -15,11 +22,37 @@ type Props = {
   pageSize?: number
   onOpenChange: (v: boolean) => void
   allowEdit?: boolean
-  onSave?: (rows: any[]) => void | Promise<void>
+  onSave?: (rows: any[], editedCells: EditedCell[]) => void | Promise<void>
   onFetchMore?: () => Promise<any[] | { data: any[] }>
   compact?: boolean
   invalidCells?: Array<{ row: number; column: string }>
   invalidRows?: number[]
+  editedCells?: EditedCell[]
+}
+
+const EditedCellRenderer = (params: any) => {
+  const { value, editedCellMap, node, colDef } = params
+  const rowIndex = node?.rowIndex ?? -1
+  const c = colDef?.field
+  const editInfo = editedCellMap?.get(`${rowIndex}|${c}`)
+
+  if (!editInfo) {
+    return <span>{value}</span>
+  }
+
+  return (
+    <div className="group relative w-full h-full flex items-center">
+      <span>{value}</span>
+      <div className="invisible group-hover:visible absolute z-50 bottom-full left-0 mb-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg shadow-xl text-xs whitespace-nowrap pointer-events-none">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 line-through">{String(editInfo.oldValue)}</span>
+          <span className="text-slate-500">→</span>
+          <span className="text-green-400 font-semibold">{String(editInfo.newValue)}</span>
+        </div>
+        <div className="absolute bottom-0 left-4 transform translate-y-1/2 rotate-45 w-2 h-2 bg-slate-900 border-r border-b border-slate-700"></div>
+      </div>
+    </div>
+  )
 }
 
 export default function AgGridDialog({
@@ -34,13 +67,15 @@ export default function AgGridDialog({
   onFetchMore,
   compact = false,
   invalidCells = [],
-  invalidRows = []
+  invalidRows = [],
+  editedCells: externalEditedCells = []
 }: Props) {
   const gridRef = useRef<AgGridReact>(null)
   const [api, setApi] = useState<GridApi | null>(null)
   const [colApi, setColApi] = useState<any>(null)
   const [localRows, setLocalRows] = useState<any[]>(rows || [])
   const originalRowsRef = useRef<any[]>(Array.isArray(rows) ? JSON.parse(JSON.stringify(rows)) : [])
+  const [editedCells, setEditedCells] = useState<EditedCell[]>(externalEditedCells || [])
 
   const invalidCellSet = useMemo(() => {
     const s = new Set<string>()
@@ -54,10 +89,23 @@ export default function AgGridDialog({
 
   const invalidRowSet = useMemo(() => new Set<number>((invalidRows || []).filter((n) => typeof n === 'number')), [invalidRows])
 
-  useMemo(() => {
+  // Map for quick lookup of edited cells
+  const editedCellMap = useMemo(() => {
+    const map = new Map<string, EditedCell>()
+    for (const edit of editedCells) {
+      map.set(`${edit.rowIndex}|${edit.column}`, edit)
+    }
+    return map
+  }, [editedCells])
+
+  useEffect(() => {
     setLocalRows(rows || [])
     originalRowsRef.current = Array.isArray(rows) ? JSON.parse(JSON.stringify(rows)) : []
-  }, [rows])
+    // If external edited cells are provided, use them
+    if (externalEditedCells && externalEditedCells.length > 0) {
+      setEditedCells(externalEditedCells)
+    }
+  }, [rows, externalEditedCells])
 
   const colDefs = useMemo<ColDef[]>(() => {
     return columns.map((c) => ({
@@ -69,17 +117,27 @@ export default function AgGridDialog({
       editable: !!allowEdit,
       resizable: true,
       suppressSizeToFit: false,
+      cellRenderer: EditedCellRenderer,
+      cellRendererParams: { editedCellMap },
       cellStyle: (p: any) => {
         const ri = p?.rowIndex
         const key = `${typeof ri === 'number' ? ri : -1}|${c}`
+
+        // Invalid cells (red)
         if ((typeof ri === 'number' && invalidRowSet.has(ri)) || invalidCellSet.has(key)) {
           return { backgroundColor: '#7F1D1D', color: '#FCA5A5' }
         }
+
+        // Edited cells (blue/highlight)
+        if (editedCellMap.has(key)) {
+          return { backgroundColor: '#1e3a5f', color: '#93c5fd', fontWeight: '600' }
+        }
+
         return undefined
       },
       cellClass: 'text-sm text-slate-300 font-mono border-r border-slate-800',
     }))
-  }, [columns, allowEdit, invalidCellSet, invalidRowSet])
+  }, [columns, allowEdit, invalidCellSet, invalidRowSet, editedCellMap])
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
@@ -103,6 +161,34 @@ export default function AgGridDialog({
       e.node.setDataValue(e.colDef.field!, e.oldValue)
       if (api) { api.showLoadingOverlay(); setTimeout(() => api.hideOverlay(), 300) }
       alert('Value required')
+      return
+    }
+
+    // Track the edit
+    const rowIndex = e.node.rowIndex
+    const column = e.colDef.field!
+    const key = `${rowIndex}|${column}`
+
+    // Get the original value from the snapshot
+    const originalValue = originalRowsRef.current[rowIndex!]?.[column]
+
+    // If the new value equals the original, remove from edits
+    if (e.newValue === originalValue) {
+      setEditedCells(prev => prev.filter(edit => `${edit.rowIndex}|${edit.column}` !== key))
+    } else {
+      // Add or update the edit
+      setEditedCells(prev => {
+        const filtered = prev.filter(edit => `${edit.rowIndex}|${edit.column}` !== key)
+        return [
+          ...filtered,
+          {
+            rowIndex: rowIndex!,
+            column,
+            oldValue: originalValue,
+            newValue: e.newValue
+          }
+        ]
+      })
     }
   }, [api])
 
@@ -113,12 +199,13 @@ export default function AgGridDialog({
     if (!onSave || !api) return
     const data: any[] = []
     api.forEachNode((node) => { if (node?.data) data.push(node.data) })
-    await onSave(data)
-  }, [onSave, api])
+    await onSave(data, editedCells)
+  }, [onSave, api, editedCells])
 
   const handleUndo = useCallback(() => {
     const snapshot = Array.isArray(originalRowsRef.current) ? JSON.parse(JSON.stringify(originalRowsRef.current)) : []
     setLocalRows(snapshot)
+    setEditedCells([])
     api?.setGridOption('rowData', snapshot)
   }, [api])
 
@@ -137,7 +224,16 @@ export default function AgGridDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] w-[95vw] h-[85vh] p-0 bg-[#0f172a] border-slate-700">
         <DialogHeader className="px-6 py-4 border-b border-slate-800">
-          <DialogTitle className="text-lg font-bold text-white">{title}</DialogTitle>
+          <div className="flex items-center justify-between">
+            <div>
+              <DialogTitle className="text-lg font-bold text-white">{title}</DialogTitle>
+              {editedCells.length > 0 && (
+                <p className="text-xs text-blue-400 mt-1">
+                  {editedCells.length} cell{editedCells.length !== 1 ? 's' : ''} edited
+                </p>
+              )}
+            </div>
+          </div>
           <DialogDescription className="sr-only">Data preview grid with pagination and export controls.</DialogDescription>
           <div className="flex items-center gap-2 mt-3">
             {!compact && (
@@ -244,7 +340,7 @@ export default function AgGridDialog({
             </div>
           </div>
         </DialogHeader>
-        <div className="ag-theme-databricks-dark" style={{ height: 'calc(85vh - 100px)' }}>
+        <div className="ag-theme-databricks-dark" style={{ height: 'calc(85vh - 120px)' }}>
           <AgGridReact
             ref={gridRef as any}
             columnDefs={colDefs}

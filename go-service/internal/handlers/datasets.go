@@ -2046,11 +2046,12 @@ func AppendOpen(c *gin.Context) {
 		return
 	}
 	var body struct {
-		UploadID    uint   `json:"upload_id"`
-		ReviewerID  uint   `json:"reviewer_id"`
-		ReviewerIDs []uint `json:"reviewer_ids"`
-		Title       string `json:"title"`
-		Comment     string `json:"comment"`
+		UploadID    uint             `json:"upload_id"`
+		ReviewerID  uint             `json:"reviewer_id"`
+		ReviewerIDs []uint           `json:"reviewer_ids"`
+		Title       string           `json:"title"`
+		Comment     string           `json:"comment"`
+		EditedCells []map[string]any `json:"edited_cells"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(400, gin.H{"error": "invalid_payload"})
@@ -2098,7 +2099,7 @@ func AppendOpen(c *gin.Context) {
 		return
 	}
 	// Create change request and staging ingest
-	payloadObj := map[string]any{"upload_id": up.ID, "filename": up.Filename}
+	payloadObj := map[string]any{"upload_id": up.ID, "filename": up.Filename, "edited_cells": body.EditedCells}
 	pb, _ := json.Marshal(payloadObj)
 	reviewersJSON, _ := json.Marshal(cleaned)
 	// Initialize reviewer states (pending)
