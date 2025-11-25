@@ -35,7 +35,7 @@ export default function LandingPage() {
 				<div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
 					<div className="reveal inline-flex items-center gap-2 px-4 py-2 rounded-full bg-azure-blue/10 border border-azure-blue/20 backdrop-blur-md mb-8">
 						<span className="flex h-2 w-2 rounded-full bg-azure-blue animate-pulse" />
-						<span className="text-sm font-medium text-cyan-100">Why should coders have all the fun!</span>
+						<span className="text-sm font-medium text-cyan-100">Simple for Users. Powerful for Data</span>
 					</div>
 
 					<h1 className="reveal text-5xl md:text-7xl font-bold tracking-tight mb-6">
@@ -44,8 +44,8 @@ export default function LandingPage() {
 					</h1>
 
 					<p className="reveal mt-6 text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
-						Stop writing SQL for simple fixes. <b>Oreo</b> provides a spreadsheet-like interface for your Delta Lake tables,
-						enforcing strict schemas and tracking every change.
+						Forget the SQL overhead.
+						<b>Oreo</b> provides an intuitive spreadsheet interface for business users, with built-in validation, governance, and full change tracking.
 					</p>
 
 					<div className="reveal mt-10 flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -67,7 +67,7 @@ export default function LandingPage() {
 									<div className="w-3 h-3 rounded-full bg-yellow-500/50"></div>
 									<div className="w-3 h-3 rounded-full bg-green-500/50"></div>
 								</div>
-								<div className="flex-1 text-center text-xs font-mono text-slate-500">user_transactions.delta — Oreo Editor</div>
+								<div className="flex-1 text-center text-xs font-mono text-slate-500">user_transactions.data — Oreo Editor</div>
 							</div>
 
 							{/* Mockup Body */}
@@ -142,8 +142,8 @@ export default function LandingPage() {
 					<div className="text-center mb-16">
 						<h2 className="reveal text-3xl md:text-4xl font-bold mb-4">Why use Oreo?</h2>
 						<p className="reveal text-slate-400 max-w-2xl mx-auto">
-							Managing Delta Lake shouldn't require a PhD in Data Engineering.
-							We bring the simplicity of a spreadsheet to your data lake.
+							Leave the complexity behind.
+							Experience data the way it was meant to be—simple, familiar, and effortless.
 						</p>
 					</div>
 
@@ -170,7 +170,7 @@ export default function LandingPage() {
 							</div>
 							<h3 className="text-xl font-semibold mb-3">Schema Governance</h3>
 							<p className="text-slate-400 leading-relaxed">
-								Oreo enforces your schema rules strictly. No more "schema drift" or accidental type mismatches corrupting your lake.
+								Oreo enforces your schema rules strictly. No more "schema drift" or accidental type mismatches corrupting your data.
 							</p>
 						</div>
 

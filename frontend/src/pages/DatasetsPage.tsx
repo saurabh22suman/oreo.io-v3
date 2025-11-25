@@ -53,28 +53,12 @@ export default function DatasetsPage() {
       allowed: role && role !== 'viewer'
     },
     {
-      label: 'SQL Query',
-      icon: Search,
-      path: `/projects/${projectId}/query`,
-      color: 'purple',
-      desc: 'Run SQL on your data',
-      allowed: true
-    },
-    {
       label: 'Dashboard',
       icon: LayoutDashboard,
       path: `/projects/${projectId}/dashboard`,
       color: 'emerald',
       desc: 'Visualize insights',
       allowed: true
-    },
-    {
-      label: 'Audit Log',
-      icon: FileText,
-      path: `/projects/${projectId}/audit`,
-      color: 'amber',
-      desc: 'Track changes',
-      allowed: role && role !== 'viewer'
     }
   ]
 
@@ -83,30 +67,39 @@ export default function DatasetsPage() {
       {error && <Alert type="error" message={error} onClose={() => setError('')} />}
 
       {/* Feature Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {features.map((feature, i) => (
           feature.allowed ? (
             <div
               key={i}
               onClick={() => navigate(feature.path)}
-              className="group relative p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-primary/50 dark:hover:border-primary/50 transition-all duration-300 cursor-pointer hover:shadow-lg hover:-translate-y-1"
+              className="group relative overflow-hidden p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-transparent transition-all duration-500 cursor-pointer shadow-lg shadow-slate-200/50 dark:shadow-none hover:shadow-2xl hover:-translate-y-1"
             >
-              <div className={`w-12 h-12 rounded-xl bg-${feature.color}-50 dark:bg-${feature.color}-900/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                <feature.icon className={`w-6 h-6 text-${feature.color}-600 dark:text-${feature.color}-400`} />
+              <div className={`absolute inset-0 bg-gradient-to-br from-${feature.color}-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
+              <div className={`absolute inset-0 bg-gradient-to-r from-${feature.color}-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
+
+              <div className="relative z-10 flex items-start justify-between">
+                <div>
+                  <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br from-${feature.color}-500 to-${feature.color}-600 text-white flex items-center justify-center mb-4 shadow-lg shadow-${feature.color}-500/30 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
+                    <feature.icon className="w-7 h-7" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2 group-hover:text-${feature.color}-600 dark:group-hover:text-${feature.color}-400 transition-colors">
+                    {feature.label}
+                  </h3>
+                  <p className="text-slate-500 dark:text-slate-400 font-medium">{feature.desc}</p>
+                </div>
+                <div className={`p-2 rounded-full bg-${feature.color}-50 dark:bg-${feature.color}-900/20 text-${feature.color}-600 dark:text-${feature.color}-400 opacity-0 group-hover:opacity-100 transform translate-x-4 group-hover:translate-x-0 transition-all duration-500`}>
+                  <ArrowRight className="w-5 h-5" />
+                </div>
               </div>
-              <h3 className="font-semibold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
-                {feature.label}
-                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all duration-300 text-primary" />
-              </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{feature.desc}</p>
             </div>
           ) : (
-            <div key={i} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 opacity-60 cursor-not-allowed">
-              <div className="w-12 h-12 rounded-xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center mb-4">
-                <feature.icon className="w-6 h-6 text-slate-400" />
+            <div key={i} className="p-6 rounded-3xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 opacity-60 cursor-not-allowed grayscale">
+              <div className="w-14 h-14 rounded-2xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center mb-4">
+                <feature.icon className="w-7 h-7 text-slate-400" />
               </div>
-              <h3 className="font-semibold text-slate-500 dark:text-slate-400 mb-1">{feature.label}</h3>
-              <p className="text-sm text-slate-400">{feature.desc}</p>
+              <h3 className="text-xl font-bold text-slate-500 dark:text-slate-400 mb-2">{feature.label}</h3>
+              <p className="text-slate-400 font-medium">{feature.desc}</p>
             </div>
           )
         ))}
@@ -160,7 +153,7 @@ export default function DatasetsPage() {
                       onClick={() => navigate(`/projects/${projectId}/datasets/${d.id}`)}
                       className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
                     >
-                      <td className="py-4 px-6">
+                      <td className="py-2 px-6">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
                             <Database className="w-4 h-4" />
@@ -170,12 +163,12 @@ export default function DatasetsPage() {
                           </span>
                         </div>
                       </td>
-                      <td className="py-4 px-6 text-right">
+                      <td className="py-2 px-6 text-right">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${d.schema ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'}`}>
                           {d.schema ? 'Dataset' : 'File'}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-right text-sm text-slate-500 dark:text-slate-400">
+                      <td className="py-2 px-6 text-right text-sm text-slate-500 dark:text-slate-400">
                         <div className="flex items-center justify-end gap-1.5">
                           <Clock className="w-3.5 h-3.5" />
                           {d.last_upload_at ? new Date(d.last_upload_at).toLocaleDateString() : '—'}
