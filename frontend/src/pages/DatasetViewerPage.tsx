@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useParams } from 'react-router-dom'
 import { getDatasetDataTop, getDatasetStatsTop, getProject, getDataset } from '../api'
 import Alert from '../components/Alert'
@@ -7,12 +8,23 @@ import type { ColDef, GridApi } from 'ag-grid-community'
 import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community'
 ModuleRegistry.registerModules([AllCommunityModule])
 import 'ag-grid-community/styles/ag-theme-quartz.css'
-import { ChevronLeft, Database, BarChart3, Table2, RefreshCw, Download, ChevronRight, ChevronLeft as PrevIcon, Edit3, Type, Hash, Calendar, ToggleLeft, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react'
+import {
+  ChevronLeft, Database, BarChart3, Table2, RefreshCw, Download,
+  ChevronRight, ChevronLeft as PrevIcon, Edit3, Type, Hash, Calendar,
+  ToggleLeft, FileSpreadsheet, FileText, ChevronDown, MoreVertical,
+  Filter, Copy, Pin, Clock, ArrowUp, ArrowDown, ArrowUpDown, X, Plus
+} from 'lucide-react'
 
-// Custom Header Component for Column Types
+// Custom Header Component with Sort Icons and Context Menu
 const CustomHeader = (props: any) => {
-  const { displayName, column } = props;
+  const { displayName, column, api, setFilterColumn } = props;
   const type = props.columnType || 'text';
+  const [showMenu, setShowMenu] = useState(false);
+  const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const sortState = column.getSort();
 
   const Icon = {
     text: Type,
@@ -21,10 +33,122 @@ const CustomHeader = (props: any) => {
     boolean: ToggleLeft
   }[type] || Type;
 
+  const SortIcon = sortState === 'asc' ? ArrowUp : sortState === 'desc' ? ArrowDown : ArrowUpDown;
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(event.target as Node) &&
+        buttonRef.current && !buttonRef.current.contains(event.target as Node)
+      ) {
+        setShowMenu(false);
+      }
+    };
+
+    if (showMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showMenu]);
+
+  const handleMenuClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!showMenu && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setMenuPos({ x: rect.right - 192, y: rect.bottom + 5 });
+    }
+    setShowMenu(!showMenu);
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(displayName);
+    setShowMenu(false);
+  };
+
+  const handleFilter = () => {
+    setFilterColumn({
+      name: displayName,
+      field: column.getColId(),
+      type: type
+    });
+    setShowMenu(false);
+  };
+
+  const handlePin = () => {
+    const colId = column.getColId();
+    const isPinned = column.isPinned();
+    api.applyColumnState({
+      state: [{ colId, pinned: isPinned ? null : 'left' }],
+      defaultState: { pinned: null }
+    });
+    setShowMenu(false);
+  };
+
+  const handleSort = () => {
+    if (!sortState) {
+      column.setSort('asc');
+    } else if (sortState === 'asc') {
+      column.setSort('desc');
+    } else {
+      column.setSort(null);
+    }
+  };
+
   return (
-    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
-      <Icon className="w-3.5 h-3.5 opacity-50" />
-      <span>{displayName}</span>
+    <div className="flex items-center justify-between w-full h-full group">
+      <div className="flex items-center gap-2 text-xs font-bold text-slate-400 group-hover:text-slate-200 transition-colors">
+        <Icon className="w-3.5 h-3.5 opacity-50" />
+        <span>{displayName}</span>
+        <button
+          onClick={handleSort}
+          className="opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <SortIcon className={`w-3.5 h-3.5 ${sortState ? 'text-blue-400' : 'text-slate-500'}`} />
+        </button>
+      </div>
+
+      <div className="relative">
+        <button
+          ref={buttonRef}
+          onClick={handleMenuClick}
+          className={`p-1 rounded hover:bg-slate-700 text-slate-500 hover:text-slate-200 opacity-0 group-hover:opacity-100 transition-all ${showMenu ? 'opacity-100 bg-slate-700 text-slate-200' : ''}`}
+        >
+          <MoreVertical className="w-3.5 h-3.5" />
+        </button>
+
+        {showMenu && createPortal(
+          <div
+            ref={menuRef}
+            style={{ position: 'fixed', left: `${menuPos.x}px`, top: `${menuPos.y}px` }}
+            className="w-48 bg-[#1e293b] border border-slate-700 rounded-lg shadow-xl z-[9999] py-1"
+          >
+            <button onClick={handleCopy} className="w-full px-3 py-2 text-left text-xs text-slate-300 hover:bg-slate-700 flex items-center gap-2">
+              <Copy className="w-3.5 h-3.5" />
+              Copy column name
+            </button>
+            <button onClick={handleFilter} className="w-full px-3 py-2 text-left text-xs text-slate-300 hover:bg-slate-700 flex items-center gap-2">
+              <Filter className="w-3.5 h-3.5" />
+              Filter
+            </button>
+            <div className="relative group/sub">
+              <button className="w-full px-3 py-2 text-left text-xs text-slate-300 hover:bg-slate-700 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Edit3 className="w-3.5 h-3.5" />
+                  Format
+                </div>
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="h-px bg-slate-700 my-1" />
+            <button onClick={handlePin} className="w-full px-3 py-2 text-left text-xs text-slate-300 hover:bg-slate-700 flex items-center gap-2">
+              <Pin className="w-3.5 h-3.5" />
+              {column.isPinned() ? 'Unpin column' : 'Pin column'}
+            </button>
+          </div>,
+          document.body
+        )}
+      </div>
     </div>
   );
 };
@@ -45,11 +169,19 @@ export default function DatasetViewerPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [showDownloadMenu, setShowDownloadMenu] = useState(false)
+  const [runtime, setRuntime] = useState<number>(0)
+  const [filterColumn, setFilterColumn] = useState<any>(null)
+  const [filterCondition, setFilterCondition] = useState('contains')
+  const [filterValue, setFilterValue] = useState('')
 
   async function loadData(offset: number, limit: number) {
     try {
       setLoading(true)
+      const start = performance.now()
       const response = await getDatasetDataTop(dsId, limit, offset)
+      const end = performance.now()
+      setRuntime((end - start) / 1000)
+
       if (!response) throw new Error('No response from server')
 
       const dataArray = response.data || response.rows || []
@@ -65,7 +197,6 @@ export default function DatasetViewerPage() {
     }
   }
 
-  // Load data automatically on mount
   useEffect(() => {
     (async () => {
       try {
@@ -80,7 +211,6 @@ export default function DatasetViewerPage() {
     })()
   }, [projectId, dsId])
 
-  // Infer column types
   const columnTypes = useMemo(() => {
     const types: Record<string, string> = {};
     if (rows.length > 0) {
@@ -98,18 +228,17 @@ export default function DatasetViewerPage() {
   }, [rows, columns]);
 
   const colDefs = useMemo<ColDef[]>(() => {
-    // Add row number column
     const defs: ColDef[] = [
       {
-        headerName: '#',
+        headerName: '',
         valueGetter: 'node.rowIndex + 1',
         width: 50,
         pinned: 'left',
         sortable: false,
         filter: false,
         resizable: false,
-        cellClass: 'bg-slate-50 dark:bg-slate-800 text-slate-400 text-xs font-mono flex items-center justify-center border-r border-slate-200 dark:border-slate-700',
-        headerClass: 'bg-slate-100 dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700',
+        cellClass: 'bg-[#0f172a] text-slate-500 text-xs font-mono flex items-center justify-center border-r border-slate-800',
+        headerClass: 'bg-[#0f172a] border-r border-slate-800',
       }
     ];
 
@@ -123,8 +252,8 @@ export default function DatasetViewerPage() {
       sortable: true,
       filter: true,
       headerComponent: CustomHeader,
-      headerComponentParams: { columnType: columnTypes[c] },
-      cellClass: 'text-sm text-slate-900 dark:text-slate-100 border-r border-slate-200 dark:border-slate-700 font-mono',
+      headerComponentParams: { columnType: columnTypes[c], setFilterColumn },
+      cellClass: 'text-sm text-slate-300 font-mono border-r border-slate-800',
     }))]
   }, [columns, columnTypes])
 
@@ -133,7 +262,7 @@ export default function DatasetViewerPage() {
     filter: true,
     resizable: true,
     minWidth: 100,
-    headerClass: 'bg-slate-50 dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700',
+    headerClass: 'bg-[#0f172a] border-r border-slate-800',
   }), [])
 
   const onGridReady = useCallback((params: { api: GridApi }) => {
@@ -171,13 +300,17 @@ export default function DatasetViewerPage() {
   }, [api, dataset])
 
   const exportExcel = useCallback(() => {
-    // For now, we'll just use CSV but name it .csv (Excel opens it). 
-    // Real .xlsx requires a library like 'xlsx' or 'exceljs'.
     api?.exportDataAsCsv({ fileName: `${dataset?.name || 'dataset'}.csv` })
     setShowDownloadMenu(false)
   }, [api, dataset])
 
-  // Update grid when rows change
+  const applyFilter = () => {
+    if (!api || !filterColumn || !filterValue) return;
+    api.setGridOption('quickFilterText', filterValue);
+    setFilterColumn(null);
+    setFilterValue('');
+  };
+
   useEffect(() => {
     if (api && rows.length > 0) {
       api.setGridOption('rowData', rows)
@@ -187,13 +320,12 @@ export default function DatasetViewerPage() {
   const totalPages = Math.ceil((stats?.row_count || 0) / pageSize)
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      {/* Header - Slightly Larger */}
-      <div className="bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800 border-b border-slate-700">
-        <div className="max-w-full px-8 py-6">
+    <div className="min-h-screen bg-[#0f172a] text-slate-200">
+      <div className="bg-[#0f172a] border-b border-slate-800">
+        <div className="max-w-full px-6 py-4">
           <Link
             to={`/projects/${projectId}/datasets/${dsId}`}
-            className="inline-flex items-center gap-2 text-sm font-medium text-slate-300 hover:text-white mb-4 transition-colors"
+            className="inline-flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-white mb-4 transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
             Back to Dataset
@@ -201,46 +333,19 @@ export default function DatasetViewerPage() {
 
           <div className="flex items-start justify-between gap-6">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-white/10 backdrop-blur-sm">
-                <Table2 className="w-6 h-6 text-white" />
+              <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <Table2 className="w-5 h-5 text-blue-400" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-white leading-tight">Data Viewer</h1>
-                <p className="text-slate-300 text-sm mt-1">Browse and explore dataset records</p>
-              </div>
-            </div>
-
-            {/* Quick Stats */}
-            <div className="flex gap-4">
-              <div className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl flex items-center gap-4">
-                <div className="text-right">
-                  <div className="text-slate-400 text-[10px] uppercase tracking-wider">Total Rows</div>
-                  <div className="text-lg font-bold text-white leading-none">{(stats?.row_count ?? 0).toLocaleString()}</div>
-                </div>
-                <BarChart3 className="w-5 h-5 text-white/40" />
-              </div>
-
-              <div className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl flex items-center gap-4">
-                <div className="text-right">
-                  <div className="text-slate-400 text-[10px] uppercase tracking-wider">Viewing</div>
-                  <div className="text-lg font-bold text-white leading-none">{rows.length}</div>
-                </div>
-                <Table2 className="w-5 h-5 text-white/40" />
-              </div>
-
-              <div className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl flex items-center gap-4">
-                <div className="text-right">
-                  <div className="text-slate-400 text-[10px] uppercase tracking-wider">Columns</div>
-                  <div className="text-lg font-bold text-white leading-none">{columns.length || stats?.column_count || 0}</div>
-                </div>
-                <Database className="w-5 h-5 text-white/40" />
+                <h1 className="text-xl font-bold text-white leading-tight">Data Viewer</h1>
+                <p className="text-slate-400 text-sm">Explore {dataset?.name}</p>
               </div>
             </div>
 
             <div className="flex gap-3">
               <button
                 onClick={handleRefresh}
-                className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm font-medium rounded-lg transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm font-medium rounded-lg transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
                 Refresh
@@ -250,36 +355,70 @@ export default function DatasetViewerPage() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="max-w-full px-6 py-6">
         {error && <Alert type="error" message={error} onClose={() => setError('')} />}
 
-        {/* Data Grid Card */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-          {/* Toolbar */}
-          <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h3 className="font-bold text-base text-slate-900 dark:text-white">{dataset?.name || 'Dataset Records'}</h3>
-              <span className="text-xs text-slate-500 dark:text-slate-400 px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded-full">
-                Page {page + 1} of {totalPages || 1}
-              </span>
-            </div>
+        <div className="bg-[#0f172a] rounded-lg border border-slate-800 overflow-hidden flex flex-col h-[calc(100vh-220px)]">
+          {filterColumn && (
+            <div className="p-4 border-b border-slate-800 bg-[#1e293b]/50">
+              <div className="flex items-center gap-3 mb-3">
+                <Filter className="w-4 h-4 text-blue-400" />
+                <span className="text-sm font-medium text-slate-300">Add filter</span>
+                <button onClick={() => setFilterColumn(null)} className="ml-auto p-1 hover:bg-slate-700 rounded">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => api?.sizeColumnsToFit({ defaultMinWidth: 100 })}
-                className="px-3 py-1.5 text-xs font-medium border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"
-              >
-                Fit Columns
-              </button>
-            </div>
-          </div>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded">
+                    {filterColumn.name}
+                  </span>
+                  <button onClick={() => setFilterColumn(null)} className="p-1 hover:bg-slate-700 rounded">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
 
-          {/* AG Grid */}
-          <div className="ag-theme-quartz dark:ag-theme-quartz-dark" style={{ height: 'calc(100vh - 350px)', minHeight: '400px' }}>
-            {loading ? (
+                <select
+                  value={filterCondition}
+                  onChange={(e) => setFilterCondition(e.target.value)}
+                  className="px-3 py-2 bg-[#0f172a] border border-slate-700 rounded text-sm text-slate-300"
+                >
+                  <option value="is one of">is one of</option>
+                  <option value="contains">contains</option>
+                  <option value="equals">equals</option>
+                </select>
+
+                <input
+                  type="text"
+                  value={filterValue}
+                  onChange={(e) => setFilterValue(e.target.value)}
+                  placeholder="Type or select"
+                  className="px-3 py-2 bg-[#0f172a] border border-slate-700 rounded text-sm text-slate-300 placeholder-slate-500"
+                />
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={applyFilter}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    onClick={() => setFilterColumn(null)}
+                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex-1 ag-theme-databricks-dark w-full">
+            {loading && rows.length === 0 ? (
               <div className="flex items-center justify-center h-full">
-                <div className="text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                <div className="text-slate-400 flex items-center gap-2">
                   <RefreshCw className="w-4 h-4 animate-spin" />
                   Loading data...
                 </div>
@@ -297,91 +436,78 @@ export default function DatasetViewerPage() {
                 domLayout="normal"
                 rowHeight={32}
                 headerHeight={36}
-                rowClass="border-b border-slate-100 dark:border-slate-700/50 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors text-slate-900 dark:text-slate-100 font-medium"
               />
             )}
           </div>
 
-          {/* Bottom Toolbar: Pagination & Download */}
-          <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between">
-            {/* Download Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowDownloadMenu(!showDownloadMenu)}
-                className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 dark:border-slate-600 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 transition-colors"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Download
-                <ChevronDown className="w-3 h-3 opacity-50" />
-              </button>
+          <div className="px-4 py-2 border-t border-slate-800 bg-[#0f172a] flex items-center justify-between text-xs text-slate-400 font-mono">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <button
+                  onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+                  className="p-1.5 border border-slate-700 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors"
+                  title="Download"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </button>
 
-              {showDownloadMenu && (
-                <>
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setShowDownloadMenu(false)}
-                  />
-                  <div className="absolute bottom-full left-0 mb-2 w-40 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 py-1 z-20">
-                    <button
-                      onClick={exportCsv}
-                      className="w-full px-4 py-2 text-left text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-slate-400" />
-                      Download CSV
-                    </button>
-                    <button
-                      onClick={exportExcel}
-                      className="w-full px-4 py-2 text-left text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2"
-                    >
-                      <FileSpreadsheet className="w-3.5 h-3.5 text-green-600" />
-                      Download Excel
-                    </button>
-                  </div>
-                </>
-              )}
+                {showDownloadMenu && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setShowDownloadMenu(false)}
+                    />
+                    <div className="absolute bottom-full left-0 mb-2 w-40 bg-[#1e293b] rounded-lg shadow-xl border border-slate-700 py-1 z-20">
+                      <button
+                        onClick={exportCsv}
+                        className="w-full px-4 py-2 text-left text-xs text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-slate-400" />
+                        Download CSV
+                      </button>
+                      <button
+                        onClick={exportExcel}
+                        className="w-full px-4 py-2 text-left text-xs text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-green-500" />
+                        Download Excel
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
-            {/* Pagination */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-600 dark:text-slate-400">Rows:</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    const newSize = Number(e.target.value)
-                    setPageSize(newSize)
-                    setPage(0)
-                    loadData(0, newSize)
-                  }}
-                  className="px-2 py-1 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-xs"
+                <button
+                  onClick={handlePrevPage}
+                  disabled={page === 0}
+                  className="hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
                 >
-                  <option value="25">25</option>
-                  <option value="50">50</option>
-                  <option value="100">100</option>
-                  <option value="200">200</option>
-                </select>
+                  <PrevIcon className="w-3.5 h-3.5" />
+                </button>
+                <span>
+                  {page * pageSize + 1}-{Math.min((page + 1) * pageSize, stats?.row_count || 0)}
+                </span>
+                <button
+                  onClick={handleNextPage}
+                  disabled={page >= totalPages - 1 || rows.length < pageSize}
+                  className="hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-600 dark:text-slate-400">
-                  {page * pageSize + 1}–{Math.min((page + 1) * pageSize, stats?.row_count || 0)} of {(stats?.row_count || 0).toLocaleString()}
-                </span>
-                <div className="flex gap-1">
-                  <button
-                    onClick={handlePrevPage}
-                    disabled={page === 0}
-                    className="p-1.5 border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <PrevIcon className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={handleNextPage}
-                    disabled={page >= totalPages - 1 || rows.length < pageSize}
-                    className="p-1.5 border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+              <div className="h-3 w-px bg-slate-700" />
+
+              <span>{rows.length} rows</span>
+
+              <div className="h-3 w-px bg-slate-700" />
+
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-3 h-3" />
+                <span>{runtime.toFixed(2)}s runtime</span>
               </div>
             </div>
           </div>
