@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { getProject, currentUser, approveChange, rejectChange, myProjectRole, subscribeNotifications } from '../api'
-import AgGridDialog from '../components/AgGridDialog'
+import AgGridTable from '../components/AgGridTable'
 import Alert from '../components/Alert'
 import Card from '../components/Card'
 import { CheckCircle, XCircle, MessageSquare, FileText, User, Clock, AlertCircle, GitPullRequest, ArrowUpRight, Check, X } from 'lucide-react'
@@ -22,7 +22,6 @@ export default function ChangeDetailsPage() {
   const [change, setChange] = useState<any>(null)
   const [reviewerStates, setReviewerStates] = useState<any[] | null>(null)
   const [preview, setPreview] = useState<{ data: any[]; columns: string[] } | null>(null)
-  const [open, setOpen] = useState(false)
   const [comments, setComments] = useState<any[]>([])
   const [comment, setComment] = useState('')
   const [error, setError] = useState('')
@@ -139,72 +138,35 @@ export default function ChangeDetailsPage() {
         {/* Left Column: Details & Preview */}
         <div className="lg:col-span-2 space-y-6">
           {/* Data Preview Card */}
-          <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none">
+          <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none flex flex-col h-[800px]">
             <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-white dark:bg-slate-800/50">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary" />
                 Data Preview
               </h2>
-              {preview && (
-                <button
-                  onClick={() => setOpen(true)}
-                  className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1 transition-colors"
-                >
-                  Open in dialog
-                  <ArrowUpRight className="w-4 h-4" />
-                </button>
-              )}
             </div>
-            <div className="p-6 bg-slate-50/50 dark:bg-slate-900/50">
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                Review the changes proposed in this request. Open the full dialog for detailed inspection.
-              </p>
-              {/* Mini preview or placeholder */}
-              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden h-48 flex items-center justify-center text-slate-400">
-                {preview ? (
+            <div className="flex-1 bg-slate-50/50 dark:bg-slate-900/50 p-0 overflow-hidden">
+              {preview ? (
+                <AgGridTable
+                  rows={preview.data}
+                  columns={preview.columns}
+                  pageSize={50}
+                  allowEdit={false}
+                  compact={false}
+                  editedCells={editedCells}
+                  className="h-full border-0 rounded-none"
+                  title=""
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center text-slate-400">
                   <div className="flex flex-col items-center gap-2">
                     <FileText className="w-8 h-8 opacity-50" />
-                    <span className="text-sm">Preview available ({preview.data.length} rows)</span>
+                    <span className="text-sm">No preview available</span>
                   </div>
-                ) : (
-                  <span>No preview available</span>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </Card>
-
-          {/* Reviewer Status Card */}
-          {Array.isArray(reviewerStates) && reviewerStates.length > 0 && (
-            <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none">
-              <div className="p-6 border-b border-slate-100 dark:border-slate-700/50">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <User className="w-5 h-5 text-primary" />
-                  Reviewers
-                </h2>
-              </div>
-              <div className="p-6 bg-white dark:bg-slate-800/50">
-                <div className="space-y-3">
-                  {reviewerStates.map((st: any, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500">
-                          <User className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-slate-900 dark:text-white">{st.email || `User #${st.id}`}</div>
-                          {st.decided_at && <div className="text-xs text-slate-500">{new Date(st.decided_at).toLocaleString()}</div>}
-                        </div>
-                      </div>
-                      <span className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 ${getStatusColor(st.status || 'pending')}`}>
-                        {getStatusIcon(st.status || 'pending')}
-                        {(st.status || 'pending').charAt(0).toUpperCase() + (st.status || 'pending').slice(1)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Card>
-          )}
         </div>
 
         {/* Right Column: Actions & Comments */}
@@ -238,8 +200,41 @@ export default function ChangeDetailsPage() {
               </Card>
             )}
 
+          {/* Reviewer Status Card */}
+          {Array.isArray(reviewerStates) && reviewerStates.length > 0 && (
+            <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none">
+              <div className="p-6 border-b border-slate-100 dark:border-slate-700/50">
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <User className="w-5 h-5 text-primary" />
+                  Reviewers
+                </h2>
+              </div>
+              <div className="p-6 bg-white dark:bg-slate-800/50">
+                <div className="space-y-3">
+                  {reviewerStates.map((st: any, idx: number) => (
+                    <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500">
+                          <User className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-slate-900 dark:text-white">{st.email || `User #${st.id}`}</div>
+                          {st.decided_at && <div className="text-xs text-slate-500">{new Date(st.decided_at).toLocaleString()}</div>}
+                        </div>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 ${getStatusColor(st.status || 'pending')}`}>
+                        {getStatusIcon(st.status || 'pending')}
+                        {(st.status || 'pending').charAt(0).toUpperCase() + (st.status || 'pending').slice(1)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          )}
+
           {/* Comments Card */}
-          <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none flex flex-col h-[500px]">
+          <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none flex flex-col h-[400px]">
             <div className="p-6 border-b border-slate-100 dark:border-slate-700/50">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-primary" />
@@ -303,18 +298,6 @@ export default function ChangeDetailsPage() {
           </Card>
         </div>
       </div>
-
-      <AgGridDialog
-        open={open}
-        onOpenChange={setOpen}
-        title={`Change #${chId} preview`}
-        rows={preview?.data || []}
-        columns={preview?.columns || []}
-        pageSize={50}
-        allowEdit={false}
-        compact={false}
-        editedCells={editedCells}
-      />
 
       {showSuccess && (
         <div role="alert" className="fixed bottom-6 right-6 bg-green-600 text-white px-6 py-4 rounded-xl shadow-2xl shadow-green-900/20 text-sm font-medium animate-in slide-in-from-bottom-6 flex items-center gap-3">
