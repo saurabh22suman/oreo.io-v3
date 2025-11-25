@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"log"
 
 	"github.com/gin-gonic/gin"
 	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
@@ -396,12 +397,14 @@ func ensureDeltaTable(ds *models.Dataset) error {
 func ingestCSVToTable(gdb *gorm.DB, filePath, table string) error {
 	f, err := os.Open(filePath)
 	if err != nil {
+		log.Printf("ingestCSVToTable: open file failed: %v", err)
 		return err
 	}
 	defer f.Close()
 	r := csv.NewReader(f)
 	headers, err := r.Read()
 	if err != nil {
+		log.Printf("ingestCSVToTable: read headers failed: %v", err)
 		return err
 	}
 	for {
@@ -419,10 +422,12 @@ func ingestCSVToTable(gdb *gorm.DB, filePath, table string) error {
 		jb, _ := json.Marshal(row)
 		if dialect(gdb) == "postgres" {
 			if ex := gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) VALUES (?::jsonb)", table), string(jb)); ex.Error != nil {
+				log.Printf("ingestCSVToTable: insert postgres failed: %v", ex.Error)
 				return ex.Error
 			}
 		} else {
 			if ex := gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) VALUES (?)", table), string(jb)); ex.Error != nil {
+				log.Printf("ingestCSVToTable: insert sqlite failed: %v", ex.Error)
 				return ex.Error
 			}
 		}
@@ -437,16 +442,19 @@ func ingestJSONToTable(gdb *gorm.DB, filePath, table string) error {
 	}
 	var arr []map[string]any
 	if err := json.Unmarshal(b, &arr); err != nil {
+		log.Printf("ingestJSONToTable: unmarshal failed: %v", err)
 		return err
 	}
 	for _, obj := range arr {
 		jb, _ := json.Marshal(obj)
 		if dialect(gdb) == "postgres" {
 			if ex := gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) VALUES (?::jsonb)", table), string(jb)); ex.Error != nil {
+				log.Printf("ingestJSONToTable: insert postgres failed: %v", ex.Error)
 				return ex.Error
 			}
 		} else {
 			if ex := gdb.Exec(fmt.Sprintf("INSERT INTO %s (data) VALUES (?)", table), string(jb)); ex.Error != nil {
+				log.Printf("ingestJSONToTable: insert sqlite failed: %v", ex.Error)
 				return ex.Error
 			}
 		}
@@ -691,6 +699,7 @@ func DatasetsPrepare(c *gin.Context) {
 	}
 	// Parse multipart
 	if err := c.Request.ParseMultipartForm(int64(maxUploadBytes) + (10 << 20)); err != nil {
+		log.Printf("DatasetsPrepare: ParseMultipartForm failed: %v", err)
 		c.JSON(400, gin.H{"error": "invalid_multipart"})
 		return
 	}
@@ -727,6 +736,7 @@ func DatasetsPrepare(c *gin.Context) {
 	if backend == "" { backend = "postgres" }
 	ds := models.Dataset{ProjectID: uint(pid), Name: name, Source: source, TargetSchema: schemaName, TargetTable: tableName, StorageBackend: backend}
 	if err := gdb.Create(&ds).Error; err != nil {
+		log.Printf("DatasetsPrepare: create dataset record failed: %v", err)
 		c.JSON(409, gin.H{"error": "name_conflict"})
 		return
 	}
@@ -744,6 +754,7 @@ func DatasetsPrepare(c *gin.Context) {
 		// Read full content once for schema inference + ingest reuse
 		contentBytes, rerr := io.ReadAll(file)
 		if rerr != nil {
+			log.Printf("DatasetsPrepare: read file failed: %v", rerr)
 			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
 			c.JSON(400, gin.H{"error": "invalid_file"})
 			return
@@ -773,19 +784,30 @@ func DatasetsPrepare(c *gin.Context) {
 						_ = gdb.Model(&ds).Update("schema", ds.Schema).Error
 					}
 				} else {
-					// Log warning but proceed (will use empty schema)
+					// Log error and abort if inference fails
+					msg := "unknown error"
 					if resp != nil {
+						b, _ := io.ReadAll(resp.Body)
+						msg = string(b)
 						resp.Body.Close()
+					} else if err != nil {
+						msg = err.Error()
 					}
+					log.Printf("DatasetsPrepare: schema inference failed: %s", msg)
+					_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
+					c.JSON(500, gin.H{"error": "inference_failed", "message": "Failed to infer schema from file: " + msg})
+					return
 				}
 			}
 			if err := ensureDeltaTable(&ds); err != nil {
+				log.Printf("DatasetsPrepare: ensureDeltaTable failed: %v", err)
 				_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
 				c.JSON(500, gin.H{"error": "delta_ensure_failed", "message": err.Error()})
 				return
 			}
 		} else {
 			if err := ensureDatasetTable(gdb, &ds); err != nil {
+				log.Printf("DatasetsPrepare: ensureDatasetTable failed: %v", err)
 				_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
 				c.JSON(500, gin.H{"error": "table_create_failed"})
 				return

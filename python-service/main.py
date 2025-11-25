@@ -302,7 +302,7 @@ def delta_append_file(
         raise HTTPException(status_code=400, detail="invalid rows")
     
     if use_hierarchical:
-        _delta_adapter.append_rows_to_main(project_id, dataset_id, rows or [])
+        _delta_adapter.append_to_main(project_id, dataset_id, rows or [])
     else:
         _delta_adapter.append_rows(table, rows or [])  # Legacy
     
