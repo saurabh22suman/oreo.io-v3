@@ -98,22 +98,6 @@ export default function DashboardPage() {
           {/* Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div
-              onClick={() => navigate('/inbox')}
-              className="group cursor-pointer p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-300"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
-                  <AlertCircle className="w-6 h-6" />
-                </div>
-                <span className="flex items-center gap-1 text-xs font-medium text-slate-400 group-hover:text-blue-500 transition-colors">
-                  View Inbox <ArrowRight className="w-3 h-3" />
-                </span>
-              </div>
-              <h3 className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{unreadCount}</h3>
-              <p className="text-slate-500 dark:text-slate-400 font-medium">Pending Approvals</p>
-            </div>
-
-            <div
               onClick={() => navigate('/projects')}
               className="group cursor-pointer p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none hover:shadow-2xl hover:shadow-purple-500/10 transition-all duration-300"
             >
@@ -127,6 +111,22 @@ export default function DashboardPage() {
               </div>
               <h3 className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{projects.length}</h3>
               <p className="text-slate-500 dark:text-slate-400 font-medium">Active Projects</p>
+            </div>
+
+            <div
+              onClick={() => navigate('/inbox')}
+              className="group cursor-pointer p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-300"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <span className="flex items-center gap-1 text-xs font-medium text-slate-400 group-hover:text-blue-500 transition-colors">
+                  View Inbox <ArrowRight className="w-3 h-3" />
+                </span>
+              </div>
+              <h3 className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{unreadCount}</h3>
+              <p className="text-slate-500 dark:text-slate-400 font-medium">Pending Approvals</p>
             </div>
           </div>
 
@@ -142,8 +142,8 @@ export default function DashboardPage() {
               {recentActivities.map((activity) => (
                 <div key={activity.id} className="p-4 flex items-start gap-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
                   <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${activity.type === 'alert' ? 'bg-red-500 shadow-lg shadow-red-500/50' :
-                      activity.type === 'create' ? 'bg-blue-500 shadow-lg shadow-blue-500/50' :
-                        'bg-emerald-500 shadow-lg shadow-emerald-500/50'
+                    activity.type === 'create' ? 'bg-blue-500 shadow-lg shadow-blue-500/50' :
+                      'bg-emerald-500 shadow-lg shadow-emerald-500/50'
                     }`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-900 dark:text-white truncate group-hover:text-primary transition-colors">

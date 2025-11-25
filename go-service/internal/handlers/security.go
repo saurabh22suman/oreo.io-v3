@@ -30,6 +30,7 @@ func RegisterSecurityRoutes(r *gin.Engine) {
 
 		// Notifications (inbox)
 		sec.POST("/notifications", createNotification)             // system/admin create
+		sec.DELETE("/notifications", deleteNotifications)          // delete selected
 		sec.GET("/notifications", listNotifications)               // list mine
 		sec.POST("/notifications/read", markNotificationsRead)     // bulk mark read
 		sec.POST("/notifications/unread", markNotificationsUnread) // bulk mark unread
@@ -342,6 +343,39 @@ func markNotificationsUnread(c *gin.Context) {
 		uid = uint(v)
 	}
 	if err := db.Model(&models.Notification{}).Where("user_id = ? AND id IN ?", uid, in.IDs).Update("is_read", false).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	NotifHub.PublishUnreadCount(uid)
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func deleteNotifications(c *gin.Context) {
+	db := dbpkg.Get()
+	if db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "db unavailable"})
+		return
+	}
+	var in struct {
+		IDs []uint64 `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil || len(in.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "invalid body"})
+		return
+	}
+	uidVal, _ := c.Get("user_id")
+	uid := uint(0)
+	switch v := uidVal.(type) {
+	case uint:
+		uid = v
+	case int:
+		uid = uint(v)
+	case int64:
+		uid = uint(v)
+	case float64:
+		uid = uint(v)
+	}
+	if err := db.Where("user_id = ? AND id IN ?", uid, in.IDs).Delete(&models.Notification{}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
 		return
 	}

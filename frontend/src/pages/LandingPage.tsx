@@ -35,7 +35,7 @@ export default function LandingPage() {
 				<div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
 					<div className="reveal inline-flex items-center gap-2 px-4 py-2 rounded-full bg-azure-blue/10 border border-azure-blue/20 backdrop-blur-md mb-8">
 						<span className="flex h-2 w-2 rounded-full bg-azure-blue animate-pulse" />
-						<span className="text-sm font-medium text-cyan-100">The Missing UI for Delta Lake</span>
+						<span className="text-sm font-medium text-cyan-100">Why should coders have all the fun!</span>
 					</div>
 
 					<h1 className="reveal text-5xl md:text-7xl font-bold tracking-tight mb-6">

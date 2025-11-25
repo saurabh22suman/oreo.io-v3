@@ -1,367 +1,119 @@
-import { useState, useEffect, Suspense, lazy } from 'react'
-import Spinner from '../components/Spinner'
-import { useParams } from 'react-router-dom'
-import AgGridDialog from '../components/AgGridDialog'
-// Keep the lazy import at module scope so the editor component remains stable
-const MonacoEditor = lazy(() => import('@monaco-editor/react'))
-
-type ResultSet = {
-    columns: string[]
-    rows: any[][]
-}
+import { ReactNode } from 'react'
+import { Link, useSearchParams, useParams } from 'react-router-dom'
+import { RotateCcw, ShieldCheck, FileSearch, ArrowRight, FlaskConical } from 'lucide-react'
 
 export default function ProjectQueryPage() {
     const { id } = useParams<{ id: string }>()
-    const [tab, setTab] = useState<'sql' | 'python' | 'saved'>('sql')
-    const [sql, setSql] = useState<string>('SELECT * FROM information_schema.tables LIMIT 25')
-    const [pythonCode, setPythonCode] = useState<string>('# Python lab will run in-browser via Pyodide')
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [results, setResults] = useState<ResultSet | null>(null)
-    const [page, setPage] = useState(1)
-    const [limit, setLimit] = useState(250)
-    const [previewOpen, setPreviewOpen] = useState(false)
-    const [previewRows, setPreviewRows] = useState<any[]>([])
-    const [previewCols, setPreviewCols] = useState<string[]>([])
-    // History UI state (local, per-project, per-language)
-    const [historyOpen, setHistoryOpen] = useState(false)
-    const [historyTick, setHistoryTick] = useState(0)
+    const [searchParams] = useSearchParams()
+    const datasetId = searchParams.get('dataset')
 
-    // User editor preferences
-    type EditorPrefs = { language?: 'sql' | 'python'; autocomplete?: boolean; historySize?: number; lineNumbers?: boolean; syntaxHighlight?: boolean }
-    type Prefs = { theme?: 'light' | 'dark'; fontScale?: number; editor?: EditorPrefs }
-    const [prefs, setPrefs] = useState<Prefs>({ editor: { language: 'sql', autocomplete: true, historySize: 100, lineNumbers: true, syntaxHighlight: true }, fontScale: 100 })
+    return (
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Header Section with Mascot */}
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900 p-8 text-white shadow-2xl shadow-indigo-900/20">
+                <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                    <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                            <span className="px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-bold border border-white/10 text-indigo-200 flex items-center gap-2">
+                                <FlaskConical className="w-3 h-3" />
+                                Oreo Labs
+                            </span>
+                        </div>
+                        <h1 className="text-4xl font-bold mb-3 tracking-tight">Experimental Features</h1>
+                        <p className="text-indigo-200 max-w-md text-sm leading-relaxed">
+                            Explore our experimental features in beta versions. These tools are in active development and may change.
+                        </p>
+                    </div>
 
-    // small helper
-    async function fetchJSON(url: string, opts: RequestInit = {}) {
-        const r = await fetch(url, { credentials: 'include', headers: { 'Content-Type': 'application/json' }, ...opts })
-        if (!r.ok) { throw new Error(await r.text() || r.statusText) }
-        return r.json()
+                    {/* Mascot Image */}
+                    <div className="hidden md:block relative w-48 h-48 -mr-4 -mb-8">
+                        <img
+                            src="/images/oreo_rabbit.png"
+                            alt="Oreo Mascot"
+                            className="w-full h-full object-contain drop-shadow-2xl transform hover:scale-105 transition-transform duration-500 opacity-90"
+                        />
+                    </div>
+                </div>
+
+                {/* Decorative background elements */}
+                <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
+            </div>
+
+            {/* Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <FeatureCard
+                    icon={<RotateCcw className="w-8 h-8" />}
+                    title="Restore"
+                    description="Rollback datasets to previous versions or recover deleted items."
+                    color="blue"
+                    to="#" // Placeholder
+                />
+
+                <FeatureCard
+                    icon={<ShieldCheck className="w-8 h-8" />}
+                    title="Rules"
+                    description="Define and enforce data quality rules and validation policies."
+                    color="emerald"
+                    to={datasetId ? `/projects/${id}/datasets/${datasetId}/rules` : '#'}
+                />
+
+                <FeatureCard
+                    icon={<FileSearch className="w-8 h-8" />}
+                    title="Audit"
+                    description="Track changes, access logs, and monitor security events."
+                    color="amber"
+                    to="#" // Placeholder
+                />
+            </div>
+        </div>
+    )
+}
+
+function FeatureCard({ icon, title, description, color, to }: {
+    icon: ReactNode
+    title: string
+    description: string
+    color: 'blue' | 'emerald' | 'amber' | 'purple'
+    to: string
+}) {
+    const colors = {
+        blue: 'from-blue-500 to-indigo-500 text-blue-600',
+        emerald: 'from-emerald-500 to-teal-500 text-emerald-600',
+        amber: 'from-amber-500 to-orange-500 text-amber-600',
+        purple: 'from-purple-500 to-pink-500 text-purple-600',
     }
 
-    // Load preferences and apply defaults (tab, font size, etc.)
-    useEffect(() => {
-        let mounted = true
-            ; (async () => {
-                try {
-                    const pr: Prefs = await fetchJSON('/api/me/preferences').catch(() => ({}))
-                    if (!mounted) return
-                    const baseEditor: EditorPrefs = { language: 'sql', autocomplete: true, historySize: 100, lineNumbers: true, syntaxHighlight: true }
-                    const mergedEditor: EditorPrefs = { ...baseEditor, ...(pr?.editor || {}) }
-                    const merged: Prefs = { fontScale: 100, ...pr, editor: mergedEditor }
-                    setPrefs(merged)
-                    if (merged.editor?.language && (merged.editor.language === 'sql' || merged.editor.language === 'python')) {
-                        setTab(merged.editor.language)
-                    }
-                } catch { /* ignore */ }
-            })()
-        return () => { mounted = false }
-    }, [])
-
-    useEffect(() => {
-        // Reset errors when tab changes
-        setError(null)
-    }, [tab])
-
-    async function runSQL() {
-        setError(null)
-        // basic client-side guard
-        const selectRe = /^\s*(with\b[\s\S]+select\b|select\b)/i
-        if (!selectRe.test(sql)) {
-            setError('Modifications are not allowed. Use append flow.')
-            return
-        }
-        setLoading(true)
-        try {
-            const resp = await fetch('/api/query/execute', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sql, page, limit, project_id: id ? Number(id) : undefined })
-            })
-            if (!resp.ok) {
-                const txt = await resp.text()
-                throw new Error(txt || resp.statusText)
-            }
-            const data = await resp.json()
-            setResults(data)
-            // Always open pop-up table with expanded columns
-            const grid = buildGridFromResults(data)
-            setPreviewCols(grid.columns)
-            setPreviewRows(grid.rows)
-            setPreviewOpen(true)
-            // Push to history (capped by preference)
-            try { pushHistory('sql', sql) } catch { }
-            // bump history to refresh any open dropdown
-            setHistoryTick(t => t + 1)
-        } catch (e: any) {
-            setError(e?.message || 'Query failed')
-            setResults(null)
-        } finally { setLoading(false) }
-    }
-
-    function exportJSON() {
-        if (!results) return
-        const blob = new Blob([JSON.stringify(results)], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `query-results-${id || 'project'}.json`
-        a.click()
-        URL.revokeObjectURL(url)
-    }
-
-    function exportCSV() {
-        if (!results) return
-        const cols = results.columns
-        const lines = [cols.join(',')]
-        for (const r of results.rows) {
-            lines.push(r.map((c: any) => `"${String(c ?? '')}"`).join(','))
-        }
-        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `query-results-${id || 'project'}.csv`
-        a.click()
-        URL.revokeObjectURL(url)
-    }
-
-    // MonacoEditor is lazy-imported at module scope to avoid remounts
-    const [editorReady, setEditorReady] = useState(false)
-
-    // Compute Monaco options from prefs
-    const theme = document.documentElement.classList.contains('dark') ? 'vs-dark' : 'vs'
-    const fontSize = Math.max(10, Math.min(20, Math.round(((prefs.fontScale || 100) / 100) * 14)))
-    function editorOptionsFor(lang: 'sql' | 'python') {
-        const ep = prefs.editor || {}
-        const autocomplete = ep.autocomplete !== false
-        const lineNumbers = ep.lineNumbers !== false
-        return {
-            automaticLayout: true,
-            fontSize,
-            lineNumbers: lineNumbers ? 'on' : 'off',
-            quickSuggestions: autocomplete,
-            wordBasedSuggestions: autocomplete,
-            suggestOnTriggerCharacters: autocomplete,
-            minimap: { enabled: false },
-        } as any
-    }
-
-    // Choose language respecting syntax highlight toggle
-    function langFor(base: 'sql' | 'python') {
-        const ep = prefs.editor || {}
-        if (ep.syntaxHighlight === false) return 'plaintext'
-        return base
-    }
-
-    // Minimal local history support capped by prefs.editor.historySize
-    function pushHistory(language: 'sql' | 'python', text: string) {
-        const n = Math.max(0, Math.min(1000, prefs.editor?.historySize ?? 100))
-        if (n === 0) return
-        const key = `oreo.history.${id || 'project'}.${language}`
-        let arr: string[] = []
-        try { arr = JSON.parse(localStorage.getItem(key) || '[]') } catch { arr = [] }
-        const trimmed = (text || '').trim()
-        if (!trimmed) return
-        // de-dupe existing occurrence
-        arr = [trimmed, ...arr.filter(v => v !== trimmed)]
-        if (arr.length > n) arr.length = n
-        localStorage.setItem(key, JSON.stringify(arr))
-    }
-
-    function getHistory(language: 'sql' | 'python') {
-        const key = `oreo.history.${id || 'project'}.${language}`
-        try { return JSON.parse(localStorage.getItem(key) || '[]') as string[] } catch { return [] }
-    }
-
-    function clearHistory(language: 'sql' | 'python') {
-        const key = `oreo.history.${id || 'project'}.${language}`
-        localStorage.removeItem(key)
-        setHistoryTick(t => t + 1)
-    }
-
-    function buildGridFromResults(r: ResultSet) {
-        const cols = Array.isArray(r?.columns) ? r.columns : []
-        const idx: Record<string, number> = {}
-        cols.forEach((c, i) => idx[c] = i)
-        const outRows: any[] = []
-        const keySet = new Set<string>()
-        let expanded = false
-        for (const arr of (r?.rows || [])) {
-            const row: any = {}
-            cols.forEach((c, i) => { row[c] = arr?.[i] })
-            // Expand JSON in 'data' column when possible
-            if (typeof row.data === 'string') {
-                try { const obj = JSON.parse(row.data); if (obj && typeof obj === 'object') { Object.assign(row, obj); expanded = true } } catch { }
-            }
-            // Track keys
-            Object.keys(row).forEach(k => keySet.add(k))
-            outRows.push(row)
-        }
-        // Build columns list: id first (if present), then expanded keys (excluding 'data' when expanded), then any remaining
-        const allKeys = Array.from(keySet)
-        const ordered: string[] = []
-        if (allKeys.includes('id')) ordered.push('id')
-        const core = allKeys.filter(k => k !== 'id' && (!expanded || k !== 'data'))
-        core.sort((a, b) => a.localeCompare(b))
-        ordered.push(...core)
-        if (!expanded && allKeys.includes('data')) ordered.push('data')
-        return { rows: outRows, columns: ordered }
-    }
-
-    function openTablePreview() {
-        if (!results) { setError('No results'); return }
-        const grid = buildGridFromResults(results)
-        setPreviewCols(grid.columns)
-        setPreviewRows(grid.rows)
-        setPreviewOpen(true)
+    const bgColors = {
+        blue: 'bg-blue-50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30',
+        emerald: 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/30',
+        amber: 'bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/30',
+        purple: 'bg-purple-50 dark:bg-purple-900/10 border-purple-100 dark:border-purple-900/30',
     }
 
     return (
-        <div className="p-6">
-            <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-semibold">Query Editor</h2>
-                <div className="flex items-center gap-2">
-                    <button onClick={runSQL} className={`bg-indigo-600 text-white px-3 py-2 rounded ${(!editorReady || loading) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-700'}`} aria-disabled={!editorReady || loading} disabled={!editorReady || loading}>Run</button>
-                    <button onClick={() => alert('Save query - not yet implemented')} className="border px-3 py-2 rounded">Save</button>
-                    {/* History dropdown (SQL) */}
-                    <div className="relative" onBlur={() => setHistoryOpen(false)}>
-                        {(() => {
-                            const items = getHistory('sql')
-                            const hasItems = items.length > 0
-                            return (
-                                <>
-                                    <button
-                                        onClick={() => hasItems && setHistoryOpen(o => !o)}
-                                        className={`border px-3 py-2 rounded ${hasItems ? '' : 'opacity-50 cursor-not-allowed'}`}
-                                        aria-haspopup="menu"
-                                        aria-expanded={historyOpen}
-                                        disabled={!hasItems}
-                                    >History</button>
-                                    {historyOpen && (
-                                        <div className="absolute right-0 z-10 mt-1 w-[420px] max-h-80 overflow-auto rounded border bg-white shadow">
-                                            <div className="flex items-center justify-between px-2 py-1 text-xs text-gray-500 border-b">
-                                                <span>Recent SQL ({items.length})</span>
-                                                <button onClick={() => { clearHistory('sql'); setHistoryOpen(false) }} className="text-red-600 hover:underline">Clear</button>
-                                            </div>
-                                            <ul role="menu" aria-label="SQL history" className="divide-y">
-                                                {items.slice(0, 20).map((q, i) => {
-                                                    // render one-line preview
-                                                    const firstLine = (q || '').split('\n')[0].trim()
-                                                    const preview = firstLine.length > 100 ? firstLine.slice(0, 100) + "…" : firstLine
-                                                    return (
-                                                        <li key={i}>
-                                                            <button
-                                                                role="menuitem"
-                                                                className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm"
-                                                                title={q}
-                                                                onClick={() => { setSql(q); setHistoryOpen(false) }}
-                                                            >{preview || '(empty)'}</button>
-                                                        </li>
-                                                    )
-                                                })}
-                                                {items.length === 0 && <li className="px-3 py-2 text-sm text-gray-500">No history</li>}
-                                            </ul>
-                                        </div>
-                                    )}
-                                </>
-                            )
-                        })()}
-                    </div>
-                    <div className="relative">
-                        <button className="border px-3 py-2 rounded">Export</button>
-                        <div className="absolute right-0 mt-1 bg-white shadow-md rounded p-1 hidden">{/* future dropdown */}</div>
-                    </div>
+        <Link
+            to={to}
+            className={`group relative overflow-hidden rounded-2xl p-6 border transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${bgColors[color]}`}
+        >
+            <div className="relative z-10">
+                <div className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${colors[color].split(' ').slice(0, 2).join(' ')} text-white mb-4 shadow-lg`}>
+                    {icon}
+                </div>
+
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">{title}</h3>
+                <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-6">
+                    {description}
+                </p>
+
+                <div className={`flex items-center text-sm font-bold ${colors[color].split(' ').pop()} group-hover:opacity-80 transition-opacity`}>
+                    Explore
+                    <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                 </div>
             </div>
 
-            <div className="mt-4">
-                <div className="border-b border-gray-200">
-                    <nav className="-mb-px flex space-x-6" aria-label="Tabs">
-                        <button onClick={() => setTab('sql')} className={`py-3 px-1 border-b-2 ${tab === 'sql' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}>SQL</button>
-                        <button onClick={() => setTab('python')} className={`py-3 px-1 border-b-2 ${tab === 'python' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}>Python Lab</button>
-                        <button onClick={() => setTab('saved')} className={`py-3 px-1 border-b-2 ${tab === 'saved' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}>Saved Queries</button>
-                    </nav>
-                </div>
-
-                <div className="mt-4">
-                    {tab === 'sql' && (
-                        <div>
-                            <label className="text-sm text-gray-600">SQL</label>
-                            <div className="w-full mt-2 border rounded">
-                                <Suspense fallback={<div className="p-4"><Spinner /></div>}>
-                                    {/* @ts-ignore dynamic import */}
-                                    <MonacoEditor
-                                        height={250}
-                                        theme={theme}
-                                        defaultLanguage={langFor('sql')}
-                                        value={sql}
-                                        onChange={(v) => setSql(v ?? '')}
-                                        options={editorOptionsFor('sql')}
-                                        onMount={() => setEditorReady(true)}
-                                    />
-                                </Suspense>
-                            </div>
-                        </div>
-                    )}
-
-                    {tab === 'python' && (
-                        <div>
-                            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-sm text-yellow-800">Warning: Python runs client-side in the browser via Pyodide; large datasets (&gt;10MB) may be slow or memory intensive.</div>
-                            <label className="text-sm text-gray-600 mt-3 block">Python</label>
-                            <div className="w-full mt-2 border rounded">
-                                <Suspense fallback={<div className="p-4"><Spinner /></div>}>
-                                    {/* @ts-ignore dynamic import */}
-                                    <MonacoEditor
-                                        height={350}
-                                        theme={theme}
-                                        defaultLanguage={langFor('python')}
-                                        value={pythonCode}
-                                        onChange={(v) => setPythonCode(v ?? '')}
-                                        options={editorOptionsFor('python')}
-                                        onMount={() => setEditorReady(true)}
-                                    />
-                                </Suspense>
-                            </div>
-                            <div className="mt-2 text-sm text-gray-500">Run Python is client-side only and not proxied to the server in this implementation.</div>
-                        </div>
-                    )}
-
-                    {tab === 'saved' && (
-                        <div>
-                            <div className="text-sm text-gray-600">Saved queries per project will appear here (coming soon).</div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="mt-6">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-medium">Results</h3>
-                        <div className="flex gap-2">
-                            {results && <button onClick={openTablePreview} className="border px-2 py-1 rounded text-sm">Open table</button>}
-                            <button onClick={exportCSV} className="border px-2 py-1 rounded text-sm">CSV</button>
-                            <button onClick={exportJSON} className="border px-2 py-1 rounded text-sm">JSON</button>
-                        </div>
-                    </div>
-                    <div className="mt-3">
-                        {loading && <div className="text-sm text-gray-500">Running...</div>}
-                        {error && <div className="text-sm text-red-600">{error}</div>}
-                        {!results && !loading && <div className="text-sm text-gray-500">Run a query to view results in the pop‑up.</div>}
-                        {/* Inline results list hidden by design; using pop-up table instead */}
-                    </div>
-                </div>
-            </div>
-            {/* Pop-up table viewer */}
-            <AgGridDialog
-                open={previewOpen}
-                onOpenChange={setPreviewOpen}
-                title={`Query results (${previewRows.length.toLocaleString()} rows)`}
-                rows={previewRows}
-                columns={previewCols}
-                pageSize={100}
-                allowEdit={false}
-                compact={false}
-            />
-        </div>
+            {/* Hover Gradient Overlay */}
+            <div className={`absolute inset-0 bg-gradient-to-br ${colors[color].split(' ').slice(0, 2).join(' ')} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
+        </Link>
     )
 }

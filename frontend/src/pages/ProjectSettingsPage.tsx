@@ -4,15 +4,17 @@ import { deleteProject, getProject, updateProject, myProjectRole } from '../api'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '../components/ui/dialog'
 import ProjectLayout from '../components/ProjectLayout'
 import Card from '../components/Card'
+import Alert from '../components/Alert'
 import { Settings, Trash2, AlertTriangle, Save, Type, FileText } from 'lucide-react'
 
 export default function ProjectSettingsPage() {
   const { id } = useParams()
   const projectId = Number(id)
   const [project, setProject] = useState<any>(null)
-  const [error, setError] = useState('')
+  const [toast, setToast] = useState<{ type: 'success' | 'error', message: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [name, setName] = useState('')
+  const [confirmName, setConfirmName] = useState('')
   const [description, setDescription] = useState('')
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -35,7 +37,7 @@ export default function ProjectSettingsPage() {
           setRole(r.role)
         }
       } catch (e: any) {
-        if (mounted) setError(e.message)
+        if (mounted) setToast({ type: 'error', message: e.message })
       } finally {
         if (mounted) setLoading(false)
       }
@@ -45,6 +47,8 @@ export default function ProjectSettingsPage() {
 
   return (
     <ProjectLayout project={project} role={role} loading={loading}>
+      {toast && <Alert type={toast.type} message={toast.message} onClose={() => setToast(null)} autoDismiss={true} />}
+
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
 
@@ -88,16 +92,16 @@ export default function ProjectSettingsPage() {
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-3">
-                {error && <span className="text-sm text-red-500">{error}</span>}
                 <button
                   disabled={saving || !name.trim()}
                   className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-slate-500/20"
                   onClick={async () => {
-                    setError(''); setSaving(true)
+                    setSaving(true)
                     try {
                       const p = await updateProject(projectId, { name: name.trim(), description })
                       setProject(p)
-                    } catch (e: any) { setError(e.message) }
+                      setToast({ type: 'success', message: 'Project updated successfully' })
+                    } catch (e: any) { setToast({ type: 'error', message: e.message }) }
                     finally { setSaving(false) }
                   }}
                 >
@@ -156,27 +160,44 @@ export default function ProjectSettingsPage() {
             </DialogDescription>
           </div>
 
-          <div className="p-6 bg-white dark:bg-slate-900 flex items-center justify-end gap-3">
-            <DialogClose asChild>
+          <div className="p-6 bg-white dark:bg-slate-900">
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Type <span className="font-mono font-bold select-all">{project?.name}</span> to confirm
+              </label>
+              <input
+                type="text"
+                className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all"
+                placeholder="Type project name"
+                onChange={(e) => setConfirmName(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <DialogClose asChild>
+                <button
+                  className="px-4 py-2 rounded-xl font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
+              </DialogClose>
               <button
-                className="px-4 py-2 rounded-xl font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                disabled={deleting}
+                className="px-6 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold shadow-lg shadow-red-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={deleting || confirmName !== project?.name}
+                onClick={async () => {
+                  setDeleting(true)
+                  try {
+                    await deleteProject(projectId)
+                    setDeleteOpen(false)
+                    nav('/projects')
+                  }
+                  catch (e: any) { setToast({ type: 'error', message: e.message }) }
+                  finally { setDeleting(false) }
+                }}
               >
-                Cancel
+                {deleting ? 'Deleting...' : 'Yes, Delete Project'}
               </button>
-            </DialogClose>
-            <button
-              className="px-6 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold shadow-lg shadow-red-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={deleting}
-              onClick={async () => {
-                setError(''); setDeleting(true)
-                try { await deleteProject(projectId); setDeleteOpen(false); nav('/projects') }
-                catch (e: any) { setError(e.message) }
-                finally { setDeleting(false) }
-              }}
-            >
-              {deleting ? 'Deleting...' : 'Yes, Delete Project'}
-            </button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

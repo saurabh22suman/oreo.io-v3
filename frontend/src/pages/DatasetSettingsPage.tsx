@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { deleteDataset, getDataset, getDatasetStatsTop, getProject, myProjectRole } from '../api'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '../components/ui/dialog'
 import Alert from '../components/Alert'
 import { Settings, ChevronLeft, Database, User, Calendar, Table2, BarChart3, AlertTriangle, Trash2, Info } from 'lucide-react'
 
@@ -14,7 +15,8 @@ export default function DatasetSettingsPage() {
   const [stats, setStats] = useState<{ row_count?: number; column_count?: number; owner_name?: string; table_location?: string; last_update_at?: string } | null>(null)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
-  const [confirming, setConfirming] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [confirmName, setConfirmName] = useState('')
   const [busy, setBusy] = useState(false)
   const [role, setRole] = useState<'owner' | 'contributor' | 'viewer' | null>(null)
 
@@ -29,22 +31,13 @@ export default function DatasetSettingsPage() {
     })()
   }, [projectId, dsId])
 
-  async function onDelete() {
-    if (!confirming) { setConfirming(true); return }
-    try {
-      setBusy(true)
-      await deleteDataset(projectId, dsId)
-      setToast('Dataset deleted')
-      nav(`/projects/${projectId}`)
-    } catch (e: any) { setError(e.message) }
-    finally { setBusy(false); setConfirming(false) }
-  }
+
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       {/* Header */}
       <div className="bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800 border-b border-slate-700">
-        <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="max-w-[95%] mx-auto px-6 py-8">
           <Link
             to={`/projects/${projectId}/datasets/${dsId}`}
             className="inline-flex items-center gap-2 text-sm font-medium text-slate-300 hover:text-white mb-6 transition-colors"
@@ -66,7 +59,7 @@ export default function DatasetSettingsPage() {
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-[95%] mx-auto px-6 py-8">
         {error && <Alert type="error" message={error} onClose={() => setError('')} />}
         {toast && <Alert type="success" message={toast} onClose={() => setToast('')} />}
 
@@ -175,32 +168,71 @@ export default function DatasetSettingsPage() {
                     </p>
                   </div>
                   <button
-                    disabled={busy}
-                    onClick={onDelete}
-                    className={`px-4 py-2 rounded-lg border font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${confirming
-                        ? 'bg-red-600 hover:bg-red-700 text-white border-red-600'
-                        : 'border-red-600/50 text-red-500 hover:bg-red-950/50'
-                      } ${busy ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    onClick={() => setDeleteOpen(true)}
+                    className="px-4 py-2 rounded-lg border border-red-600/50 text-red-500 hover:bg-red-950/50 font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
                   >
                     <Trash2 className="w-4 h-4" />
-                    {busy ? 'Deleting…' : confirming ? 'Confirm Delete' : 'Delete Dataset'}
+                    Delete Dataset
                   </button>
                 </div>
-
-                {confirming && (
-                  <div className="px-6 pb-4 bg-slate-950">
-                    <div className="bg-red-950/50 border border-red-900/50 rounded-lg p-3">
-                      <p className="text-sm text-red-300 flex items-start gap-2">
-                        <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                        <span>
-                          <strong>Warning:</strong> This action cannot be undone. All data will be permanently removed.
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
+
+            {/* Delete confirmation modal */}
+            <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+              <DialogContent className="max-w-md w-full p-0 overflow-hidden rounded-2xl border-0">
+                <div className="bg-red-50 dark:bg-red-900/20 p-6 flex flex-col items-center text-center border-b border-red-100 dark:border-red-900/30">
+                  <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center mb-4 text-red-600 dark:text-red-400">
+                    <AlertTriangle className="w-6 h-6" />
+                  </div>
+                  <DialogTitle className="text-xl font-bold text-slate-900 dark:text-white">Delete Dataset?</DialogTitle>
+                  <DialogDescription className="text-slate-500 dark:text-slate-400 mt-2">
+                    This will permanently delete <span className="font-bold text-slate-900 dark:text-white">{dataset?.name}</span>. This action cannot be undone.
+                  </DialogDescription>
+                </div>
+
+                <div className="p-6 bg-white dark:bg-slate-900">
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Type <span className="font-mono font-bold select-all">{dataset?.name}</span> to confirm
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all"
+                      placeholder="Type dataset name"
+                      onChange={(e) => setConfirmName(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-3">
+                    <DialogClose asChild>
+                      <button
+                        className="px-4 py-2 rounded-xl font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        disabled={busy}
+                      >
+                        Cancel
+                      </button>
+                    </DialogClose>
+                    <button
+                      className="px-6 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold shadow-lg shadow-red-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={busy || confirmName !== dataset?.name}
+                      onClick={async () => {
+                        setBusy(true)
+                        try {
+                          await deleteDataset(projectId, dsId)
+                          setDeleteOpen(false)
+                          setToast('Dataset deleted successfully')
+                          nav(`/projects/${projectId}`)
+                        } catch (e: any) { setToast(e.message) }
+                        finally { setBusy(false) }
+                      }}
+                    >
+                      {busy ? 'Deleting...' : 'Yes, Delete Dataset'}
+                    </button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
 
             {role !== 'owner' && (
               <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-xl p-6 text-center">

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { InboxItem, listInbox, markInboxRead, markInboxUnread } from '../api'
+import { InboxItem, listInbox, markInboxRead, markInboxUnread, deleteInboxMessages } from '../api'
 import Card from '../components/Card'
 import { Check, Mail, MailOpen, Trash2, RefreshCw, Filter, ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -36,6 +36,7 @@ export default function InboxPage() {
 
   async function markRead() { if (selectedIds.length === 0) return; await markInboxRead(selectedIds); clearSel(); await load() }
   async function markUnread() { if (selectedIds.length === 0) return; await markInboxUnread(selectedIds); clearSel(); await load() }
+  async function deleteMsgs() { if (selectedIds.length === 0) return; await deleteInboxMessages(selectedIds); clearSel(); await load() }
 
   // Mark a single item as read and optimistically update state
   async function markOneRead(id: number) {
@@ -157,6 +158,13 @@ export default function InboxPage() {
               >
                 <Mail className="w-4 h-4" />
                 Mark Unread
+              </button>
+              <button
+                onClick={deleteMsgs}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
               </button>
               <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2"></div>
             </>

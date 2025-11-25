@@ -16,7 +16,7 @@ function InnerLayout() {
         )}
 
         <main className={`main flex-1 p-6 lg:p-8 overflow-auto ${user ? '' : 'max-w-full'}`}>
-          <div className="max-w-7xl mx-auto"><Outlet /></div>
+          <div className="max-w-[95%] mx-auto"><Outlet /></div>
         </main>
       </div>
     </div>
