@@ -150,45 +150,45 @@ export default function DatasetDetailsPage() {
 
       {/* Pending Approvals Section */}
       {pending.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div className="bg-[#0f172a] rounded-3xl shadow-lg border border-slate-800 overflow-hidden">
+          <div className="bg-slate-900/50 px-6 py-4 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-white shadow-sm">
-                <FileCheck className="w-5 h-5 text-blue-600" />
+              <div className="p-2 rounded-lg bg-slate-800 shadow-sm">
+                <FileCheck className="w-5 h-5 text-blue-400" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900">Pending Approvals</h3>
-                <p className="text-xs text-slate-600">{pending.length} change{pending.length !== 1 ? 's' : ''} awaiting review</p>
+                <h3 className="font-bold text-white">Pending Approvals</h3>
+                <p className="text-xs text-slate-400">{pending.length} change{pending.length !== 1 ? 's' : ''} awaiting review</p>
               </div>
             </div>
             <Link
               to={`/projects/${projectId}/datasets/${dsId}/approvals`}
-              className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1 group"
+              className="text-sm font-semibold text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1 group no-underline"
             >
               View all
               <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </div>
 
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-slate-800">
             {pending.slice(0, 5).map((ch: any) => (
-              <li key={ch.id} className="p-4 hover:bg-slate-50 transition-colors">
+              <li key={ch.id} className="p-4 hover:bg-slate-800/50 transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-slate-900">{ch.title || ch.type}</span>
-                      <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
+                      <span className="font-semibold text-white">{ch.title || ch.type}</span>
+                      <span className="px-2 py-0.5 text-xs font-medium bg-blue-900/30 text-blue-300 rounded-full border border-blue-800">
                         #{ch.id}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-slate-600">
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
                       <Clock className="w-3.5 h-3.5" />
                       Submitted {ch.created_at ? new Date(ch.created_at).toLocaleString() : ''}
                     </div>
                   </div>
                   <Link
                     to={`/projects/${projectId}/datasets/${dsId}/changes/${ch.id}`}
-                    className="px-4 py-2 text-sm font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-all"
+                    className="px-4 py-2 text-sm font-semibold text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 rounded-lg transition-all no-underline"
                   >
                     Review
                   </Link>
@@ -200,12 +200,12 @@ export default function DatasetDetailsPage() {
       )}
 
       {pending.length === 0 && (
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8 text-center">
-          <div className="inline-flex p-4 rounded-full bg-slate-50 mb-4">
-            <FileCheck className="w-8 h-8 text-slate-600" />
+        <div className="bg-[#0f172a] rounded-3xl shadow-lg border border-slate-800 p-8 text-center">
+          <div className="inline-flex p-4 rounded-full bg-slate-900 mb-4">
+            <FileCheck className="w-8 h-8 text-slate-500" />
           </div>
-          <h3 className="text-lg font-bold text-slate-900 mb-2">All Clear!</h3>
-          <p className="text-sm text-slate-600">There are no pending approvals at this time.</p>
+          <h3 className="text-lg font-bold text-white mb-2">All Clear!</h3>
+          <p className="text-sm text-slate-400">There are no pending approvals at this time.</p>
         </div>
       )}
     </div>
@@ -224,9 +224,9 @@ function ActionCard({ to, icon, title, description, disabled }: {
   return (
     <Cmp
       to={disabled ? undefined : to}
-      className={`group relative overflow-hidden rounded-2xl bg-white shadow-lg border border-slate-200 p-6 transition-all duration-300 ${disabled
+      className={`group relative overflow-hidden rounded-3xl bg-[#0f172a] shadow-lg border border-slate-800 p-6 transition-all duration-300 no-underline ${disabled
         ? 'opacity-50 cursor-not-allowed'
-        : 'hover:shadow-xl hover:-translate-y-1 hover:border-slate-300'
+        : 'hover:shadow-xl hover:-translate-y-1 hover:border-slate-700'
         }`}
       title={disabled ? description : undefined}
       aria-disabled={disabled}
@@ -238,11 +238,11 @@ function ActionCard({ to, icon, title, description, disabled }: {
           {icon}
         </div>
 
-        <h3 className="text-lg font-bold text-slate-900 mb-1">{title}</h3>
-        <p className="text-sm text-slate-600">{description}</p>
+        <h3 className="text-lg font-bold text-white mb-1">{title}</h3>
+        <p className="text-sm text-slate-400">{description}</p>
 
         {!disabled && (
-          <div className="mt-4 flex items-center text-sm font-semibold text-blue-600 group-hover:text-blue-700">
+          <div className="mt-4 flex items-center text-sm font-semibold text-blue-400 group-hover:text-blue-300">
             Open
             <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
           </div>
