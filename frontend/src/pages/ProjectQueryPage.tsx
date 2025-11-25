@@ -1,6 +1,6 @@
 import { ReactNode } from 'react'
 import { Link, useSearchParams, useParams } from 'react-router-dom'
-import { RotateCcw, ShieldCheck, FileSearch, ArrowRight, FlaskConical } from 'lucide-react'
+import { RotateCcw, ShieldCheck, FileSearch, ArrowRight, FlaskConical, Pencil } from 'lucide-react'
 
 export default function ProjectQueryPage() {
     const { id } = useParams<{ id: string }>()
@@ -41,7 +41,15 @@ export default function ProjectQueryPage() {
             </div>
 
             {/* Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <FeatureCard
+                    icon={<Pencil className="w-8 h-8" />}
+                    title="Live Editor"
+                    description="Edit dataset cells directly with real-time validation and change tracking."
+                    color="purple"
+                    to={datasetId ? `/projects/${id}/datasets/${datasetId}/live-edit` : '#'}
+                />
+
                 <FeatureCard
                     icon={<RotateCcw className="w-8 h-8" />}
                     title="Restore"
@@ -63,7 +71,7 @@ export default function ProjectQueryPage() {
                     title="Audit"
                     description="Track changes, access logs, and monitor security events."
                     color="amber"
-                    to="#" // Placeholder
+                    to={datasetId ? `/projects/${id}/datasets/${datasetId}/audit` : '#'}
                 />
             </div>
         </div>

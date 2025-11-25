@@ -650,9 +650,33 @@ def delta_query_legacy(payload: DeltaQueryPayload):
 
 @app.get("/delta/history/{table}")
 def delta_history(table: str):
+    """Get Delta table history using table name (legacy endpoint)."""
     if _delta_adapter is None:
         raise HTTPException(status_code=500, detail="Delta adapter not available")
-    return {"history": _delta_adapter.history(table)}
+    # Parse table name if it contains project/dataset info
+    # Format could be: "project_id/dataset_id" or just a table name
+    parts = table.split("/")
+    if len(parts) == 2:
+        try:
+            project_id = int(parts[0])
+            dataset_id = int(parts[1])
+            return {"history": _delta_adapter.history(project_id, dataset_id)}
+        except ValueError:
+            pass
+    # Fallback: treat as simple table name (not supported by current adapter)
+    return {"history": []}
+
+
+@app.get("/delta/history/{project_id}/{dataset_id}")
+def delta_history_by_ids(project_id: int, dataset_id: int):
+    """Get Delta table history using project and dataset IDs."""
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    try:
+        return {"history": _delta_adapter.history(project_id, dataset_id)}
+    except Exception as e:
+        # Table might not exist yet
+        return {"history": []}
 
 
 class RestoreRequest(BaseModel):

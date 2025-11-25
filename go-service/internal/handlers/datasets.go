@@ -479,6 +479,15 @@ func ingestBytesToTable(gdb *gorm.DB, content []byte, filename, table string) er
 	}
 }
 
+// countStagingRows counts rows in a staging table
+func countStagingRows(gdb *gorm.DB, table string) int {
+	var count int64
+	if err := gdb.Table(table).Count(&count).Error; err != nil {
+		return 0
+	}
+	return int(count)
+}
+
 // List datasets within a project
 func DatasetsList(c *gin.Context) {
 	gdb := dbpkg.Get()
@@ -2050,12 +2059,23 @@ func AppendUpload(c *gin.Context) {
 		return
 	}
 	// Create staging table and ingest upload content
+	stagingTbl := dsStagingTable(ds.ID, cr.ID)
 	_ = ensureStagingTable(gdb, ds.ID, cr.ID)
-	_ = ingestBytesToTable(gdb, up.Content, up.Filename, dsStagingTable(ds.ID, cr.ID))
+	_ = ingestBytesToTable(gdb, up.Content, up.Filename, stagingTbl)
+	rowCount := countStagingRows(gdb, stagingTbl)
 	// Notify reviewer if present
 	if reviewerID != 0 {
 		_ = AddNotification(reviewerID, "You were requested to review a change", models.JSONB{"type": "reviewer_assigned", "project_id": uint(pid), "dataset_id": ds.ID, "change_request_id": cr.ID, "title": "Append data"})
 	}
+	// Record audit event for CR creation
+	crID := cr.ID
+	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, cr.UserID, models.AuditEventTypeCRCreated,
+		fmt.Sprintf("Change Request #%d created: %s", cr.ID, cr.Title),
+		fmt.Sprintf("%d rows appended", rowCount),
+		&crID,
+		models.AuditEventSummary{RowsAdded: rowCount},
+		nil,
+	)
 	c.JSON(201, gin.H{"ok": true, "change_request": cr})
 }
 
@@ -2432,8 +2452,10 @@ func AppendOpen(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
+	stagingTbl2 := dsStagingTable(ds.ID, cr.ID)
 	_ = ensureStagingTable(gdb, ds.ID, cr.ID)
-	_ = ingestBytesToTable(gdb, up.Content, up.Filename, dsStagingTable(ds.ID, cr.ID))
+	_ = ingestBytesToTable(gdb, up.Content, up.Filename, stagingTbl2)
+	rowCount2 := countStagingRows(gdb, stagingTbl2)
 	// Notify reviewers
 	reviewers := []uint{}
 	if firstReviewer != 0 {
@@ -2458,6 +2480,15 @@ func AppendOpen(c *gin.Context) {
 		}
 		_ = gdb.Create(&cc).Error
 	}
+	// Record audit event for CR creation
+	crID := cr.ID
+	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, cr.UserID, models.AuditEventTypeCRCreated,
+		fmt.Sprintf("Change Request #%d created: %s", cr.ID, cr.Title),
+		fmt.Sprintf("%d rows appended", rowCount2),
+		&crID,
+		models.AuditEventSummary{RowsAdded: rowCount2},
+		nil,
+	)
 	c.JSON(201, gin.H{"ok": true, "change_request": cr})
 }
 
@@ -2664,8 +2695,15 @@ func AppendJSON(c *gin.Context) {
 		return
 	}
 	// Create staging table and ingest JSON rows
+	stagingTbl3 := dsStagingTable(ds.ID, cr.ID)
 	_ = ensureStagingTable(gdb, ds.ID, cr.ID)
-	_ = ingestBytesToTable(gdb, jb, fname, dsStagingTable(ds.ID, cr.ID))
+	_ = ingestBytesToTable(gdb, jb, fname, stagingTbl3)
+	// For edited rows, count cells changed (each row has edits)
+	rowCount3 := len(body.Rows)
+	cellsEdited := 0
+	for _, row := range body.Rows {
+		cellsEdited += len(row)
+	}
 	// Notify reviewers for edited-rows path
 	reviewers := []uint{}
 	if firstReviewer != 0 {
@@ -2675,6 +2713,15 @@ func AppendJSON(c *gin.Context) {
 		reviewers = reviewersAll
 	}
 	_ = AddNotificationsBulk(reviewers, "You were requested to review a change", models.JSONB{"type": "reviewer_assigned", "project_id": uint(pid), "dataset_id": ds.ID, "change_request_id": cr.ID, "title": "Append data (edited)"})
+	// Record audit event for CR creation
+	crID := cr.ID
+	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, cr.UserID, models.AuditEventTypeCRCreated,
+		fmt.Sprintf("Change Request #%d created: %s", cr.ID, cr.Title),
+		fmt.Sprintf("%d rows appended, %d cells edited", rowCount3, cellsEdited),
+		&crID,
+		models.AuditEventSummary{RowsAdded: rowCount3, CellsChanged: cellsEdited},
+		nil,
+	)
 	c.JSON(201, gin.H{"ok": true, "change_request": cr})
 }
 

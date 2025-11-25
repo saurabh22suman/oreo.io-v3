@@ -228,6 +228,15 @@ func ChangeApprove(c *gin.Context) {
 			}
 			// Notify requester
 			if cr.UserID != 0 { _ = AddNotification(cr.UserID, "Your append request has been applied successfully", models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID}) }
+			// Record audit event for CR merge
+			crID := cr.ID
+			_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, models.AuditEventTypeCRMerged,
+				fmt.Sprintf("Change Request #%d merged", cr.ID),
+				fmt.Sprintf("Append data request was applied to dataset"),
+				&crID,
+				models.AuditEventSummary{RowsAdded: int(rowCount)},
+				nil,
+			)
 			c.JSON(200, gin.H{"ok": true, "change_request": cr})
 			return
 		}
@@ -371,6 +380,21 @@ func ChangeApprove(c *gin.Context) {
 			}
 			_ = AddNotification(cr.UserID, msg, models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID})
 		}
+		// Record audit event for CR merge (DB path)
+		crID := cr.ID
+		eventType := models.AuditEventTypeCRMerged
+		eventTitle := fmt.Sprintf("Change Request #%d merged", cr.ID)
+		if !usedDB {
+			eventType = models.AuditEventTypeCRApproved
+			eventTitle = fmt.Sprintf("Change Request #%d approved", cr.ID)
+		}
+		_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, eventType,
+			eventTitle,
+			fmt.Sprintf("Append data request was processed"),
+			&crID,
+			models.AuditEventSummary{RowsAdded: int(rowCount)},
+			nil,
+		)
 		c.JSON(200, gin.H{"ok": true, "change_request": cr})
 		return
 	}
@@ -488,6 +512,15 @@ func ChangeReject(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
+	// Record audit event for CR rejection
+	crID := cr.ID
+	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, models.AuditEventTypeCRRejected,
+		fmt.Sprintf("Change Request #%d rejected", cr.ID),
+		fmt.Sprintf("Change request was rejected by reviewer"),
+		&crID,
+		models.AuditEventSummary{},
+		nil,
+	)
 	c.JSON(200, gin.H{"ok": true, "change_request": cr})
 }
 
@@ -542,6 +575,15 @@ func ChangeWithdraw(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
+	// Record audit event for CR withdrawal
+	crID := cr.ID
+	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, uid, models.AuditEventTypeCRWithdrawn,
+		fmt.Sprintf("Change Request #%d withdrawn", cr.ID),
+		fmt.Sprintf("Change request was withdrawn by the requester"),
+		&crID,
+		models.AuditEventSummary{},
+		nil,
+	)
 	c.JSON(200, gin.H{"ok": true, "change_request": cr})
 }
 

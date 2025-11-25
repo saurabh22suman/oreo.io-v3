@@ -80,6 +80,7 @@ func SetupRouter() *gin.Engine {
 			&models.ProjectActivity{},
 			&models.DataQualityRule{},
 			&models.DataQualityResult{},
+			&models.AuditEvent{},
 		)
 
 		// Only migrate jobs table and start worker when using Postgres (skip for sqlite tests)
@@ -234,6 +235,8 @@ func SetupRouter() *gin.Engine {
 		RegisterSecurityRoutes(r)
 		// Jobs (background tasks)
 		RegisterJobsRoutes(r)
+		// Audit routes (dataset timeline & event details)
+		RegisterAuditRoutes(r)
 
 		// Note: Datasets APIs are currently nested under projects routes.
 
