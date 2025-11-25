@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getDataset, getDatasetStatsTop, getProject, listDatasetApprovalsTop, myProjectRole, subscribeNotifications } from '../api'
 import Alert from '../components/Alert'
-import { Database, Eye, Plus, Terminal, Settings, Clock, Table2, BarChart3, FileCheck, ArrowRight } from 'lucide-react'
+import { Database, Eye, Plus, Atom, Settings, Clock, Table2, BarChart3, FileCheck, ArrowRight, Terminal } from 'lucide-react'
 
 type Dataset = { id: number; name: string; schema?: string; rules?: string; last_upload_path?: string; last_upload_at?: string }
 

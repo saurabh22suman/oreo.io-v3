@@ -134,8 +134,8 @@ export default function MembersPage() {
                       <div className="font-medium text-slate-900 dark:text-white">{m.email}</div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${m.role === 'owner' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' :
-                            m.role === 'contributor' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
-                              'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                          m.role === 'contributor' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                            'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
                           }`}>
                           {m.role.charAt(0).toUpperCase() + m.role.slice(1)}
                         </span>
