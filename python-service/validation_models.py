@@ -148,7 +148,7 @@ class SessionValidationResult(BaseModel):
 
 class ChangeRequestValidationResult(BaseModel):
     """Result of change request validation"""
-    change_request_id: int
+    change_request_tag: str
     state: ChangeRequestValidationState
     validation_result: ValidationResult
     can_approve: bool
@@ -157,7 +157,7 @@ class ChangeRequestValidationResult(BaseModel):
 
 class MergeValidationResult(BaseModel):
     """Result of merge-stage validation"""
-    change_request_id: int
+    change_request_tag: str
     merge_state: MergeState
     validation_result: ValidationResult
     conflict_detected: bool = False

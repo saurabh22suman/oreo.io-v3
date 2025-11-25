@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/config"
+	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
 	"gorm.io/gorm"
 )
@@ -27,17 +27,21 @@ func ChangesList(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pidStr := c.Param("id")
-	if pidStr == "" {
-		pidStr = c.Param("projectId")
+	pidOrTag := c.Param("id")
+	if pidOrTag == "" {
+		pidOrTag = c.Param("projectId")
 	}
-	pid, _ := strconv.Atoi(pidStr)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
 	var items []models.ChangeRequest
-	if err := gdb.Where("project_id = ?", pid).Order("id desc").Find(&items).Error; err != nil {
+	if err := gdb.Where("project_id = ?", project.ID).Order("id desc").Find(&items).Error; err != nil {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
@@ -54,22 +58,33 @@ func ChangeApprove(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pidStr := c.Param("id")
-	if pidStr == "" {
-		pidStr = c.Param("projectId")
+	pidOrTag := c.Param("id")
+	if pidOrTag == "" {
+		pidOrTag = c.Param("projectId")
 	}
-	pid, _ := strconv.Atoi(pidStr)
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
 	// Basic access: must at least be a project member (viewer or above)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
-	changeID, _ := strconv.Atoi(c.Param("changeId"))
-
+	changeIDOrTag := c.Param("changeId")
+	// Lookup change request by ID or vanity tag
 	var cr models.ChangeRequest
-	if err := gdb.Where("project_id = ?", pid).First(&cr, changeID).Error; err != nil {
-		c.JSON(404, gin.H{"error": "not_found"})
-		return
+	if cid, err := strconv.Atoi(changeIDOrTag); err == nil {
+		if err := gdb.Where("project_id = ?", project.ID).First(&cr, cid).Error; err != nil {
+			c.JSON(404, gin.H{"error": "not_found"})
+			return
+		}
+	} else {
+		if err := gdb.Where("project_id = ? AND vanity_tag = ?", project.ID, changeIDOrTag).First(&cr).Error; err != nil {
+			c.JSON(404, gin.H{"error": "not_found"})
+			return
+		}
 	}
 	if cr.Status != "pending" {
 		c.JSON(409, gin.H{"error": "not_pending"})
@@ -155,7 +170,7 @@ func ChangeApprove(c *gin.Context) {
 	// Apply according to type. For append, prefer backend-specific path.
 	if cr.Type == "append" {
 		var ds models.Dataset
-		if err := gdb.Where("project_id = ?", pid).First(&ds, cr.DatasetID).Error; err != nil {
+		if err := gdb.Where("project_id = ?", project.ID).First(&ds, cr.DatasetID).Error; err != nil {
 			c.JSON(404, gin.H{"error": "dataset_not_found"})
 			return
 		}
@@ -170,19 +185,22 @@ func ChangeApprove(c *gin.Context) {
 			return
 		}
 		var up models.DatasetUpload
-		if err := gdb.Where("project_id = ? AND id = ?", pid, payload.UploadID).First(&up).Error; err != nil {
+		if err := gdb.Where("project_id = ? AND id = ?", project.ID, payload.UploadID).First(&up).Error; err != nil {
 			c.JSON(404, gin.H{"error": "upload_not_found"})
 			return
 		}
 		// Delta backend: stream upload directly to python /delta/append-file
 		if strings.EqualFold(ds.StorageBackend, "delta") {
-			cfg := config.Get(); pyBase := cfg.PythonServiceURL
-			if strings.TrimSpace(pyBase) == "" { pyBase = "http://python-service:8000" }
+			cfg := config.Get()
+			pyBase := cfg.PythonServiceURL
+			if strings.TrimSpace(pyBase) == "" {
+				pyBase = "http://python-service:8000"
+			}
 			var mpBuf bytes.Buffer
 			mw := multipart.NewWriter(&mpBuf)
-			// Use hierarchical path (project_id + dataset_id) for proper main table location
-			_ = mw.WriteField("project_id", fmt.Sprintf("%d", pid))
-			_ = mw.WriteField("dataset_id", fmt.Sprintf("%d", ds.ID))
+			// Use vanity tags for hierarchical path structure
+			_ = mw.WriteField("project_tag", project.VanityTag)
+			_ = mw.WriteField("dataset_tag", ds.VanityTag)
 			fw, _ := mw.CreateFormFile("file", payload.Filename)
 			_, _ = fw.Write(up.Content)
 			_ = mw.Close()
@@ -199,15 +217,17 @@ func ChangeApprove(c *gin.Context) {
 				return
 			}
 			// Update timestamps and meta
-		now := time.Now()
-		ds.LastUploadAt = &now
-		_ = gdb.Save(&ds).Error
-		upsertDatasetMeta(gdb, &ds)
-		// Record version snapshot (delta path reference)
-		cfg = config.Get()
-		root := strings.TrimRight(cfg.DeltaDataRoot, "/\\")
-		if root == "" { root = "/data/delta" }
-		main := fmt.Sprintf("%s/%d", root, ds.ID)
+			now := time.Now()
+			ds.LastUploadAt = &now
+			_ = gdb.Save(&ds).Error
+			upsertDatasetMeta(gdb, &ds)
+			// Record version snapshot (delta path reference)
+			cfg = config.Get()
+			root := strings.TrimRight(cfg.DeltaDataRoot, "/\\")
+			if root == "" {
+				root = "/data/delta"
+			}
+			main := fmt.Sprintf("%s/%d", root, ds.ID)
 			var rowCount int64 = 0
 			verData := map[string]any{
 				"table":      main,
@@ -217,8 +237,10 @@ func ChangeApprove(c *gin.Context) {
 			}
 			if b, err := json.Marshal(verData); err == nil {
 				approvers := cr.ReviewerStates
-				if strings.TrimSpace(approvers) == "" { approvers = cr.Reviewers }
-				_ = gdb.Create(&models.DatasetVersion{ DatasetID: ds.ID, Data: string(b), EditedBy: cr.UserID, EditedAt: time.Now(), Status: "approved", Approvers: approvers }).Error
+				if strings.TrimSpace(approvers) == "" {
+					approvers = cr.Reviewers
+				}
+				_ = gdb.Create(&models.DatasetVersion{DatasetID: ds.ID, Data: string(b), EditedBy: cr.UserID, EditedAt: time.Now(), Status: "approved", Approvers: approvers}).Error
 			}
 			cr.Status = "completed"
 			cr.Summary = "Applied append at " + time.Now().Format(time.RFC3339)
@@ -227,7 +249,9 @@ func ChangeApprove(c *gin.Context) {
 				return
 			}
 			// Notify requester
-			if cr.UserID != 0 { _ = AddNotification(cr.UserID, "Your append request has been applied successfully", models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID}) }
+			if cr.UserID != 0 {
+				_ = AddNotification(cr.UserID, "Your append request has been applied successfully", models.JSONB{"type": "append_completed", "project_id": project.ID, "dataset_id": cr.DatasetID, "change_request_id": cr.ID})
+			}
 			c.JSON(200, gin.H{"ok": true, "change_request": cr})
 			return
 		}
@@ -329,9 +353,9 @@ func ChangeApprove(c *gin.Context) {
 
 		// Record a dataset version snapshot (table reference and row count) on approved change
 		// Compute row count from main table if available
-	var rowCount int64
-	_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", main)).Row().Scan(&rowCount)
-	fmt.Printf("[ChangeApprove] version snapshot: table=%s row_count=%d\n", main, rowCount)
+		var rowCount int64
+		_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", main)).Row().Scan(&rowCount)
+		fmt.Printf("[ChangeApprove] version snapshot: table=%s row_count=%d\n", main, rowCount)
 		verData := map[string]any{
 			"table":      main,
 			"row_count":  rowCount,
@@ -353,7 +377,7 @@ func ChangeApprove(c *gin.Context) {
 			}).Error
 		}
 		// Mark change status
-	if usedDB {
+		if usedDB {
 			cr.Status = "completed"
 		} else {
 			cr.Status = "approved"
@@ -369,7 +393,7 @@ func ChangeApprove(c *gin.Context) {
 			if !usedDB {
 				msg = "Your append request was approved; data was stored for later processing"
 			}
-			_ = AddNotification(cr.UserID, msg, models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID})
+			_ = AddNotification(cr.UserID, msg, models.JSONB{"type": "append_completed", "project_id": project.ID, "dataset_id": cr.DatasetID, "change_request_id": cr.ID})
 		}
 		c.JSON(200, gin.H{"ok": true, "change_request": cr})
 		return
@@ -394,21 +418,32 @@ func ChangeReject(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pidStr := c.Param("id")
-	if pidStr == "" {
-		pidStr = c.Param("projectId")
+	pidOrTag := c.Param("id")
+	if pidOrTag == "" {
+		pidOrTag = c.Param("projectId")
 	}
-	pid, _ := strconv.Atoi(pidStr)
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
 	// Basic access: must at least be a project member (viewer or above)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
-	changeID, _ := strconv.Atoi(c.Param("changeId"))
+	changeIDOrTag := c.Param("changeId")
 	var cr models.ChangeRequest
-	if err := gdb.Where("project_id = ?", pid).First(&cr, changeID).Error; err != nil {
-		c.JSON(404, gin.H{"error": "not_found"})
-		return
+	if cid, err := strconv.Atoi(changeIDOrTag); err == nil {
+		if err := gdb.Where("project_id = ?", project.ID).First(&cr, cid).Error; err != nil {
+			c.JSON(404, gin.H{"error": "not_found"})
+			return
+		}
+	} else {
+		if err := gdb.Where("project_id = ? AND vanity_tag = ?", project.ID, changeIDOrTag).First(&cr).Error; err != nil {
+			c.JSON(404, gin.H{"error": "not_found"})
+			return
+		}
 	}
 	if cr.Status != "pending" {
 		c.JSON(409, gin.H{"error": "not_pending"})
@@ -501,20 +536,31 @@ func ChangeWithdraw(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pidStr := c.Param("id")
-	if pidStr == "" {
-		pidStr = c.Param("projectId")
+	pidOrTag := c.Param("id")
+	if pidOrTag == "" {
+		pidOrTag = c.Param("projectId")
 	}
-	pid, _ := strconv.Atoi(pidStr)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
-	changeID, _ := strconv.Atoi(c.Param("changeId"))
+	changeIDOrTag := c.Param("changeId")
 	var cr models.ChangeRequest
-	if err := gdb.Where("project_id = ?", pid).First(&cr, changeID).Error; err != nil {
-		c.JSON(404, gin.H{"error": "not_found"})
-		return
+	if cid, err := strconv.Atoi(changeIDOrTag); err == nil {
+		if err := gdb.Where("project_id = ?", project.ID).First(&cr, cid).Error; err != nil {
+			c.JSON(404, gin.H{"error": "not_found"})
+			return
+		}
+	} else {
+		if err := gdb.Where("project_id = ? AND vanity_tag = ?", project.ID, changeIDOrTag).First(&cr).Error; err != nil {
+			c.JSON(404, gin.H{"error": "not_found"})
+			return
+		}
 	}
 	if cr.Status != "pending" {
 		c.JSON(409, gin.H{"error": "not_pending"})
@@ -557,11 +603,19 @@ func DatasetApprovalsListTop(c *gin.Context) {
 		gdb = dbpkg.Get()
 	}
 	// Resolve dataset and enforce RBAC by its project
-	dsID, _ := strconv.Atoi(c.Param("id"))
+	dsIDOrTag := c.Param("id")
 	var ds models.Dataset
-	if err := gdb.First(&ds, dsID).Error; err != nil {
-		c.JSON(404, gin.H{"error": "dataset_not_found"})
-		return
+	// Try numeric ID first, then vanity tag
+	if dsID, err := strconv.Atoi(dsIDOrTag); err == nil {
+		if err := gdb.First(&ds, dsID).Error; err != nil {
+			c.JSON(404, gin.H{"error": "dataset_not_found"})
+			return
+		}
+	} else {
+		if err := gdb.Where("vanity_tag = ?", dsIDOrTag).First(&ds).Error; err != nil {
+			c.JSON(404, gin.H{"error": "dataset_not_found"})
+			return
+		}
 	}
 	if !HasProjectRole(c, ds.ProjectID, "owner", "contributor", "viewer") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})

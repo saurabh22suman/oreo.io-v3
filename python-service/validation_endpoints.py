@@ -17,8 +17,8 @@ except Exception as e:
 
 class CellValidationRequest(BaseModel):
     """Request for cell-level validation"""
-    project_id: int
-    dataset_id: int
+    project_tag: str
+    dataset_tag: str
     row_id: str
     column: str
     new_value: Any
@@ -26,23 +26,23 @@ class CellValidationRequest(BaseModel):
 
 class SessionValidationRequest(BaseModel):
     """Request for session-level validation"""
-    project_id: int
-    dataset_id: int
+    project_tag: str
+    dataset_tag: str
     session_id: str
 
 
 class ChangeRequestValidationRequest(BaseModel):
     """Request for change request validation"""
-    project_id: int
-    dataset_id: int
-    change_request_id: int
+    project_tag: str
+    dataset_tag: str
+    change_request_tag: str
 
 
 class MergeValidationRequest(BaseModel):
     """Request for merge validation"""
-    project_id: int
-    dataset_id: int
-    change_request_id: int
+    project_tag: str
+    dataset_tag: str
+    change_request_tag: str
 
 
 @app.post("/validation/cell")
@@ -58,8 +58,8 @@ def validate_cell_endpoint(req: CellValidationRequest):
     
     try:
         result = _validation_service.validate_cell(
-            req.project_id,
-            req.dataset_id,
+            req.project_tag,
+            req.dataset_tag,
             req.row_id,
             req.column,
             req.new_value
@@ -82,16 +82,16 @@ def validate_session_endpoint(req: SessionValidationRequest):
     
     try:
         result = _validation_service.validate_session(
-            req.project_id,
-            req.dataset_id,
+            req.project_tag,
+            req.dataset_tag,
             req.session_id
         )
         
         # Save validation result
         if result.validation_result:
             _validation_service.save_validation_result(
-                req.project_id,
-                req.dataset_id,
+                req.project_tag,
+                req.dataset_tag,
                 result.validation_result
             )
         
@@ -113,16 +113,16 @@ def validate_change_request_endpoint(req: ChangeRequestValidationRequest):
     
     try:
         result = _validation_service.validate_change_request(
-            req.project_id,
-            req.dataset_id,
-            req.change_request_id
+            req.project_tag,
+            req.dataset_tag,
+            req.change_request_tag
         )
         
         # Save validation result
         if result.validation_result:
             _validation_service.save_validation_result(
-                req.project_id,
-                req.dataset_id,
+                req.project_tag,
+                req.dataset_tag,
                 result.validation_result
             )
         
@@ -144,16 +144,16 @@ def validate_merge_endpoint(req: MergeValidationRequest):
     
     try:
         result = _validation_service.validate_before_merge(
-            req.project_id,
-            req.dataset_id,
-            req.change_request_id
+            req.project_tag,
+            req.dataset_tag,
+            req.change_request_tag
         )
         
         # Save validation result
         if result.validation_result:
             _validation_service.save_validation_result(
-                req.project_id,
-                req.dataset_id,
+                req.project_tag,
+                req.dataset_tag,
                 result.validation_result
             )
         

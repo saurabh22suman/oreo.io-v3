@@ -63,25 +63,25 @@ class MergeExecutor:
         self.audit_root = os.path.join(delta_root, "audit", "change_requests")
         os.makedirs(self.audit_root, exist_ok=True)
     
-    def _get_main_path(self, project_id: int, dataset_id: int) -> str:
+    def _get_main_path(self, project_tag: str, dataset_tag: str) -> str:
         """Get path to main Delta table"""
         return os.path.join(
             self.delta_root,
             "projects",
-            str(project_id),
+            project_tag,
             "datasets",
-            str(dataset_id),
+            dataset_tag,
             "main"
         )
     
-    def _get_staging_path(self, project_id: int, dataset_id: int, cr_id: str) -> str:
+    def _get_staging_path(self, project_tag: str, dataset_tag: str, cr_id: str) -> str:
         """Get path to staging Delta table"""
         return os.path.join(
             self.delta_root,
             "projects",
-            str(project_id),
+            project_tag,
             "datasets",
-            str(dataset_id),
+            dataset_tag,
             "staging",
             cr_id
         )
@@ -376,8 +376,8 @@ class MergeExecutor:
     
     def full_merge(
         self,
-        project_id: int,
-        dataset_id: int,
+        project_tag: str,
+        dataset_tag: str,
         cr_id: str,
         primary_keys: List[str],
         delta_version_before: Optional[int] = None,
@@ -397,15 +397,15 @@ class MergeExecutor:
         - diff summary
         - audit info
         """
-        main_path = self._get_main_path(project_id, dataset_id)
-        staging_path = self._get_staging_path(project_id, dataset_id, cr_id)
+        main_path = self._get_main_path(project_tag, dataset_tag)
+        staging_path = self._get_staging_path(project_tag, dataset_tag, cr_id)
         audit_path = self._get_audit_path(cr_id)
         
         result = {
             "ok": False,
             "cr_id": cr_id,
-            "project_id": project_id,
-            "dataset_id": dataset_id,
+            "project_tag": project_tag,
+            "dataset_tag": dataset_tag,
             "conflicts": [],
             "validation": None,
             "merge": None,

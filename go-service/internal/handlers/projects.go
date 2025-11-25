@@ -6,12 +6,45 @@ import (
 	"github.com/gin-gonic/gin"
 	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
+	"github.com/oreo-io/oreo.io-v2/go-service/internal/utils"
 	"gorm.io/gorm"
 )
 
 type ProjectIn struct {
 	Name        string `json:"name" binding:"required,min=1"`
 	Description string `json:"description"`
+}
+
+// LookupProjectByIDOrTag finds a project by numeric ID or vanity tag
+func LookupProjectByIDOrTag(db *gorm.DB, idOrTag string) (*models.Project, error) {
+	var p models.Project
+	// Try numeric ID first
+	if id, err := strconv.Atoi(idOrTag); err == nil {
+		if err := db.First(&p, id).Error; err == nil {
+			return &p, nil
+		}
+	}
+	// Try vanity tag
+	if err := db.Where("vanity_tag = ?", idOrTag).First(&p).Error; err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// LookupDatasetByIDOrTag finds a dataset by numeric ID or vanity tag within a project
+func LookupDatasetByIDOrTag(db *gorm.DB, projectID uint, idOrTag string) (*models.Dataset, error) {
+	var ds models.Dataset
+	// Try numeric ID first
+	if id, err := strconv.Atoi(idOrTag); err == nil {
+		if err := db.Where("id = ? AND project_id = ?", id, projectID).First(&ds).Error; err == nil {
+			return &ds, nil
+		}
+	}
+	// Try vanity tag
+	if err := db.Where("vanity_tag = ? AND project_id = ?", idOrTag, projectID).First(&ds).Error; err != nil {
+		return nil, err
+	}
+	return &ds, nil
 }
 
 func ProjectsList(c *gin.Context) {
@@ -118,7 +151,7 @@ func ProjectsCreate(c *gin.Context) {
 			ownerID = v
 		}
 	}
-	p := models.Project{Name: in.Name, Description: in.Description, OwnerID: ownerID}
+	p := models.Project{Name: in.Name, Description: in.Description, OwnerID: ownerID, VanityTag: utils.GenerateVanityTag()}
 	if err := gdb.Create(&p).Error; err != nil {
 		c.JSON(409, gin.H{"error": "name_conflict"})
 		return
@@ -138,10 +171,9 @@ func ProjectsGet(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	idStr := c.Param("id")
-	id, _ := strconv.Atoi(idStr)
-	var p models.Project
-	if err := gdb.First(&p, id).Error; err != nil {
+	idOrTag := c.Param("id")
+	p, err := LookupProjectByIDOrTag(gdb, idOrTag)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "not_found"})
 		return
 	}
@@ -162,10 +194,9 @@ func ProjectsUpdate(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	idStr := c.Param("id")
-	id, _ := strconv.Atoi(idStr)
-	var p models.Project
-	if err := gdb.First(&p, id).Error; err != nil {
+	idOrTag := c.Param("id")
+	p, err := LookupProjectByIDOrTag(gdb, idOrTag)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "not_found"})
 		return
 	}
@@ -197,10 +228,9 @@ func ProjectsDelete(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	idStr := c.Param("id")
-	id, _ := strconv.Atoi(idStr)
-	var p models.Project
-	if err := gdb.First(&p, id).Error; err != nil {
+	idOrTag := c.Param("id")
+	p, err := LookupProjectByIDOrTag(gdb, idOrTag)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "not_found"})
 		return
 	}

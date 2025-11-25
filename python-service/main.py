@@ -322,8 +322,8 @@ class DeltaAppendPayload(BaseModel):
 
 class DeltaEnsurePayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    project_id: Optional[int] = None
-    dataset_id: Optional[int] = None
+    project_tag: Optional[str] = None
+    dataset_tag: Optional[str] = None
     table: Optional[str] = None  # Legacy support
     schema: Dict[str, Any]
 
@@ -333,10 +333,10 @@ def delta_ensure(payload: DeltaEnsurePayload):
     if _delta_adapter is None:
         raise HTTPException(status_code=500, detail="Delta adapter not available")
     
-    # Prefer hierarchical path
-    if payload.project_id is not None and payload.dataset_id is not None:
+    # Prefer hierarchical path with vanity tags
+    if payload.project_tag is not None and payload.dataset_tag is not None:
         try:
-            _delta_adapter.ensure_main_table(payload.project_id, payload.dataset_id, payload.schema or {})
+            _delta_adapter.ensure_main_table(payload.project_tag, payload.dataset_tag, payload.schema or {})
             return {"ok": True}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
@@ -348,7 +348,7 @@ def delta_ensure(payload: DeltaEnsurePayload):
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
     else:
-        raise HTTPException(status_code=400, detail="Either (project_id + dataset_id) or table is required")
+        raise HTTPException(status_code=400, detail="Either (project_tag + dataset_tag) or table is required")
 
 
 
@@ -365,20 +365,20 @@ def delta_append(payload: DeltaAppendPayload):
 @app.post("/delta/append-file")
 def delta_append_file(
     file: UploadFile = File(...),
-    project_id: Optional[int] = Form(None),
-    dataset_id: Optional[int] = Form(None),
+    project_tag: Optional[str] = Form(None),
+    dataset_tag: Optional[str] = Form(None),
     table: Optional[str] = Form(None)  # Legacy support
 ):
     if _delta_adapter is None:
         raise HTTPException(status_code=500, detail="Delta adapter not available")
     
-    # Prefer hierarchical path with project_id/dataset_id
-    if project_id is not None and dataset_id is not None:
+    # Prefer hierarchical path with vanity tags
+    if project_tag is not None and dataset_tag is not None:
         use_hierarchical = True
     elif table:
         use_hierarchical = False
     else:
-        raise HTTPException(status_code=400, detail="Either (project_id + dataset_id) or table is required")
+        raise HTTPException(status_code=400, detail="Either (project_tag + dataset_tag) or table is required")
     content = file.file.read()
     # Try CSV, JSON, Excel
     rows: List[Dict[str, Any]] = []
@@ -416,7 +416,7 @@ def delta_append_file(
         raise HTTPException(status_code=400, detail="invalid rows")
     
     if use_hierarchical:
-        _delta_adapter.append_to_main(project_id, dataset_id, rows or [])
+        _delta_adapter.append_to_main(project_tag, dataset_tag, rows or [])
     else:
         _delta_adapter.append_rows(table, rows or [])  # Legacy
     
@@ -541,8 +541,8 @@ def staging_delete(staging_id: str):
 @app.post("/staging/{staging_id}/finalize")
 def staging_finalize(
     staging_id: str,
-    project_id: int = Form(...),
-    dataset_id: int = Form(...),
+    project_tag: str = Form(...),
+    dataset_tag: str = Form(...),
 ):
     """Finalize a staged upload by writing data to the Delta table.
     
@@ -598,7 +598,7 @@ def staging_finalize(
     
     # Write to Delta table
     try:
-        _delta_adapter.append_to_main(project_id, dataset_id, rows)
+        _delta_adapter.append_to_main(project_tag, dataset_tag, rows)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to write to Delta: {e}")
     
@@ -658,8 +658,8 @@ def delta_history(table: str):
 class RestoreRequest(BaseModel):
     """Request model for Delta table restore operation."""
     model_config = ConfigDict(extra="ignore")
-    project_id: int
-    dataset_id: int
+    project_tag: str
+    dataset_tag: str
     version: int
 
 
@@ -678,7 +678,7 @@ def delta_restore_new(payload: RestoreRequest):
         raise HTTPException(status_code=500, detail="Delta adapter not available")
     
     try:
-        result = _delta_adapter.restore(payload.project_id, payload.dataset_id, payload.version)
+        result = _delta_adapter.restore(payload.project_tag, payload.dataset_tag, payload.version)
         return {
             "status": "ok",
             "restored_to_version": result["restored_to"],
@@ -734,8 +734,8 @@ class MergeChangeRequestPayload(BaseModel):
     """
     model_config = ConfigDict(extra="ignore")
     
-    project_id: int
-    dataset_id: int
+    project_tag: str
+    dataset_tag: str
     cr_id: str
     primary_keys: List[str]
     delta_version_before: Optional[int] = None
@@ -768,8 +768,8 @@ def delta_merge_change_request(payload: MergeChangeRequestPayload):
     try:
         # Execute full merge workflow
         result = _merge_executor.full_merge(
-            project_id=payload.project_id,
-            dataset_id=payload.dataset_id,
+            project_tag=payload.project_tag,
+            dataset_tag=payload.dataset_tag,
             cr_id=payload.cr_id,
             primary_keys=payload.primary_keys,
             delta_version_before=payload.delta_version_before,
@@ -1016,8 +1016,8 @@ except Exception as e:
 
 class CellValidationRequest(BaseModel):
     """Request for cell-level validation"""
-    project_id: int
-    dataset_id: int
+    project_tag: str
+    dataset_tag: str
     row_id: str
     column: str
     new_value: Any
@@ -1025,23 +1025,23 @@ class CellValidationRequest(BaseModel):
 
 class SessionValidationRequest(BaseModel):
     """Request for session-level validation"""
-    project_id: int
-    dataset_id: int
+    project_tag: str
+    dataset_tag: str
     session_id: str
 
 
 class ChangeRequestValidationRequest(BaseModel):
     """Request for change request validation"""
-    project_id: int
-    dataset_id: int
-    change_request_id: int
+    project_tag: str
+    dataset_tag: str
+    change_request_tag: str
 
 
 class MergeValidationRequest(BaseModel):
     """Request for merge validation"""
-    project_id: int
-    dataset_id: int
-    change_request_id: int
+    project_tag: str
+    dataset_tag: str
+    change_request_tag: str
 
 
 @app.post("/validation/cell")
@@ -1057,8 +1057,8 @@ def validate_cell_endpoint(req: CellValidationRequest):
     
     try:
         result = _validation_service.validate_cell(
-            req.project_id,
-            req.dataset_id,
+            req.project_tag,
+            req.dataset_tag,
             req.row_id,
             req.column,
             req.new_value
@@ -1081,16 +1081,16 @@ def validate_session_endpoint(req: SessionValidationRequest):
     
     try:
         result = _validation_service.validate_session(
-            req.project_id,
-            req.dataset_id,
+            req.project_tag,
+            req.dataset_tag,
             req.session_id
         )
         
         # Save validation result
         if result.validation_result:
             _validation_service.save_validation_result(
-                req.project_id,
-                req.dataset_id,
+                req.project_tag,
+                req.dataset_tag,
                 result.validation_result
             )
         
@@ -1112,16 +1112,16 @@ def validate_change_request_endpoint(req: ChangeRequestValidationRequest):
     
     try:
         result = _validation_service.validate_change_request(
-            req.project_id,
-            req.dataset_id,
-            req.change_request_id
+            req.project_tag,
+            req.dataset_tag,
+            req.change_request_tag
         )
         
         # Save validation result
         if result.validation_result:
             _validation_service.save_validation_result(
-                req.project_id,
-                req.dataset_id,
+                req.project_tag,
+                req.dataset_tag,
                 result.validation_result
             )
         
@@ -1143,16 +1143,16 @@ def validate_merge_endpoint(req: MergeValidationRequest):
     
     try:
         result = _validation_service.validate_before_merge(
-            req.project_id,
-            req.dataset_id,
-            req.change_request_id
+            req.project_tag,
+            req.dataset_tag,
+            req.change_request_tag
         )
         
         # Save validation result
         if result.validation_result:
             _validation_service.save_validation_result(
-                req.project_id,
-                req.dataset_id,
+                req.project_tag,
+                req.dataset_tag,
                 result.validation_result
             )
         
@@ -1164,7 +1164,7 @@ def validate_merge_endpoint(req: MergeValidationRequest):
 # ==================== Delta Table Stats ====================
 
 class DeltaStatsRequest(BaseModel):
-    table: str  # dataset ID as string for legacy compatibility
+    table: str  # Can be "project_tag/dataset_tag" format or legacy path
 
 
 @app.post("/delta/stats")
@@ -1174,42 +1174,22 @@ def delta_stats(req: DeltaStatsRequest):
         raise HTTPException(status_code=500, detail="Delta adapter not available")
     
     try:
-        # Parse table as dataset_id (legacy format uses dataset_id as the table identifier)
-        dataset_id = int(req.table)
-        # For now, we'll use project_id = 0 for legacy tables, or parse from extended format later
-        # The delta adapter's _table_path method will use the legacy /data/delta/<id> path
-        # We need to use the new format with project and dataset IDs
-        
-        # Since we're transitioning, try to call get_stats with reasonable defaults
-        # Check if table contains "/" which would indicate new format
+        # Check if table contains "/" which indicates "project_tag/dataset_tag" format
         if "/" in req.table:
-            # New format might be "project_id/dataset_id" but for now we'll use legacy
+            # Format: "project_tag/dataset_tag"
             parts = req.table.split("/")
             if len(parts) >= 2:
-                project_id = int(parts[0])
-                dataset_id = int(parts[1])
-                stats = _delta_adapter.get_stats(project_id, dataset_id)
+                project_tag = parts[0]
+                dataset_tag = parts[1]
+                stats = _delta_adapter.get_stats(project_tag, dataset_tag)
             else:
                 raise ValueError("Invalid table format")
         else:
-            # Legacy format: table is just the dataset_id, assume project_id from structure
-            # For the legacy _table_path, we can call get_stats with dummy project_id
-            # But actually, let's check the actual path structure
-            # The Go service sends just the dataset ID, so we need to handle that
-            # Let's use 0 as project_id for now or check actual file structure
-            # Actually, we should use the new path structure: projects/<project_id>/datasets/<dataset_id>/main
-            # But without project_id, we need to scan or default
-            
-            # Simplest approach: since Go service only sends dataset_id, 
-            # we should update the call to use the legacy _table_path directly
-            # But get_stats uses _main_path which requires project_id
-            
-            # Work-around: read from legacy path /data/delta/<dataset_id>
-            from delta_adapter import DeltaTable
-            import os
+            # Legacy format or single identifier - try legacy path
             from deltalake import DeltaTable
+            import os
             
-            legacy_path = f"/data/delta/{dataset_id}"
+            legacy_path = f"/data/delta/{req.table}"
             if not os.path.exists(os.path.join(legacy_path, "_delta_log")):
                 return {"num_rows": 0, "num_cols": 0}
             
@@ -1227,14 +1207,14 @@ def delta_stats(req: DeltaStatsRequest):
 
 @app.get("/delta/table-info")
 def delta_table_info(
-    project_id: Optional[int] = None,
-    dataset_id: Optional[int] = None,
+    project_tag: Optional[str] = None,
+    dataset_tag: Optional[str] = None,
     table: Optional[str] = None
 ):
     """Get statistics about a Delta table using query parameters.
     
     Accepts either:
-    - project_id + dataset_id (hierarchical path)
+    - project_tag + dataset_tag (hierarchical vanity tag path)
     - table (legacy format)
     """
     if _delta_adapter is None:
@@ -1245,16 +1225,16 @@ def delta_table_info(
         from deltalake import DeltaTable
         
         # Determine which path to use
-        if project_id is not None and dataset_id is not None:
-            # Use hierarchical path
-            delta_path = _delta_adapter._main_path(project_id, dataset_id)
+        if project_tag is not None and dataset_tag is not None:
+            # Use hierarchical path with vanity tags
+            delta_path = _delta_adapter._main_path(project_tag, dataset_tag)
         elif table:
-            # Legacy path - table can be dataset_id or other legacy format
+            # Legacy path - table can be vanity tags or other legacy format
             if "/" in table:
-                # Format: project_id/dataset_id
+                # Format: project_tag/dataset_tag
                 parts = table.split("/")
                 if len(parts) >= 2:
-                    delta_path = _delta_adapter._main_path(int(parts[0]), int(parts[1]))
+                    delta_path = _delta_adapter._main_path(parts[0], parts[1])
                 else:
                     raise ValueError("Invalid table format")
             else:
@@ -1263,7 +1243,7 @@ def delta_table_info(
         else:
             raise HTTPException(
                 status_code=400, 
-                detail="Either (project_id + dataset_id) or table is required"
+                detail="Either (project_tag + dataset_tag) or table is required"
             )
         
         # Check if Delta table exists
@@ -1288,7 +1268,7 @@ def delta_table_info(
 
 class DeltaQueryRequest(BaseModel):
     sql: str
-    table_mappings: Dict[str, str]  # {"schema.table": "project_id/dataset_id"}
+    table_mappings: Dict[str, str]  # {"schema.table": "project_tag/dataset_tag"}
     limit: int = 250
     offset: int = 0
 
@@ -1317,27 +1297,26 @@ def delta_query(req: DeltaQueryRequest):
         
         # Register each Delta table as a view in DuckDB
         for table_ref, path_info in req.table_mappings.items():
-            # path_info can be "project_id/dataset_id" or just "dataset_id"
+            # path_info can be "project_tag/dataset_tag" format
             delta_path = None
             
             if "/" in path_info:
                 parts = path_info.split("/")
-                project_id = int(parts[0])
-                dataset_id = int(parts[1])
+                project_tag = parts[0]
+                dataset_tag = parts[1]
                 
-                # Try new hierarchical path first
-                new_path = _delta_adapter._main_path(project_id, dataset_id)
+                # Try new hierarchical path with vanity tags
+                new_path = _delta_adapter._main_path(project_tag, dataset_tag)
                 if os.path.exists(os.path.join(new_path, "_delta_log")):
                     delta_path = new_path
                 else:
-                    # Fall back to legacy path
-                    legacy_path = f"/data/delta/{dataset_id}"
+                    # Fall back to legacy path (treat path_info as single identifier)
+                    legacy_path = f"/data/delta/{path_info.replace('/', '_')}"
                     if os.path.exists(os.path.join(legacy_path, "_delta_log")):
                         delta_path = legacy_path
             else:
-                # Legacy format - just dataset_id
-                dataset_id = int(path_info)
-                legacy_path = f"/data/delta/{dataset_id}"
+                # Legacy format - single identifier
+                legacy_path = f"/data/delta/{path_info}"
                 if os.path.exists(os.path.join(legacy_path, "_delta_log")):
                     delta_path = legacy_path
             
@@ -1345,7 +1324,7 @@ def delta_query(req: DeltaQueryRequest):
             if delta_path is None or not os.path.exists(os.path.join(delta_path, "_delta_log")):
                 raise HTTPException(
                     status_code=404, 
-                    detail=f"Delta table not found for {table_ref}. Tried paths: new={_delta_adapter._main_path(int(parts[0]), int(parts[1])) if '/' in path_info else 'N/A'}, legacy=/data/delta/{dataset_id}"
+                    detail=f"Delta table not found for {table_ref}. Path info: {path_info}"
                 )
             
             # Normalize path for DuckDB (replace backslashes with forward slashes to avoid escape sequence issues)

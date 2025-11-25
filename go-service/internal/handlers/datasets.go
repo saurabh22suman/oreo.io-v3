@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -15,13 +16,12 @@ import (
 	"strings"
 	"time"
 	"unicode"
-	"log"
 
 	"github.com/gin-gonic/gin"
-	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/config"
-	"github.com/oreo-io/oreo.io-v2/go-service/internal/utils"
+	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
+	"github.com/oreo-io/oreo.io-v2/go-service/internal/utils"
 	"gorm.io/gorm"
 )
 
@@ -265,25 +265,29 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 	tbl := datasetPhysicalTable(ds)
 	// For delta backend, try to get stats from Python service
 	if strings.EqualFold(ds.StorageBackend, "delta") {
-		// Attempt to get Delta table stats from Python service using hierarchical path
-		pyBase := getPythonServiceURL()
-		url := fmt.Sprintf("%s/delta/table-info?project_id=%d&dataset_id=%d", pyBase, ds.ProjectID, ds.ID)
-		resp, err := http.Get(url)
-		if err == nil && resp != nil && resp.StatusCode == 200 {
-			defer resp.Body.Close()
-			var statsResp struct {
-				NumRows int64 `json:"num_rows"`
-				NumCols int   `json:"num_cols"`
-			}
-			if json.NewDecoder(resp.Body).Decode(&statsResp) == nil {
-				rows = statsResp.NumRows
-				// We'll set cols from schema below
+		// Lookup project to get vanity tag
+		var project models.Project
+		if err := gdb.First(&project, ds.ProjectID).Error; err == nil && project.VanityTag != "" && ds.VanityTag != "" {
+			// Attempt to get Delta table stats from Python service using vanity tags
+			pyBase := getPythonServiceURL()
+			url := fmt.Sprintf("%s/delta/table-info?project_tag=%s&dataset_tag=%s", pyBase, project.VanityTag, ds.VanityTag)
+			resp, err := http.Get(url)
+			if err == nil && resp != nil && resp.StatusCode == 200 {
+				defer resp.Body.Close()
+				var statsResp struct {
+					NumRows int64 `json:"num_rows"`
+					NumCols int   `json:"num_cols"`
+				}
+				if json.NewDecoder(resp.Body).Decode(&statsResp) == nil {
+					rows = statsResp.NumRows
+					// We'll set cols from schema below
+				}
 			}
 		}
 	} else if strings.TrimSpace(tbl) != "" {
 		_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", tbl)).Row().Scan(&rows)
 	}
-	
+
 	// Infer columns count from schema
 	cols := 0
 	if strings.TrimSpace(ds.Schema) != "" {
@@ -294,7 +298,7 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 			}
 		}
 	}
-	
+
 	// Fallback: for non-delta, sample one row to infer columns count if schema failed
 	if cols == 0 && rows > 0 && !strings.EqualFold(ds.StorageBackend, "delta") {
 		if r1, err := gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT 1", tbl)).Rows(); err == nil {
@@ -316,7 +320,7 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 			}
 		}
 	}
-	
+
 	// Resolve owner name
 	ownerName := ""
 	var proj models.Project
@@ -327,13 +331,13 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 		}
 	}
 	now := time.Now()
-	
+
 	// Compose table location string - always show schema.table format
 	tableLoc := ""
 	s := strings.TrimSpace(ds.TargetSchema)
 	t := strings.TrimSpace(ds.TargetTable)
 	d := strings.TrimSpace(ds.TargetDatabase)
-	
+
 	// Always use schema.table format for user-facing display
 	switch {
 	case d != "" && s != "" && t != "":
@@ -344,7 +348,7 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 		// Fallback to physical table if target fields not set
 		tableLoc = datasetPhysicalTable(ds)
 	}
-	
+
 	var meta models.DatasetMeta
 	if err := gdb.Where("dataset_id = ?", ds.ID).First(&meta).Error; err != nil {
 		meta = models.DatasetMeta{ProjectID: ds.ProjectID, DatasetID: ds.ID, OwnerName: ownerName, RowCount: rows, ColumnCount: cols, LastUpdateAt: now, TableLocation: tableLoc}
@@ -360,8 +364,11 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 }
 
 // ensureDeltaTable calls the Python service to create an empty Delta table for this dataset.
-func ensureDeltaTable(ds *models.Dataset) error {
-	if ds == nil { return fmt.Errorf("nil dataset") }
+// It requires the project's vanity tag to construct the hierarchical path.
+func ensureDeltaTable(ds *models.Dataset, projectVanityTag string) error {
+	if ds == nil {
+		return fmt.Errorf("nil dataset")
+	}
 	pyBase := getPythonServiceURL()
 	// Build schema object from ds.Schema if JSON; if empty or invalid use {} to satisfy pydantic Dict expectation
 	var schemaObj any
@@ -375,20 +382,25 @@ func ensureDeltaTable(ds *models.Dataset) error {
 		schemaObj = map[string]any{}
 	}
 	payload := map[string]any{
-		"table":  fmt.Sprintf("%d", ds.ID),
-		"schema": schemaObj,
+		"project_tag": projectVanityTag,
+		"dataset_tag": ds.VanityTag,
+		"schema":      schemaObj,
 	}
 	body, _ := json.Marshal(payload)
 	req, _ := http.NewRequest(http.MethodPost, pyBase+"/delta/ensure", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
-	if err != nil || resp == nil { return fmt.Errorf("python_unreachable") }
+	if err != nil || resp == nil {
+		return fmt.Errorf("python_unreachable")
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Attempt to read error body for diagnostic surface
 		b, _ := io.ReadAll(resp.Body)
 		msg := strings.TrimSpace(string(b))
-		if msg == "" { msg = resp.Status }
+		if msg == "" {
+			msg = resp.Status
+		}
 		return fmt.Errorf("ensure_failed: %s", msg)
 	}
 	return nil
@@ -489,17 +501,21 @@ func DatasetsList(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pidStr := c.Param("projectId")
-	if pidStr == "" {
-		pidStr = c.Param("id")
+	pidOrTag := c.Param("projectId")
+	if pidOrTag == "" {
+		pidOrTag = c.Param("id")
 	}
-	pid, _ := strconv.Atoi(pidStr)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
 	var items []models.Dataset
-	if err := gdb.Where("project_id = ?", pid).Order("id desc").Find(&items).Error; err != nil {
+	if err := gdb.Where("project_id = ?", project.ID).Order("id desc").Find(&items).Error; err != nil {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
@@ -515,12 +531,16 @@ func DatasetsCreate(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pidStr := c.Param("projectId")
-	if pidStr == "" {
-		pidStr = c.Param("id")
+	pidOrTag := c.Param("projectId")
+	if pidOrTag == "" {
+		pidOrTag = c.Param("id")
 	}
-	pid, _ := strconv.Atoi(pidStr)
-	if !HasProjectRole(c, uint(pid), "owner", "contributor") {
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -530,19 +550,20 @@ func DatasetsCreate(c *gin.Context) {
 		return
 	}
 	// Capture default storage backend (env driven) for dataset row
-	cfg := config.Get(); backend := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
+	cfg := config.Get()
+	backend := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
 	if backend == "" {
 		backend = "postgres"
 	}
-	ds := models.Dataset{ProjectID: uint(pid), Name: in.Name, Schema: in.Schema, StorageBackend: backend}
+	ds := models.Dataset{ProjectID: project.ID, Name: in.Name, Schema: in.Schema, StorageBackend: backend, VanityTag: utils.GenerateVanityTag()}
 	if err := gdb.Create(&ds).Error; err != nil {
 		c.JSON(409, gin.H{"error": "name_conflict"})
 		return
 	}
 	// Backend-specific ensure logic
 	if strings.EqualFold(ds.StorageBackend, "delta") {
-		// Call python /delta/ensure to create empty delta table (using dataset ID as table name)
-		if err := ensureDeltaTable(&ds); err != nil {
+		// Call python /delta/ensure to create empty delta table
+		if err := ensureDeltaTable(&ds, project.VanityTag); err != nil {
 			// Surface failure to client; delete the just-created dataset row to avoid dangling metadata
 			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
 			c.JSON(500, gin.H{"error": "delta_ensure_failed", "message": err.Error()})
@@ -588,6 +609,12 @@ func DatasetsCreateTop(c *gin.Context) {
 	}
 	if !HasProjectRole(c, body.ProjectID, "owner", "contributor") {
 		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
+	// Lookup project to get vanity tag
+	var project models.Project
+	if err := gdb.First(&project, body.ProjectID).Error; err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
 		return
 	}
 
@@ -654,8 +681,11 @@ func DatasetsCreateTop(c *gin.Context) {
 			return
 		}
 	}
-	cfg := config.Get(); backend := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
-	if backend == "" { backend = "postgres" }
+	cfg := config.Get()
+	backend := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
+	if backend == "" {
+		backend = "postgres"
+	}
 	ds := models.Dataset{
 		ProjectID:      body.ProjectID,
 		Name:           dsName,
@@ -666,6 +696,7 @@ func DatasetsCreateTop(c *gin.Context) {
 		TargetSchema:   schemaName,
 		TargetTable:    tableName,
 		StorageBackend: backend,
+		VanityTag:      utils.GenerateVanityTag(),
 	}
 	if err := gdb.Create(&ds).Error; err != nil {
 		c.JSON(409, gin.H{"error": "name_conflict"})
@@ -673,7 +704,7 @@ func DatasetsCreateTop(c *gin.Context) {
 	}
 	// Ensure physical storage depending on backend
 	if strings.EqualFold(ds.StorageBackend, "delta") {
-		if err := ensureDeltaTable(&ds); err != nil {
+		if err := ensureDeltaTable(&ds, project.VanityTag); err != nil {
 			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
 			c.JSON(500, gin.H{"error": "delta_ensure_failed", "message": err.Error()})
 			return
@@ -703,13 +734,17 @@ func DatasetsPrepare(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid_multipart"})
 		return
 	}
-	pidStr := strings.TrimSpace(c.PostForm("project_id"))
-	pid, _ := strconv.Atoi(pidStr)
-	if pid == 0 {
+	pidOrTag := strings.TrimSpace(c.PostForm("project_id"))
+	if pidOrTag == "" {
 		c.JSON(400, gin.H{"error": "project_required"})
 		return
 	}
-	if !HasProjectRole(c, uint(pid), "owner", "contributor") {
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -727,14 +762,17 @@ func DatasetsPrepare(c *gin.Context) {
 	// Prevent duplicates if schema.table provided
 	if schemaName != "" && tableName != "" {
 		var existing models.Dataset
-		if err := gdb.Where("project_id = ? AND LOWER(target_schema) = ? AND LOWER(target_table) = ?", pid, strings.ToLower(schemaName), tableName).First(&existing).Error; err == nil {
+		if err := gdb.Where("project_id = ? AND LOWER(target_schema) = ? AND LOWER(target_table) = ?", project.ID, strings.ToLower(schemaName), tableName).First(&existing).Error; err == nil {
 			c.JSON(409, gin.H{"error": "dataset_exists", "message": "A dataset for this schema.table already exists."})
 			return
 		}
 	}
-	cfg := config.Get(); backend := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
-	if backend == "" { backend = "postgres" }
-	ds := models.Dataset{ProjectID: uint(pid), Name: name, Source: source, TargetSchema: schemaName, TargetTable: tableName, StorageBackend: backend}
+	cfg := config.Get()
+	backend := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
+	if backend == "" {
+		backend = "postgres"
+	}
+	ds := models.Dataset{ProjectID: project.ID, Name: name, Source: source, TargetSchema: schemaName, TargetTable: tableName, StorageBackend: backend, VanityTag: utils.GenerateVanityTag()}
 	if err := gdb.Create(&ds).Error; err != nil {
 		log.Printf("DatasetsPrepare: create dataset record failed: %v", err)
 		c.JSON(409, gin.H{"error": "name_conflict"})
@@ -799,7 +837,7 @@ func DatasetsPrepare(c *gin.Context) {
 					return
 				}
 			}
-			if err := ensureDeltaTable(&ds); err != nil {
+			if err := ensureDeltaTable(&ds, project.VanityTag); err != nil {
 				log.Printf("DatasetsPrepare: ensureDeltaTable failed: %v", err)
 				_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
 				c.JSON(500, gin.H{"error": "delta_ensure_failed", "message": err.Error()})
@@ -829,9 +867,9 @@ func DatasetsPrepare(c *gin.Context) {
 			pyBase := getPythonServiceURL()
 			var mpBuf bytes.Buffer
 			mw := multipart.NewWriter(&mpBuf)
-			// Send project_id and dataset_id for hierarchical path structure
-			_ = mw.WriteField("project_id", fmt.Sprintf("%d", ds.ProjectID))
-			_ = mw.WriteField("dataset_id", fmt.Sprintf("%d", ds.ID))
+			// Send vanity tags for hierarchical path structure
+			_ = mw.WriteField("project_tag", project.VanityTag)
+			_ = mw.WriteField("dataset_tag", ds.VanityTag)
 			fw, _ := mw.CreateFormFile("file", header.Filename)
 			_, _ = fw.Write(contentBytes)
 			mw.Close()
@@ -847,7 +885,9 @@ func DatasetsPrepare(c *gin.Context) {
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 				b, _ := io.ReadAll(resp.Body)
 				msg := strings.TrimSpace(string(b))
-				if msg == "" { msg = resp.Status }
+				if msg == "" {
+					msg = resp.Status
+				}
 				_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
 				c.JSON(500, gin.H{"error": "ingest_failed", "message": msg})
 				return
@@ -883,13 +923,25 @@ func DatasetsPrepare(c *gin.Context) {
 // This is the first step of a two-step dataset creation flow.
 // Returns a staging_id that can be used with DatasetsFinalize.
 func DatasetsStageUpload(c *gin.Context) {
-	pidStr := strings.TrimSpace(c.PostForm("project_id"))
-	pid, _ := strconv.Atoi(pidStr)
-	if pid == 0 {
+	gdb := dbpkg.Get()
+	if gdb == nil {
+		if _, err := dbpkg.Init(); err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+		gdb = dbpkg.Get()
+	}
+	pidOrTag := strings.TrimSpace(c.PostForm("project_id"))
+	if pidOrTag == "" {
 		c.JSON(400, gin.H{"error": "project_required"})
 		return
 	}
-	if !HasProjectRole(c, uint(pid), "owner", "contributor") {
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -972,13 +1024,13 @@ func DatasetsFinalize(c *gin.Context) {
 	}
 
 	var body struct {
-		ProjectID  int    `json:"project_id"`
-		StagingID  string `json:"staging_id"`
-		Name       string `json:"name"`
-		Schema     string `json:"schema"`       // JSON schema string
-		Table      string `json:"table"`        // Target table name
+		ProjectID    int    `json:"project_id"`
+		StagingID    string `json:"staging_id"`
+		Name         string `json:"name"`
+		Schema       string `json:"schema"`        // JSON schema string
+		Table        string `json:"table"`         // Target table name
 		TargetSchema string `json:"target_schema"` // Target schema name (e.g., "public")
-		Source     string `json:"source"`
+		Source       string `json:"source"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(400, gin.H{"error": "invalid_payload"})
@@ -1001,6 +1053,12 @@ func DatasetsFinalize(c *gin.Context) {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
+	// Lookup project to get vanity tag
+	var project models.Project
+	if err := gdb.First(&project, body.ProjectID).Error; err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
 
 	// Create the dataset record
 	cfg := config.Get()
@@ -1018,7 +1076,7 @@ func DatasetsFinalize(c *gin.Context) {
 	// Check for duplicate table
 	if schemaName != "" && tableName != "" {
 		var existing models.Dataset
-		if err := gdb.Where("project_id = ? AND LOWER(target_schema) = ? AND LOWER(target_table) = ?", 
+		if err := gdb.Where("project_id = ? AND LOWER(target_schema) = ? AND LOWER(target_table) = ?",
 			body.ProjectID, strings.ToLower(schemaName), tableName).First(&existing).Error; err == nil {
 			c.JSON(409, gin.H{"error": "dataset_exists", "message": "A dataset for this schema.table already exists."})
 			return
@@ -1033,6 +1091,7 @@ func DatasetsFinalize(c *gin.Context) {
 		TargetTable:    tableName,
 		StorageBackend: backend,
 		Schema:         body.Schema,
+		VanityTag:      utils.GenerateVanityTag(),
 	}
 	if err := gdb.Create(&ds).Error; err != nil {
 		log.Printf("DatasetsFinalize: create dataset record failed: %v", err)
@@ -1042,7 +1101,7 @@ func DatasetsFinalize(c *gin.Context) {
 
 	// Ensure Delta table structure
 	if strings.EqualFold(ds.StorageBackend, "delta") {
-		if err := ensureDeltaTable(&ds); err != nil {
+		if err := ensureDeltaTable(&ds, project.VanityTag); err != nil {
 			log.Printf("DatasetsFinalize: ensureDeltaTable failed: %v", err)
 			_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
 			c.JSON(500, gin.H{"error": "delta_ensure_failed", "message": err.Error()})
@@ -1058,8 +1117,8 @@ func DatasetsFinalize(c *gin.Context) {
 
 	var mpBuf bytes.Buffer
 	mw := multipart.NewWriter(&mpBuf)
-	_ = mw.WriteField("project_id", fmt.Sprintf("%d", ds.ProjectID))
-	_ = mw.WriteField("dataset_id", fmt.Sprintf("%d", ds.ID))
+	_ = mw.WriteField("project_tag", project.VanityTag)
+	_ = mw.WriteField("dataset_tag", ds.VanityTag)
 	mw.Close()
 
 	req, _ := http.NewRequest(http.MethodPost, pyBase+"/staging/"+body.StagingID+"/finalize", &mpBuf)
@@ -1282,7 +1341,7 @@ func DatasetDataGet(c *gin.Context) {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
-	
+
 	// Handle Delta storage backend
 	if strings.EqualFold(ds.StorageBackend, "delta") {
 		nStr := c.Query("limit")
@@ -1295,7 +1354,7 @@ func DatasetDataGet(c *gin.Context) {
 		}
 		n, _ := strconv.Atoi(nStr)
 		off, _ := strconv.Atoi(offStr)
-		
+
 		// Get the table location from metadata
 		gdb := dbpkg.Get()
 		if gdb == nil {
@@ -1303,64 +1362,71 @@ func DatasetDataGet(c *gin.Context) {
 				gdb = dbpkg.Get()
 			}
 		}
-		
+
 		var meta models.DatasetMeta
 		if err := gdb.Where("dataset_id = ?", ds.ID).First(&meta).Error; err != nil {
 			c.JSON(500, gin.H{"error": "metadata_not_found"})
 			return
 		}
-		
+
 		tableLocation := meta.TableLocation
 		if tableLocation == "" {
 			// Fallback to dataset physical table
 			tableLocation = datasetPhysicalTable(ds)
 		}
-		
+
 		// Query Delta table via Python service
 		pyBase := getPythonServiceURL()
 		if pyBase == "" {
 			pyBase = "http://python-service:8000"
 		}
-		
+
 		// Build query request
+		// Look up project for vanity tag
+		var project models.Project
+		if err := gdb.First(&project, ds.ProjectID).Error; err != nil {
+			c.JSON(500, gin.H{"error": "project_not_found"})
+			return
+		}
+
 		queryReq := map[string]any{
 			"sql": fmt.Sprintf("SELECT * FROM %s", tableLocation),
 			"table_mappings": map[string]string{
-				tableLocation: fmt.Sprintf("%d/%d", ds.ProjectID, ds.ID),
+				tableLocation: fmt.Sprintf("%s/%s", project.VanityTag, ds.VanityTag),
 			},
 			"limit":  n,
 			"offset": off,
 		}
-		
+
 		body, _ := json.Marshal(queryReq)
 		req, _ := http.NewRequest(http.MethodPost, pyBase+"/delta/query", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil || resp == nil {
 			c.JSON(502, gin.H{"error": "python_unreachable"})
 			return
 		}
 		defer resp.Body.Close()
-		
+
 		if resp.StatusCode != 200 {
 			b, _ := io.ReadAll(resp.Body)
 			c.JSON(resp.StatusCode, gin.H{"error": "delta_query_failed", "details": string(b)})
 			return
 		}
-		
+
 		// Parse Python service response
 		var deltaResp struct {
 			Columns []string        `json:"columns"`
 			Rows    [][]interface{} `json:"rows"`
 			Total   int             `json:"total"`
 		}
-		
+
 		if err := json.NewDecoder(resp.Body).Decode(&deltaResp); err != nil {
 			c.JSON(500, gin.H{"error": "invalid_response"})
 			return
 		}
-		
+
 		// Convert rows to map format expected by frontend
 		dataRows := make([]map[string]interface{}, 0, len(deltaResp.Rows))
 		for _, row := range deltaResp.Rows {
@@ -1372,14 +1438,14 @@ func DatasetDataGet(c *gin.Context) {
 			}
 			dataRows = append(dataRows, rowMap)
 		}
-		
+
 		c.JSON(200, gin.H{
 			"data":    dataRows,
 			"columns": deltaResp.Columns,
 		})
 		return
 	}
-	
+
 	gdb := dbpkg.Get()
 	if gdb == nil {
 		if _, err := dbpkg.Init(); err == nil {
@@ -1614,19 +1680,23 @@ func DatasetsGet(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pidStr := c.Param("projectId")
-	if pidStr == "" {
-		pidStr = c.Param("id")
+	pidOrTag := c.Param("projectId")
+	if pidOrTag == "" {
+		pidOrTag = c.Param("id")
 	}
-	pid, _ := strconv.Atoi(pidStr)
-	id, _ := strconv.Atoi(c.Param("datasetId"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
-		c.JSON(403, gin.H{"error": "forbidden"})
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
 		return
 	}
-	var ds models.Dataset
-	if err := gdb.Where("project_id = ?", pid).First(&ds, id).Error; err != nil {
+	dsIdOrTag := c.Param("datasetId")
+	ds, err := LookupDatasetByIDOrTag(gdb, project.ID, dsIdOrTag)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
+		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
 	c.JSON(200, ds)
@@ -1641,19 +1711,23 @@ func DatasetsUpdate(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pidStr := c.Param("projectId")
-	if pidStr == "" {
-		pidStr = c.Param("id")
+	pidOrTag := c.Param("projectId")
+	if pidOrTag == "" {
+		pidOrTag = c.Param("id")
 	}
-	pid, _ := strconv.Atoi(pidStr)
-	id, _ := strconv.Atoi(c.Param("datasetId"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor") {
-		c.JSON(403, gin.H{"error": "forbidden"})
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
 		return
 	}
-	var ds models.Dataset
-	if err := gdb.Where("project_id = ?", pid).First(&ds, id).Error; err != nil {
+	dsIdOrTag := c.Param("datasetId")
+	ds, err := LookupDatasetByIDOrTag(gdb, project.ID, dsIdOrTag)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor") {
+		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
 	var in DatasetIn
@@ -1691,26 +1765,28 @@ func DatasetsDelete(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pidStr := c.Param("projectId")
-	if pidStr == "" {
-		pidStr = c.Param("id")
+	pidOrTag := c.Param("projectId")
+	if pidOrTag == "" {
+		pidOrTag = c.Param("id")
 	}
-	pid, _ := strconv.Atoi(pidStr)
-	id, _ := strconv.Atoi(c.Param("datasetId"))
-
-	// Load dataset to check emptiness if needed
-	var ds models.Dataset
-	if err := gdb.Where("project_id = ?", pid).First(&ds, id).Error; err != nil {
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	dsIdOrTag := c.Param("datasetId")
+	ds, err := LookupDatasetByIDOrTag(gdb, project.ID, dsIdOrTag)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "not_found"})
 		return
 	}
 
 	// Owners can always delete
-	if !HasProjectRole(c, uint(pid), "owner") {
+	if !HasProjectRole(c, project.ID, "owner") {
 		// Contributors may delete only if the dataset is effectively empty (no uploads, no schema/rules)
-		if HasProjectRole(c, uint(pid), "contributor") {
+		if HasProjectRole(c, project.ID, "contributor") {
 			var cnt int64
-			if err := gdb.Model(&models.DatasetUpload{}).Where("project_id = ? AND dataset_id = ?", pid, ds.ID).Count(&cnt).Error; err != nil {
+			if err := gdb.Model(&models.DatasetUpload{}).Where("project_id = ? AND dataset_id = ?", project.ID, ds.ID).Count(&cnt).Error; err != nil {
 				c.JSON(500, gin.H{"error": "db"})
 				return
 			}
@@ -1728,19 +1804,19 @@ func DatasetsDelete(c *gin.Context) {
 	// Perform cascading delete in a transaction: child rows, metadata, and physical tables
 	if err := gdb.Transaction(func(tx *gorm.DB) error {
 		// Delete change comments linked to change requests of this dataset
-		if err := tx.Exec("DELETE FROM change_comments WHERE project_id = ? AND change_request_id IN (SELECT id FROM change_requests WHERE project_id = ? AND dataset_id = ?)", pid, pid, ds.ID).Error; err != nil {
+		if err := tx.Exec("DELETE FROM change_comments WHERE project_id = ? AND change_request_id IN (SELECT id FROM change_requests WHERE project_id = ? AND dataset_id = ?)", project.ID, project.ID, ds.ID).Error; err != nil {
 			return err
 		}
 		// Delete data quality results linked via uploads
-		if err := tx.Exec("DELETE FROM data_quality_results WHERE upload_id IN (SELECT id FROM dataset_uploads WHERE project_id = ? AND dataset_id = ?)", pid, ds.ID).Error; err != nil {
+		if err := tx.Exec("DELETE FROM data_quality_results WHERE upload_id IN (SELECT id FROM dataset_uploads WHERE project_id = ? AND dataset_id = ?)", project.ID, ds.ID).Error; err != nil {
 			return err
 		}
 		// Delete uploads
-		if err := tx.Where("project_id = ? AND dataset_id = ?", pid, ds.ID).Delete(&models.DatasetUpload{}).Error; err != nil {
+		if err := tx.Where("project_id = ? AND dataset_id = ?", project.ID, ds.ID).Delete(&models.DatasetUpload{}).Error; err != nil {
 			return err
 		}
 		// Delete change requests
-		if err := tx.Where("project_id = ? AND dataset_id = ?", pid, ds.ID).Delete(&models.ChangeRequest{}).Error; err != nil {
+		if err := tx.Where("project_id = ? AND dataset_id = ?", project.ID, ds.ID).Delete(&models.ChangeRequest{}).Error; err != nil {
 			return err
 		}
 		// Delete dataset versions
@@ -1756,9 +1832,9 @@ func DatasetsDelete(c *gin.Context) {
 			return err
 		}
 		// Drop physical and staging tables for dataset
-		dropDatasetPhysicalAndStaging(tx, &ds)
+		dropDatasetPhysicalAndStaging(tx, ds)
 		// Finally delete dataset row
-		if err := tx.Where("project_id = ?", pid).Delete(&models.Dataset{}, id).Error; err != nil {
+		if err := tx.Where("project_id = ?", project.ID).Delete(&models.Dataset{}, ds.ID).Error; err != nil {
 			return err
 		}
 		return nil
@@ -1785,29 +1861,33 @@ func DatasetSample(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pidStr := c.Param("projectId")
-	if pidStr == "" {
-		pidStr = c.Param("id")
+	pidOrTag := c.Param("projectId")
+	if pidOrTag == "" {
+		pidOrTag = c.Param("id")
 	}
-	pid, _ := strconv.Atoi(pidStr)
-	dsid, _ := strconv.Atoi(c.Param("datasetId"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
-		c.JSON(403, gin.H{"error": "forbidden"})
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
 		return
 	}
-	var ds models.Dataset
-	if err := gdb.Where("project_id = ?", pid).First(&ds, dsid).Error; err != nil {
+	dsIdOrTag := c.Param("datasetId")
+	ds, err := LookupDatasetByIDOrTag(gdb, project.ID, dsIdOrTag)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "not_found"})
 		return
 	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
 	// If DB table exists, return sample from it
-	if tableExists(gdb, datasetPhysicalTable(&ds)) {
+	if tableExists(gdb, datasetPhysicalTable(ds)) {
 		nStr := c.DefaultQuery("n", "50")
 		n, _ := strconv.Atoi(nStr)
 		if n <= 0 {
 			n = 50
 		}
-		rows, err := gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT ?", datasetPhysicalTable(&ds)), n).Rows()
+		rows, err := gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT ?", datasetPhysicalTable(ds)), n).Rows()
 		if err == nil {
 			defer rows.Close()
 			out := struct {
@@ -1888,25 +1968,28 @@ func AppendUpload(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pidStr := c.Param("projectId")
-	if pidStr == "" {
-		pidStr = c.Param("id")
+	pidOrTag := c.Param("projectId")
+	if pidOrTag == "" {
+		pidOrTag = c.Param("id")
 	}
-	pid, _ := strconv.Atoi(pidStr)
-	dsid, _ := strconv.Atoi(c.Param("datasetId"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor") {
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	dsIdOrTag := c.Param("datasetId")
+	ds, err := LookupDatasetByIDOrTag(gdb, project.ID, dsIdOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
 
-	var ds models.Dataset
-	if err := gdb.Where("project_id = ?", pid).First(&ds, dsid).Error; err != nil {
-		c.JSON(404, gin.H{"error": "not_found"})
-		return
-	}
-
-	file, header, err := c.Request.FormFile("file")
-	if err != nil {
+	file, header, fileErr := c.Request.FormFile("file")
+	if fileErr != nil {
 		c.JSON(400, gin.H{"error": "missing_file"})
 		return
 	}
@@ -1923,7 +2006,7 @@ func AppendUpload(c *gin.Context) {
 	}
 	// Reviewer must be a project member (any role) now that 'approver' role is removed
 	var pr models.ProjectRole
-	if err := gdb.Where("project_id = ? AND user_id = ?", pid, reviewerID).First(&pr).Error; err != nil {
+	if err := gdb.Where("project_id = ? AND user_id = ?", project.ID, reviewerID).First(&pr).Error; err != nil {
 		c.JSON(400, gin.H{"error": "reviewer_not_member"})
 		return
 	}
@@ -1943,7 +2026,7 @@ func AppendUpload(c *gin.Context) {
 		return
 	}
 	// Persist upload into DB as bytea/blob for audit and preview.
-	up := models.DatasetUpload{ProjectID: uint(pid), DatasetID: ds.ID, Filename: header.Filename, Content: fileBuf.Bytes()}
+	up := models.DatasetUpload{ProjectID: project.ID, DatasetID: ds.ID, Filename: header.Filename, Content: fileBuf.Bytes()}
 	if err := gdb.Create(&up).Error; err != nil {
 		c.JSON(500, gin.H{"error": "db_store_upload"})
 		return
@@ -2034,7 +2117,7 @@ func AppendUpload(c *gin.Context) {
 		rs = append(rs, map[string]any{"id": reviewerID, "status": "pending", "decided_at": nil})
 	}
 	rsJSON, _ := json.Marshal(rs)
-	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data", Payload: string(pb), ReviewerID: reviewerID, ReviewerStates: string(rsJSON)}
+	cr := models.ChangeRequest{ProjectID: project.ID, DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data", Payload: string(pb), ReviewerID: reviewerID, ReviewerStates: string(rsJSON), VanityTag: utils.GenerateVanityTag()}
 	if uid, exists := c.Get("user_id"); exists {
 		switch v := uid.(type) {
 		case float64:
@@ -2054,7 +2137,7 @@ func AppendUpload(c *gin.Context) {
 	_ = ingestBytesToTable(gdb, up.Content, up.Filename, dsStagingTable(ds.ID, cr.ID))
 	// Notify reviewer if present
 	if reviewerID != 0 {
-		_ = AddNotification(reviewerID, "You were requested to review a change", models.JSONB{"type": "reviewer_assigned", "project_id": uint(pid), "dataset_id": ds.ID, "change_request_id": cr.ID, "title": "Append data"})
+		_ = AddNotification(reviewerID, "You were requested to review a change", models.JSONB{"type": "reviewer_assigned", "project_id": project.ID, "dataset_id": ds.ID, "change_request_id": cr.ID, "title": "Append data"})
 	}
 	c.JSON(201, gin.H{"ok": true, "change_request": cr})
 }
@@ -2083,24 +2166,28 @@ func AppendPreview(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pidStr := c.Param("projectId")
-	if pidStr == "" {
-		pidStr = c.Param("id")
+	pidOrTag := c.Param("projectId")
+	if pidOrTag == "" {
+		pidOrTag = c.Param("id")
 	}
-	pid, _ := strconv.Atoi(pidStr)
-	dsid, _ := strconv.Atoi(c.Param("datasetId"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
-		c.JSON(403, gin.H{"error": "forbidden"})
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
 		return
 	}
-	var ds models.Dataset
-	if err := gdb.Where("project_id = ?", pid).First(&ds, dsid).Error; err != nil {
+	dsIdOrTag := c.Param("datasetId")
+	_, err = LookupDatasetByIDOrTag(gdb, project.ID, dsIdOrTag)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "not_found"})
 		return
 	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
+		c.JSON(403, gin.H{"error": "forbidden"})
+		return
+	}
 
-	file, header, err := c.Request.FormFile("file")
-	if err != nil {
+	file, header, fileErr := c.Request.FormFile("file")
+	if fileErr != nil {
 		c.JSON(400, gin.H{"error": "missing_file"})
 		return
 	}
@@ -2417,7 +2504,7 @@ func AppendOpen(c *gin.Context) {
 	if title == "" {
 		title = "Append data"
 	}
-	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: title, Payload: string(pb), ReviewerID: firstReviewer, Reviewers: string(reviewersJSON), ReviewerStates: string(reviewerStatesJSON)}
+	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: title, Payload: string(pb), ReviewerID: firstReviewer, Reviewers: string(reviewersJSON), ReviewerStates: string(reviewerStatesJSON), VanityTag: utils.GenerateVanityTag()}
 	if uid, exists := c.Get("user_id"); exists {
 		switch v := uid.(type) {
 		case float64:
@@ -2653,7 +2740,7 @@ func AppendJSON(c *gin.Context) {
 		})
 	}
 	reviewerStatesJSON2, _ := json.Marshal(reviewerStates2)
-	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data (edited)", Payload: string(pb), ReviewerID: firstReviewer, Reviewers: string(reviewersJSON), ReviewerStates: string(reviewerStatesJSON2)}
+	cr := models.ChangeRequest{ProjectID: uint(pid), DatasetID: ds.ID, Type: "append", Status: "pending", Title: "Append data (edited)", Payload: string(pb), ReviewerID: firstReviewer, Reviewers: string(reviewersJSON), ReviewerStates: string(reviewerStatesJSON2), VanityTag: utils.GenerateVanityTag()}
 	if uid, exists := c.Get("user_id"); exists {
 		if u, ok := uid.(uint); ok {
 			cr.UserID = u

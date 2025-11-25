@@ -51,36 +51,36 @@ class ValidationService:
 
     def __init__(self, delta_root: str = "/data/delta"):
         self.delta_root = delta_root
-        self.expectation_suites: Dict[int, Any] = {}  # Cache by dataset_id
+        self.expectation_suites: Dict[str, Any] = {}  # Cache by dataset_tag
 
-    def _get_dataset_path(self, project_id: int, dataset_id: int, table_type: str = "main") -> str:
+    def _get_dataset_path(self, project_tag: str, dataset_tag: str, table_type: str = "main") -> str:
         """Get path to Delta table"""
         base = os.path.join(
             self.delta_root,
             "projects",
-            str(project_id),
+            project_tag,
             "datasets",
-            str(dataset_id)
+            dataset_tag
         )
         return os.path.join(base, table_type)
 
-    def _load_expectation_suite(self, dataset_id: int) -> Optional[Dict[str, Any]]:
+    def _load_expectation_suite(self, dataset_tag: str) -> Optional[Dict[str, Any]]:
         """
         Load Great Expectations suite for a dataset.
         
         For now, returns a simple rule-based suite.
         TODO: Load from GE configuration files or database.
         """
-        if dataset_id in self.expectation_suites:
-            return self.expectation_suites[dataset_id]
+        if dataset_tag in self.expectation_suites:
+            return self.expectation_suites[dataset_tag]
 
         # Default simple suite - replace with GE suite loader
         suite = {
-            "expectation_suite_name": f"dataset_{dataset_id}_suite",
+            "expectation_suite_name": f"dataset_{dataset_tag}_suite",
             "expectations": []
         }
 
-        self.expectation_suites[dataset_id] = suite
+        self.expectation_suites[dataset_tag] = suite
         return suite
 
     def _execute_expectations(
@@ -145,8 +145,8 @@ class ValidationService:
 
     def validate_cell(
         self,
-        project_id: int,
-        dataset_id: int,
+        project_tag: str,
+        dataset_tag: str,
         row_id: str,
         column: str,
         new_value: Any
@@ -158,7 +158,7 @@ class ValidationService:
         """
         try:
             # Load expectations for this dataset
-            suite = self._load_expectation_suite(dataset_id)
+            suite = self._load_expectation_suite(dataset_tag)
             
             # Filter expectations to this specific column
             column_expectations = [
@@ -222,8 +222,8 @@ class ValidationService:
 
     def validate_session(
         self,
-        project_id: int,
-        dataset_id: int,
+        project_tag: str,
+        dataset_tag: str,
         session_id: str
     ) -> SessionValidationResult:
         """
@@ -236,13 +236,13 @@ class ValidationService:
                 raise RuntimeError("DuckDB required for session validation")
 
             # Load session edits from Delta
-            edits_path = self._get_dataset_path(project_id, dataset_id, f"live_edit/{session_id}/edits.delta")
+            edits_path = self._get_dataset_path(project_tag, dataset_tag, f"live_edit/{session_id}/edits.delta")
             
             if not os.path.exists(edits_path):
                 raise ValueError(f"Session {session_id} not found")
 
             # Load base data and edits
-            main_path = self._get_dataset_path(project_id, dataset_id, "main")
+            main_path = self._get_dataset_path(project_tag, dataset_tag, "main")
 
             con = duckdb.connect()
             con.execute("INSTALL delta; LOAD delta;")
@@ -256,7 +256,7 @@ class ValidationService:
             main_df = con.execute(f"SELECT * FROM delta_scan('{main_path}')").fetch_arrow_table()
 
             # Load expectations
-            suite = self._load_expectation_suite(dataset_id)
+            suite = self._load_expectation_suite(dataset_tag)
 
             # Execute expectations on synthetic dataframe
             messages = self._execute_expectations(main_df, suite.get("expectations", []))
@@ -325,9 +325,9 @@ class ValidationService:
 
     def validate_change_request(
         self,
-        project_id: int,
-        dataset_id: int,
-        change_request_id: int
+        project_tag: str,
+        dataset_tag: str,
+        change_request_tag: str
     ) -> ChangeRequestValidationResult:
         """
         Validate a change request before approval.
@@ -339,10 +339,10 @@ class ValidationService:
                 raise RuntimeError("DuckDB required for CR validation")
 
             # Load staging data for this CR
-            staging_path = self._get_dataset_path(project_id, dataset_id, f"staging/{change_request_id}")
+            staging_path = self._get_dataset_path(project_tag, dataset_tag, f"staging/{change_request_tag}")
 
             if not os.path.exists(staging_path):
-                raise ValueError(f"Change request {change_request_id} staging not found")
+                raise ValueError(f"Change request {change_request_tag} staging not found")
 
             con = duckdb.connect()
             con.execute("INSTALL delta; LOAD delta;")
@@ -350,7 +350,7 @@ class ValidationService:
             staging_df = con.execute(f"SELECT * FROM delta_scan('{staging_path}')").fetch_arrow_table()
 
             # Load expectations
-            suite = self._load_expectation_suite(dataset_id)
+            suite = self._load_expectation_suite(dataset_tag)
 
             # Execute validation on staging data
             messages = self._execute_expectations(staging_df, suite.get("expectations", []))
@@ -393,7 +393,7 @@ class ValidationService:
             requires_override = final_state == ValidationState.PARTIAL_PASS
 
             return ChangeRequestValidationResult(
-                change_request_id=change_request_id,
+                change_request_tag=change_request_tag,
                 state=cr_state,
                 validation_result=validation_result,
                 can_approve=can_approve,
@@ -403,7 +403,7 @@ class ValidationService:
         except Exception as e:
             logger.error(f"CR validation error: {e}")
             return ChangeRequestValidationResult(
-                change_request_id=change_request_id,
+                change_request_tag=change_request_tag,
                 state=ChangeRequestValidationState.CR_INVALID,
                 validation_result=ValidationResult(
                     state=ValidationState.FAILED,
@@ -420,9 +420,9 @@ class ValidationService:
 
     def validate_before_merge(
         self,
-        project_id: int,
-        dataset_id: int,
-        change_request_id: int
+        project_tag: str,
+        dataset_tag: str,
+        change_request_tag: str
     ) -> MergeValidationResult:
         """
         Final validation before merge execution.
@@ -435,7 +435,7 @@ class ValidationService:
 
             # This would load both main and staging and validate the merged projection
             # For now, re-validate the staging
-            cr_result = self.validate_change_request(project_id, dataset_id, change_request_id)
+            cr_result = self.validate_change_request(project_tag, dataset_tag, change_request_tag)
 
             # Determine merge state
             if cr_result.validation_result.state == ValidationState.PASSED:
@@ -447,7 +447,7 @@ class ValidationService:
                 merge_state = MergeState.MERGE_FAILED
 
             return MergeValidationResult(
-                change_request_id=change_request_id,
+                change_request_tag=change_request_tag,
                 merge_state=merge_state,
                 validation_result=cr_result.validation_result,
                 conflict_detected=False,
@@ -457,7 +457,7 @@ class ValidationService:
         except Exception as e:
             logger.error(f"Merge validation error: {e}")
             return MergeValidationResult(
-                change_request_id=change_request_id,
+                change_request_tag=change_request_tag,
                 merge_state=MergeState.MERGE_FAILED,
                 validation_result=ValidationResult(
                     state=ValidationState.FAILED,
@@ -473,8 +473,8 @@ class ValidationService:
 
     def save_validation_result(
         self,
-        project_id: int,
-        dataset_id: int,
+        project_tag: str,
+        dataset_tag: str,
         validation_result: ValidationResult
     ) -> str:
         """
@@ -486,9 +486,9 @@ class ValidationService:
             audit_path = os.path.join(
                 self.delta_root,
                 "projects",
-                str(project_id),
+                project_tag,
                 "datasets",
-                str(dataset_id),
+                dataset_tag,
                 "audit",
                 "validation_runs"
             )
@@ -518,8 +518,8 @@ class ValidationService:
 
             logger.info(json.dumps({
                 "event": "validation_result_saved",
-                "project_id": project_id,
-                "dataset_id": dataset_id,
+                "project_tag": project_tag,
+                "dataset_tag": dataset_tag,
                 "run_id": run_id,
                 "state": validation_result.state
             }))

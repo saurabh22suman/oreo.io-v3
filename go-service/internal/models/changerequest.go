@@ -3,11 +3,12 @@ package models
 import "time"
 
 type ChangeRequest struct {
-	ID         uint `json:"id" gorm:"primaryKey"`
-	ProjectID  uint `json:"project_id" gorm:"index"`
-	DatasetID  uint `json:"dataset_id" gorm:"index"`
-	UserID     uint `json:"user_id" gorm:"index"`
-	ReviewerID uint `json:"reviewer_id" gorm:"index"`
+	ID         uint   `json:"id" gorm:"primaryKey"`
+	VanityTag  string `json:"vanity_tag" gorm:"size:50;uniqueIndex"`
+	ProjectID  uint   `json:"project_id" gorm:"index"`
+	DatasetID  uint   `json:"dataset_id" gorm:"index"`
+	UserID     uint   `json:"user_id" gorm:"index"`
+	ReviewerID uint   `json:"reviewer_id" gorm:"index"`
 	// JSON array of reviewer user IDs for multi-reviewer support
 	Reviewers string `json:"reviewers" gorm:"type:text"`
 	// JSON array of objects: [{"id":<user_id>, "status":"pending|approved|rejected", "decided_at":"RFC3339"}]

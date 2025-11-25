@@ -55,29 +55,29 @@ class DeltaStorageAdapter:
 
     # ==================== Path Resolution ====================
     
-    def _dataset_root(self, project_id: int, dataset_id: int) -> str:
-        """Get the root path for a dataset."""
-        return os.path.join(self.cfg.root, "projects", str(project_id), "datasets", str(dataset_id))
+    def _dataset_root(self, project_tag: str, dataset_tag: str) -> str:
+        """Get the root path for a dataset using vanity tags."""
+        return os.path.join(self.cfg.root, "projects", project_tag, "datasets", dataset_tag)
     
-    def _main_path(self, project_id: int, dataset_id: int) -> str:
+    def _main_path(self, project_tag: str, dataset_tag: str) -> str:
         """Get the path to the main Delta table."""
-        return os.path.join(self._dataset_root(project_id, dataset_id), "main")
+        return os.path.join(self._dataset_root(project_tag, dataset_tag), "main")
     
-    def _staging_path(self, project_id: int, dataset_id: int, change_request_id: int) -> str:
+    def _staging_path(self, project_tag: str, dataset_tag: str, change_request_tag: str) -> str:
         """Get the path to a staging Delta table for a change request."""
-        return os.path.join(self._dataset_root(project_id, dataset_id), "staging", str(change_request_id))
+        return os.path.join(self._dataset_root(project_tag, dataset_tag), "staging", change_request_tag)
     
-    def _live_edit_path(self, project_id: int, dataset_id: int, session_id: str) -> str:
+    def _live_edit_path(self, project_tag: str, dataset_tag: str, session_id: str) -> str:
         """Get the path to a live edit session's Delta table."""
-        return os.path.join(self._dataset_root(project_id, dataset_id), "live_edit", session_id, "edits.delta")
+        return os.path.join(self._dataset_root(project_tag, dataset_tag), "live_edit", session_id, "edits.delta")
     
-    def _imports_path(self, project_id: int, dataset_id: int, upload_id: str) -> str:
+    def _imports_path(self, project_tag: str, dataset_tag: str, upload_id: str) -> str:
         """Get the path to an import folder."""
-        return os.path.join(self._dataset_root(project_id, dataset_id), "imports", upload_id)
+        return os.path.join(self._dataset_root(project_tag, dataset_tag), "imports", upload_id)
     
-    def _audit_path(self, project_id: int, dataset_id: int) -> str:
+    def _audit_path(self, project_tag: str, dataset_tag: str) -> str:
         """Get the path to the audit folder."""
-        return os.path.join(self._dataset_root(project_id, dataset_id), "audit")
+        return os.path.join(self._dataset_root(project_tag, dataset_tag), "audit")
 
     # ==================== Legacy Path Support ====================
     
@@ -89,11 +89,11 @@ class DeltaStorageAdapter:
 
     # ==================== Dataset Creation ====================
     
-    def create_dataset_structure(self, project_id: int, dataset_id: int) -> str:
+    def create_dataset_structure(self, project_tag: str, dataset_tag: str) -> str:
         """Create the complete folder structure for a new dataset.
         
         Creates:
-        - projects/<project_id>/datasets/<dataset_id>/
+        - projects/<project_tag>/datasets/<dataset_tag>/
           ├── main/
           ├── staging/
           ├── live_edit/
@@ -103,7 +103,7 @@ class DeltaStorageAdapter:
             ├── snapshots/
             └── history/
         """
-        root = self._dataset_root(project_id, dataset_id)
+        root = self._dataset_root(project_tag, dataset_tag)
         
         # Create main directories
         os.makedirs(os.path.join(root, "main"), exist_ok=True)
@@ -118,8 +118,8 @@ class DeltaStorageAdapter:
         
         logger.info(json.dumps({
             "event": "create_dataset_structure",
-            "project_id": project_id,
-            "dataset_id": dataset_id,
+            "project_tag": project_tag,
+            "dataset_tag": dataset_tag,
             "path": root
         }))
         
@@ -127,13 +127,13 @@ class DeltaStorageAdapter:
 
     # ==================== Main Table Operations ====================
 
-    def ensure_main_table(self, project_id: int, dataset_id: int, schema: Dict[str, Any]) -> str:
+    def ensure_main_table(self, project_tag: str, dataset_tag: str, schema: Dict[str, Any]) -> str:
         """Create an empty main Delta table with provided schema if it does not exist.
         
         The schema is a JSON Schema-like mapping; we convert its properties to Arrow fields.
         Only writes to main/ for approved, committed data.
         """
-        path = self._main_path(project_id, dataset_id)
+        path = self._main_path(project_tag, dataset_tag)
         
         if os.path.exists(path) and os.path.isdir(path) and os.path.exists(os.path.join(path, "_delta_log")):
             return path  # already exists
@@ -142,7 +142,7 @@ class DeltaStorageAdapter:
             raise RuntimeError("pyarrow required for delta operations")
         
         # Ensure dataset structure exists
-        self.create_dataset_structure(project_id, dataset_id)
+        self.create_dataset_structure(project_tag, dataset_tag)
         
         props = {}
         if isinstance(schema, dict):
@@ -186,14 +186,14 @@ class DeltaStorageAdapter:
         write_deltalake(path, empty_table, mode="overwrite")
         logger.info(json.dumps({
             "event": "ensure_main_table",
-            "project_id": project_id,
-            "dataset_id": dataset_id,
+            "project_tag": project_tag,
+            "dataset_tag": dataset_tag,
             "columns": [f.name for f in schema_obj]
         }))
         
         return path
 
-    def append_to_main(self, project_id: int, dataset_id: int, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def append_to_main(self, project_tag: str, dataset_tag: str, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Append rows to the main Delta table.
         
         WARNING: Only use this for approved, validated data!
@@ -202,7 +202,7 @@ class DeltaStorageAdapter:
         if pa is None:
             raise RuntimeError("pyarrow required for delta operations")
         
-        path = self._main_path(project_id, dataset_id)
+        path = self._main_path(project_tag, dataset_tag)
         at = pa.Table.from_pylist(rows)
         
         # Schema alignment logic (same as before)
@@ -223,8 +223,8 @@ class DeltaStorageAdapter:
         
         logger.info(json.dumps({
             "event": "append_to_main",
-            "project_id": project_id,
-            "dataset_id": dataset_id,
+            "project_tag": project_tag,
+            "dataset_tag": dataset_tag,
             "rows": len(rows)
         }))
         
@@ -232,7 +232,7 @@ class DeltaStorageAdapter:
 
     # ==================== Staging Table Operations ====================
 
-    def create_staging_table(self, project_id: int, dataset_id: int, change_request_id: int, 
+    def create_staging_table(self, project_tag: str, dataset_tag: str, change_request_tag: str, 
                            rows: List[Dict[str, Any]]) -> str:
         """Create a staging Delta table for a change request.
         
@@ -241,7 +241,7 @@ class DeltaStorageAdapter:
         if pa is None:
             raise RuntimeError("pyarrow required for delta operations")
         
-        path = self._staging_path(project_id, dataset_id, change_request_id)
+        path = self._staging_path(project_tag, dataset_tag, change_request_tag)
         at = pa.Table.from_pylist(rows)
         
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -249,36 +249,36 @@ class DeltaStorageAdapter:
         
         logger.info(json.dumps({
             "event": "create_staging_table",
-            "project_id": project_id,
-            "dataset_id": dataset_id,
-            "change_request_id": change_request_id,
+            "project_tag": project_tag,
+            "dataset_tag": dataset_tag,
+            "change_request_tag": change_request_tag,
             "rows": len(rows)
         }))
         
         return path
 
-    def append_to_staging(self, project_id: int, dataset_id: int, change_request_id: int,
+    def append_to_staging(self, project_tag: str, dataset_tag: str, change_request_tag: str,
                          rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Append rows to an existing staging table."""
         if pa is None:
             raise RuntimeError("pyarrow required for delta operations")
         
-        path = self._staging_path(project_id, dataset_id, change_request_id)
+        path = self._staging_path(project_tag, dataset_tag, change_request_tag)
         at = pa.Table.from_pylist(rows)
         
         write_deltalake(path, at, mode="append")
         
         logger.info(json.dumps({
             "event": "append_to_staging",
-            "project_id": project_id,
-            "dataset_id": dataset_id,
-            "change_request_id": change_request_id,
+            "project_tag": project_tag,
+            "dataset_tag": dataset_tag,
+            "change_request_tag": change_request_id,
             "rows": len(rows)
         }))
         
         return {"ok": True, "inserted": len(rows)}
 
-    def merge_staging_to_main(self, project_id: int, dataset_id: int, change_request_id: int,
+    def merge_staging_to_main(self, project_tag: str, dataset_tag: str, change_request_tag: str,
                              keys: List[str]) -> Dict[str, Any]:
         """Merge a staging table into the main table.
         
@@ -288,8 +288,8 @@ class DeltaStorageAdapter:
         if not keys:
             raise ValueError("keys are required for merge")
         
-        main_path = self._main_path(project_id, dataset_id)
-        staging_path = self._staging_path(project_id, dataset_id, change_request_id)
+        main_path = self._main_path(project_tag, dataset_tag)
+        staging_path = self._staging_path(project_tag, dataset_tag, change_request_tag)
         
         if not os.path.exists(staging_path):
             raise ValueError(f"Staging table not found for change request {change_request_id}")
@@ -322,31 +322,31 @@ class DeltaStorageAdapter:
         
         logger.info(json.dumps({
             "event": "merge_staging_to_main",
-            "project_id": project_id,
-            "dataset_id": dataset_id,
-            "change_request_id": change_request_id,
+            "project_tag": project_tag,
+            "dataset_tag": dataset_tag,
+            "change_request_tag": change_request_id,
             "method": method,
             "keys": keys
         }))
         
         return {"ok": True, "method": method}
 
-    def delete_staging_table(self, project_id: int, dataset_id: int, change_request_id: int):
+    def delete_staging_table(self, project_tag: str, dataset_tag: str, change_request_tag: str):
         """Delete a staging table (e.g., after rejection or cleanup)."""
-        path = self._staging_path(project_id, dataset_id, change_request_id)
+        path = self._staging_path(project_tag, dataset_tag, change_request_tag)
         
         if os.path.exists(path):
             shutil.rmtree(path)
             logger.info(json.dumps({
                 "event": "delete_staging_table",
-                "project_id": project_id,
-                "dataset_id": dataset_id,
-                "change_request_id": change_request_id
+                "project_tag": project_tag,
+                "dataset_tag": dataset_tag,
+                "change_request_tag": change_request_id
             }))
 
     # ==================== Live Edit Operations ====================
 
-    def create_live_edit_session(self, project_id: int, dataset_id: int, session_id: str) -> str:
+    def create_live_edit_session(self, project_tag: str, dataset_tag: str, session_id: str) -> str:
         """Create a live edit session Delta table.
         
         Schema:
@@ -363,7 +363,7 @@ class DeltaStorageAdapter:
         if pa is None:
             raise RuntimeError("pyarrow required for delta operations")
         
-        path = self._live_edit_path(project_id, dataset_id, session_id)
+        path = self._live_edit_path(project_tag, dataset_tag, session_id)
         
         # Create schema for live edit table
         schema = pa.schema([
@@ -388,68 +388,68 @@ class DeltaStorageAdapter:
         
         logger.info(json.dumps({
             "event": "create_live_edit_session",
-            "project_id": project_id,
-            "dataset_id": dataset_id,
+            "project_tag": project_tag,
+            "dataset_tag": dataset_tag,
             "session_id": session_id
         }))
         
         return path
 
-    def append_live_edit(self, project_id: int, dataset_id: int, session_id: str,
+    def append_live_edit(self, project_tag: str, dataset_tag: str, session_id: str,
                         edits: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Append cell edits to a live edit session."""
         if pa is None:
             raise RuntimeError("pyarrow required for delta operations")
         
-        path = self._live_edit_path(project_id, dataset_id, session_id)
+        path = self._live_edit_path(project_tag, dataset_tag, session_id)
         at = pa.Table.from_pylist(edits)
         
         write_deltalake(path, at, mode="append")
         
         logger.info(json.dumps({
             "event": "append_live_edit",
-            "project_id": project_id,
-            "dataset_id": dataset_id,
+            "project_tag": project_tag,
+            "dataset_tag": dataset_tag,
             "session_id": session_id,
             "edits": len(edits)
         }))
         
         return {"ok": True, "edits_added": len(edits)}
 
-    def delete_live_edit_session(self, project_id: int, dataset_id: int, session_id: str):
+    def delete_live_edit_session(self, project_tag: str, dataset_tag: str, session_id: str):
         """Delete a live edit session (after merge or TTL expiry)."""
-        session_dir = os.path.dirname(self._live_edit_path(project_id, dataset_id, session_id))
+        session_dir = os.path.dirname(self._live_edit_path(project_tag, dataset_tag, session_id))
         
         if os.path.exists(session_dir):
             shutil.rmtree(session_dir)
             logger.info(json.dumps({
                 "event": "delete_live_edit_session",
-                "project_id": project_id,
-                "dataset_id": dataset_id,
+                "project_tag": project_tag,
+                "dataset_tag": dataset_tag,
                 "session_id": session_id
             }))
 
     # ==================== Query Operations ====================
 
-    def query_main(self, project_id: int, dataset_id: int, sql_where: Optional[str] = None,
+    def query_main(self, project_tag: str, dataset_tag: str, sql_where: Optional[str] = None,
                   limit: int = 100, offset: int = 0, filters: Optional[Dict[str, Any]] = None,
                   order_by: Optional[str] = None) -> Dict[str, Any]:
         """Query the main Delta table."""
-        path = self._main_path(project_id, dataset_id)
+        path = self._main_path(project_tag, dataset_tag)
         return self._query_table(path, sql_where, limit, offset, filters, order_by)
 
-    def query_staging(self, project_id: int, dataset_id: int, change_request_id: int,
+    def query_staging(self, project_tag: str, dataset_tag: str, change_request_tag: str,
                      sql_where: Optional[str] = None, limit: int = 100, offset: int = 0,
                      filters: Optional[Dict[str, Any]] = None, order_by: Optional[str] = None) -> Dict[str, Any]:
         """Query a staging Delta table."""
-        path = self._staging_path(project_id, dataset_id, change_request_id)
+        path = self._staging_path(project_tag, dataset_tag, change_request_tag)
         return self._query_table(path, sql_where, limit, offset, filters, order_by)
 
-    def query_live_edit(self, project_id: int, dataset_id: int, session_id: str,
+    def query_live_edit(self, project_tag: str, dataset_tag: str, session_id: str,
                        sql_where: Optional[str] = None, limit: int = 100, offset: int = 0,
                        filters: Optional[Dict[str, Any]] = None, order_by: Optional[str] = None) -> Dict[str, Any]:
         """Query a live edit session table."""
-        path = self._live_edit_path(project_id, dataset_id, session_id)
+        path = self._live_edit_path(project_tag, dataset_tag, session_id)
         return self._query_table(path, sql_where, limit, offset, filters, order_by)
 
     def _query_table(self, path: str, sql_where: Optional[str] = None, limit: int = 100,
@@ -492,14 +492,14 @@ class DeltaStorageAdapter:
         
         return {"columns": rel.column_names, "rows": rows, "count": len(rows)}
 
-    def get_stats(self, project_id: int, dataset_id: int) -> Dict[str, Any]:
+    def get_stats(self, project_tag: str, dataset_tag: str) -> Dict[str, Any]:
         """Get statistics about a Delta table.
         
         Returns:
             num_rows: Total number of rows in the table
             num_cols: Number of columns in the table
         """
-        path = self._main_path(project_id, dataset_id)
+        path = self._main_path(project_tag, dataset_tag)
         
         if not os.path.exists(os.path.join(path, "_delta_log")):
             return {"num_rows": 0, "num_cols": 0}
@@ -518,28 +518,28 @@ class DeltaStorageAdapter:
 
     # ==================== History & Versioning ====================
 
-    def history(self, project_id: int, dataset_id: int) -> List[Dict[str, Any]]:
+    def history(self, project_tag: str, dataset_tag: str) -> List[Dict[str, Any]]:
         """Get Delta table history for the main table."""
-        dt = DeltaTable(self._main_path(project_id, dataset_id))
+        dt = DeltaTable(self._main_path(project_tag, dataset_tag))
         hist = dt.history()
         
         logger.info(json.dumps({
             "event": "history",
-            "project_id": project_id,
-            "dataset_id": dataset_id,
+            "project_tag": project_tag,
+            "dataset_tag": dataset_tag,
             "entries": len(hist)
         }))
         
         return hist
 
-    def restore(self, project_id: int, dataset_id: int, version: int) -> Dict[str, Any]:
+    def restore(self, project_tag: str, dataset_tag: str, version: int) -> Dict[str, Any]:
         """Restore the main table to a previous version using delta-rs.
         
         Safety checks:
         - Validates that the version exists
         - Returns error if files have been removed by VACUUM
         """
-        path = self._main_path(project_id, dataset_id)
+        path = self._main_path(project_tag, dataset_tag)
         
         try:
             dt = DeltaTable(path)
@@ -554,8 +554,8 @@ class DeltaStorageAdapter:
             
             logger.info(json.dumps({
                 "event": "restore",
-                "project_id": project_id,
-                "dataset_id": dataset_id,
+                "project_tag": project_tag,
+                "dataset_tag": dataset_tag,
                 "version": version,
                 "method": "delta-rs"
             }))

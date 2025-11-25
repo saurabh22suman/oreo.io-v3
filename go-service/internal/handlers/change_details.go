@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/config"
+	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
 )
 
@@ -26,16 +26,28 @@ func ChangeGet(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pid, _ := strconv.Atoi(c.Param("id"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
+	pidOrTag := c.Param("id")
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
-	changeID, _ := strconv.Atoi(c.Param("changeId"))
+	changeIDOrTag := c.Param("changeId")
 	var cr models.ChangeRequest
-	if err := gdb.Where("project_id = ?", pid).First(&cr, changeID).Error; err != nil {
-		c.JSON(404, gin.H{"error": "not_found"})
-		return
+	if cid, err := strconv.Atoi(changeIDOrTag); err == nil {
+		if err := gdb.Where("project_id = ?", project.ID).First(&cr, cid).Error; err != nil {
+			c.JSON(404, gin.H{"error": "not_found"})
+			return
+		}
+	} else {
+		if err := gdb.Where("project_id = ? AND vanity_tag = ?", project.ID, changeIDOrTag).First(&cr).Error; err != nil {
+			c.JSON(404, gin.H{"error": "not_found"})
+			return
+		}
 	}
 	// Add reviewer email(s) for display
 	var reviewerEmail string
@@ -117,16 +129,28 @@ func ChangePreview(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pid, _ := strconv.Atoi(c.Param("id"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
+	pidOrTag := c.Param("id")
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
-	changeID, _ := strconv.Atoi(c.Param("changeId"))
+	changeIDOrTag := c.Param("changeId")
 	var cr models.ChangeRequest
-	if err := gdb.Where("project_id = ?", pid).First(&cr, changeID).Error; err != nil {
-		c.JSON(404, gin.H{"error": "not_found"})
-		return
+	if cid, err := strconv.Atoi(changeIDOrTag); err == nil {
+		if err := gdb.Where("project_id = ?", project.ID).First(&cr, cid).Error; err != nil {
+			c.JSON(404, gin.H{"error": "not_found"})
+			return
+		}
+	} else {
+		if err := gdb.Where("project_id = ? AND vanity_tag = ?", project.ID, changeIDOrTag).First(&cr).Error; err != nil {
+			c.JSON(404, gin.H{"error": "not_found"})
+			return
+		}
 	}
 	if cr.Type != "append" || cr.Payload == "" {
 		c.JSON(400, gin.H{"error": "no_preview"})
@@ -143,7 +167,7 @@ func ChangePreview(c *gin.Context) {
 		return
 	}
 	var up models.DatasetUpload
-	if err := gdb.Where("project_id = ? AND id = ?", pid, payload.UploadID).First(&up).Error; err != nil {
+	if err := gdb.Where("project_id = ? AND id = ?", project.ID, payload.UploadID).First(&up).Error; err != nil {
 		c.JSON(404, gin.H{"error": "upload_not_found"})
 		return
 	}
@@ -181,7 +205,8 @@ func ChangePreview(c *gin.Context) {
 		return
 	}
 	// Otherwise, forward to python /sample for CSV/XLSX
-	cfg := config.Get(); base := cfg.PythonServiceURL
+	cfg := config.Get()
+	base := cfg.PythonServiceURL
 	if base == "" {
 		base = "http://python-service:8000"
 	}
@@ -212,14 +237,30 @@ func ChangeCommentsList(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pid, _ := strconv.Atoi(c.Param("id"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
+	pidOrTag := c.Param("id")
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
-	changeID, _ := strconv.Atoi(c.Param("changeId"))
+	changeIDOrTag := c.Param("changeId")
+	var changeID uint
+	if cid, err := strconv.Atoi(changeIDOrTag); err == nil {
+		changeID = uint(cid)
+	} else {
+		var cr models.ChangeRequest
+		if err := gdb.Where("project_id = ? AND vanity_tag = ?", project.ID, changeIDOrTag).First(&cr).Error; err != nil {
+			c.JSON(404, gin.H{"error": "not_found"})
+			return
+		}
+		changeID = cr.ID
+	}
 	var items []models.ChangeComment
-	if err := gdb.Where("project_id = ? AND change_request_id = ?", pid, changeID).Order("id asc").Find(&items).Error; err != nil {
+	if err := gdb.Where("project_id = ? AND change_request_id = ?", project.ID, changeID).Order("id asc").Find(&items).Error; err != nil {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
@@ -269,12 +310,28 @@ func ChangeCommentsCreate(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pid, _ := strconv.Atoi(c.Param("id"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
+	pidOrTag := c.Param("id")
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
-	changeID, _ := strconv.Atoi(c.Param("changeId"))
+	changeIDOrTag := c.Param("changeId")
+	var changeID uint
+	if cid, err := strconv.Atoi(changeIDOrTag); err == nil {
+		changeID = uint(cid)
+	} else {
+		var cr models.ChangeRequest
+		if err := gdb.Where("project_id = ? AND vanity_tag = ?", project.ID, changeIDOrTag).First(&cr).Error; err != nil {
+			c.JSON(404, gin.H{"error": "not_found"})
+			return
+		}
+		changeID = cr.ID
+	}
 	var body struct {
 		Body string `json:"body"`
 	}
@@ -282,7 +339,7 @@ func ChangeCommentsCreate(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid"})
 		return
 	}
-	cc := models.ChangeComment{ProjectID: uint(pid), ChangeRequestID: uint(changeID), Body: body.Body}
+	cc := models.ChangeComment{ProjectID: project.ID, ChangeRequestID: changeID, Body: body.Body}
 	if uid, ok := c.Get("user_id"); ok {
 		switch v := uid.(type) {
 		case float64:

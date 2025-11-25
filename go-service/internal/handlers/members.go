@@ -25,13 +25,18 @@ func MembersList(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pid, _ := strconv.Atoi(c.Param("id"))
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
+	pidOrTag := c.Param("id")
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
 	var roles []models.ProjectRole
-	if err := gdb.Where("project_id = ?", pid).Find(&roles).Error; err != nil {
+	if err := gdb.Where("project_id = ?", project.ID).Find(&roles).Error; err != nil {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
@@ -60,8 +65,13 @@ func MembersUpsert(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pid, _ := strconv.Atoi(c.Param("id"))
-	if !HasProjectRole(c, uint(pid), "owner") {
+	pidOrTag := c.Param("id")
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -81,27 +91,20 @@ func MembersUpsert(c *gin.Context) {
 		}
 	}
 	// Prevent demoting the project owner to a lower role
-	var proj models.Project
-	if err := gdb.First(&proj, pid).Error; err == nil {
-		if u.ID == proj.OwnerID && normalizeRole(in.Role) != "owner" {
-			c.JSON(400, gin.H{"error": "cannot_demote_owner"})
-			return
-		}
+	if u.ID == project.OwnerID && normalizeRole(in.Role) != "owner" {
+		c.JSON(400, gin.H{"error": "cannot_demote_owner"})
+		return
 	}
 	// upsert project role (normalize role name)
 	var pr models.ProjectRole
-	if err := gdb.Where("project_id = ? AND user_id = ?", pid, u.ID).First(&pr).Error; err != nil {
-		pr = models.ProjectRole{ProjectID: uint(pid), UserID: u.ID, Role: normalizeRole(in.Role)}
+	if err := gdb.Where("project_id = ? AND user_id = ?", project.ID, u.ID).First(&pr).Error; err != nil {
+		pr = models.ProjectRole{ProjectID: project.ID, UserID: u.ID, Role: normalizeRole(in.Role)}
 		if err := gdb.Create(&pr).Error; err != nil {
 			c.JSON(500, gin.H{"error": "db"})
 			return
 		}
 		// Notify the user they were added to the project
-		var projName string
-		if err := gdb.First(&proj, pid).Error; err == nil {
-			projName = proj.Name
-		}
-		_ = AddNotification(u.ID, "You were added to a project", models.JSONB{"type": "project_member_added", "project_id": uint(pid), "project_name": projName, "role": pr.Role})
+		_ = AddNotification(u.ID, "You were added to a project", models.JSONB{"type": "project_member_added", "project_id": project.ID, "project_name": project.Name, "role": pr.Role})
 	} else {
 		pr.Role = normalizeRole(in.Role)
 		if err := gdb.Save(&pr).Error; err != nil {
@@ -122,8 +125,13 @@ func MembersDelete(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pid, _ := strconv.Atoi(c.Param("id"))
-	if !HasProjectRole(c, uint(pid), "owner") {
+	pidOrTag := c.Param("id")
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
+	if !HasProjectRole(c, project.ID, "owner") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -147,14 +155,11 @@ func MembersDelete(c *gin.Context) {
 		return
 	}
 	// Disallow removing the project owner
-	var proj models.Project
-	if err := gdb.First(&proj, pid).Error; err == nil {
-		if uint(targetUID) == proj.OwnerID {
-			c.JSON(400, gin.H{"error": "cannot_remove_owner"})
-			return
-		}
+	if uint(targetUID) == project.OwnerID {
+		c.JSON(400, gin.H{"error": "cannot_remove_owner"})
+		return
 	}
-	if err := gdb.Where("project_id = ? AND user_id = ?", pid, targetUID).Delete(&models.ProjectRole{}).Error; err != nil {
+	if err := gdb.Where("project_id = ? AND user_id = ?", project.ID, targetUID).Delete(&models.ProjectRole{}).Error; err != nil {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
@@ -171,9 +176,14 @@ func MemberMyRole(c *gin.Context) {
 		}
 		gdb = dbpkg.Get()
 	}
-	pid, _ := strconv.Atoi(c.Param("id"))
+	pidOrTag := c.Param("id")
+	project, err := LookupProjectByIDOrTag(gdb, pidOrTag)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "project_not_found"})
+		return
+	}
 	// must be part of the project in any capacity to query role
-	if !HasProjectRole(c, uint(pid), "owner", "contributor", "viewer") {
+	if !HasProjectRole(c, project.ID, "owner", "contributor", "viewer") {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
@@ -192,7 +202,7 @@ func MemberMyRole(c *gin.Context) {
 		uid = v
 	}
 	var pr models.ProjectRole
-	if err := gdb.Where("project_id = ? AND user_id = ?", pid, uid).First(&pr).Error; err != nil {
+	if err := gdb.Where("project_id = ? AND user_id = ?", project.ID, uid).First(&pr).Error; err != nil {
 		c.JSON(200, gin.H{"role": nil})
 		return
 	}
