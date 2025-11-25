@@ -19,12 +19,12 @@ services:
       METADATA_DB: /data/meta/oreo.db
       DEFAULT_STORAGE_BACKEND: delta
 
-      # Secrets (configure in Dokploy env vars)
+      # Secrets (stored in Dokploy env vars)
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
 
-      # Cookies & session (prod safe defaults)
+      # Cookies & session
       SESSION_TIMEOUT: 3600
       COOKIE_SECURE: true
       COOKIE_DOMAIN: ${COOKIE_DOMAIN}
@@ -79,9 +79,6 @@ services:
     depends_on:
       go-service:
         condition: service_healthy
-
-    ports:
-      - "80:80"     # Dokploy may override this for domain routing
 
 networks:
   dokploy-network:
