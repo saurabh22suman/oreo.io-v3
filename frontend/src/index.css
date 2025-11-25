@@ -309,6 +309,201 @@ a:hover {
   background: transparent;
 }
 
+.text-base {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.text-sm {
+  font-size: 12px;
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+/* Buttons */
+button {
+  font-family: 'Segoe UI', sans-serif;
+  font-weight: 600;
+  transition: all 0.1s ease;
+}
+
+.btn-primary,
+.create-cta {
+  background-color: var(--primary) !important;
+  color: white !important;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  padding: 6px 20px;
+  font-size: 14px;
+  box-shadow: none !important;
+  /* Flat buttons */
+}
+
+.btn-primary:hover,
+.create-cta:hover {
+  background-color: var(--primary-hover) !important;
+  transform: none !important;
+}
+
+.btn-primary:active {
+  background-color: var(--primary-pressed) !important;
+}
+
+/* Inputs */
+input,
+select,
+textarea {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--text-muted);
+  /* Rest state */
+  border-radius: 2px !important;
+  padding: 6px 12px;
+  font-size: 14px;
+  color: var(--text);
+  transition: border-color 0.1s;
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: var(--text-secondary);
+  /* Hover state */
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary);
+  outline: 1px solid var(--primary);
+  /* Focus state */
+  border-bottom-width: 2px;
+  /* Azure underline effect hint */
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--divider);
+}
+
+td {
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--text);
+  border-bottom: 1px solid var(--divider);
+}
+
+tr:hover td {
+  background-color: #F3F2F1;
+  /* Hover row color */
+}
+
+.dark tr:hover td {
+  background-color: #252423;
+}
+
+/* Sidebar */
+.sidebar {
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--divider);
+}
+
+/* Topbar */
+.topbar {
+  background-color: var(--primary);
+  color: white;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+}
+
+/* Links */
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+  color: var(--primary-hover);
+}
+
+/* Utilities */
+.bg-white {
+  background-color: var(--bg-surface) !important;
+}
+
+.text-slate-900 {
+  color: var(--text) !important;
+}
+
+.text-slate-600 {
+  color: var(--text-secondary) !important;
+}
+
+.border-gray-200 {
+  border-color: var(--divider) !important;
+}
+
+/* Remove mascot and gradients */
+.mascot-bounce {
+  display: none;
+}
+
+.hero-gradient {
+  display: none;
+}
+
+/* Layout - Fixed sidebar, flexible main */
+.layout-with-sidebar {
+  display: flex;
+  height: 100vh;
+}
+
+.layout-with-sidebar .sidebar {
+  flex-shrink: 0;
+  transition: width 0.3s ease-in-out;
+}
+
+.layout-with-sidebar .main {
+  flex: 1;
+  background-color: var(--bg-page);
+  padding: 24px;
+  overflow-y: auto;
+  transition: margin-left 0.3s ease-in-out;
+}
+
+/* Collapsed state adjustments */
+.layout-with-sidebar.collapsed .main {
+  /* Main expands automatically due to flex: 1 */
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 ::-webkit-scrollbar-thumb {
   background: #C8C6C4;
   border-radius: 4px;
@@ -316,4 +511,64 @@ a:hover {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #8A8886;
+}
+
+/* Custom Databricks-like Dark Theme for AG Grid */
+.ag-theme-databricks-dark {
+  --ag-foreground-color: #e2e8f0;
+  --ag-background-color: #0f172a;
+  --ag-header-foreground-color: #94a3b8;
+  --ag-header-background-color: #0f172a;
+  --ag-odd-row-background-color: #0f172a;
+  --ag-header-column-separator-display: block;
+  --ag-header-column-separator-height: 100%;
+  --ag-header-column-separator-width: 1px;
+  --ag-header-column-separator-color: #1e293b;
+  --ag-row-border-color: #1e293b;
+  --ag-borders: solid 1px;
+  --ag-border-color: #1e293b;
+  --ag-cell-horizontal-border: solid 1px #1e293b;
+  --ag-font-family: 'Inter', system-ui, sans-serif;
+  --ag-font-size: 13px;
+  --ag-row-hover-color: #1e293b;
+  --ag-selected-row-background-color: #1e293b;
+  --ag-range-selection-border-color: #3b82f6;
+  --ag-range-selection-background-color: rgba(59, 130, 246, 0.1);
+}
+
+.ag-theme-databricks-dark .ag-header-cell {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.ag-theme-databricks-dark .ag-cell {
+  line-height: 32px !important;
+  display: flex;
+  align-items: center;
+}
+
+.ag-theme-databricks-dark .ag-root-wrapper {
+  border: 1px solid #1e293b;
+  border-radius: 0;
+}
+
+.ag-theme-databricks-dark .ag-header {
+  border-bottom: 1px solid #1e293b;
+}
+
+/* Custom Scrollbars for Grid */
+.ag-theme-databricks-dark ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: #0f172a;
+}
+
+.ag-theme-databricks-dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 5px;
+  border: 2px solid #0f172a;
+}
+
+.ag-theme-databricks-dark ::-webkit-scrollbar-corner {
+  background: #0f172a;
 }
