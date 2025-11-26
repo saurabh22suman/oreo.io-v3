@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -201,6 +202,17 @@ func ChangeApprove(c *gin.Context) {
 				c.JSON(500, gin.H{"error": "append_failed"})
 				return
 			}
+			
+			// Parse Python response to get duplicate info
+			var pyResp struct {
+				Ok         bool `json:"ok"`
+				TotalRows  int  `json:"total_rows"`
+				Inserted   int  `json:"inserted"`
+				Duplicates int  `json:"duplicates"`
+			}
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			_ = json.Unmarshal(bodyBytes, &pyResp)
+			
 			// Update timestamps and meta
 			now := time.Now()
 			ds.LastUploadAt = &now
@@ -246,9 +258,15 @@ func ChangeApprove(c *gin.Context) {
 				c.JSON(500, gin.H{"error": "db"})
 				return
 			}
-			// Notify requester
+			// Notify requester with duplicate info
 			if cr.UserID != 0 {
-				_ = AddNotification(cr.UserID, "Your append request has been applied successfully", models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID})
+				notifyMsg := "Your append request has been applied successfully"
+				if pyResp.Duplicates > 0 {
+					notifyMsg = fmt.Sprintf("Your append request has been applied. %d rows inserted, %d duplicate rows skipped.", pyResp.Inserted, pyResp.Duplicates)
+				} else if pyResp.Inserted > 0 {
+					notifyMsg = fmt.Sprintf("Your append request has been applied. %d rows inserted.", pyResp.Inserted)
+				}
+				_ = AddNotification(cr.UserID, notifyMsg, models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID, "inserted": pyResp.Inserted, "duplicates": pyResp.Duplicates})
 			}
 			
 			// Get cells changed from payload for audit
@@ -260,16 +278,22 @@ func ChangeApprove(c *gin.Context) {
 				cellsChanged = len(payloadData.EditedCells)
 			}
 			
+			// Use actual inserted count from Python response if available
+			actualRowsAdded := rowsAdded
+			if pyResp.Inserted > 0 {
+				actualRowsAdded = pyResp.Inserted
+			}
+			
 			// Record audit event for CR merge with Delta stats
 			crID := cr.ID
 			_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, models.AuditEventTypeCRMerged,
 				fmt.Sprintf("Change Request #%d merged", cr.ID),
-				fmt.Sprintf("%d rows added, %d cells changed", rowsAdded, cellsChanged),
+				fmt.Sprintf("%d rows added, %d duplicates skipped, %d cells changed", actualRowsAdded, pyResp.Duplicates, cellsChanged),
 				&crID,
-				models.AuditEventSummary{RowsAdded: rowsAdded, RowsUpdated: rowsUpdated, CellsChanged: cellsChanged},
+				models.AuditEventSummary{RowsAdded: actualRowsAdded, RowsUpdated: rowsUpdated, CellsChanged: cellsChanged},
 				nil,
 			)
-			c.JSON(200, gin.H{"ok": true, "change_request": cr})
+			c.JSON(200, gin.H{"ok": true, "change_request": cr, "inserted": pyResp.Inserted, "duplicates": pyResp.Duplicates})
 			return
 		}
 

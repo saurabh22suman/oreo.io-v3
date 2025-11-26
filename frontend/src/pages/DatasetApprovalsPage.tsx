@@ -159,7 +159,20 @@ export default function DatasetApprovalsPage() {
                         })() && (
                             <div className="flex items-center gap-1 ml-2 pl-2 border-l border-slate-200 dark:border-slate-700">
                               <button
-                                onClick={async (e) => { e.stopPropagation(); try { await approveChange(projectId, ch.id); await load(); setToast('Change approved') } catch (err: any) { setError(err.message) } }}
+                                onClick={async (e) => { 
+                                  e.stopPropagation()
+                                  try { 
+                                    const result = await approveChange(projectId, ch.id)
+                                    await load()
+                                    if (result?.duplicates > 0) {
+                                      setToast(`Approved: ${result.inserted} rows inserted, ${result.duplicates} duplicate rows skipped`)
+                                    } else if (result?.inserted > 0) {
+                                      setToast(`Approved: ${result.inserted} rows inserted`)
+                                    } else {
+                                      setToast('Change approved')
+                                    }
+                                  } catch (err: any) { setError(err.message) } 
+                                }}
                                 className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
                                 title="Approve"
                               >

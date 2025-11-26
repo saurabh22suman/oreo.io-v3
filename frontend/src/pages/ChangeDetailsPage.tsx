@@ -25,6 +25,7 @@ export default function ChangeDetailsPage() {
   const [comments, setComments] = useState<any[]>([])
   const [comment, setComment] = useState('')
   const [error, setError] = useState('')
+  const [toast, setToast] = useState('')
   const [me, setMe] = useState<{ id: number; email: string } | null>(null)
   const [isApprover, setIsApprover] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
@@ -133,6 +134,7 @@ export default function ChangeDetailsPage() {
       </div>
 
       {error && <Alert type="error" message={error} onClose={() => setError('')} />}
+      {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss={true} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Details & Preview */}
@@ -143,7 +145,19 @@ export default function ChangeDetailsPage() {
               <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary" />
                 Data Preview
+                {preview && preview.data.length > 0 && (
+                  <span className="text-xs font-normal text-slate-500 ml-2">({preview.data.length} rows shown)</span>
+                )}
               </h2>
+              {preview && preview.data.length > 0 && (
+                <button
+                  onClick={() => window.open(`/projects/${projectId}/datasets/${dsId}/view`, '_blank')}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                >
+                  <ArrowUpRight className="w-4 h-4" />
+                  View Full Data
+                </button>
+              )}
             </div>
             <div className="flex-1 bg-slate-50/50 dark:bg-slate-900/50 p-0 overflow-hidden">
               {preview ? (
@@ -182,7 +196,19 @@ export default function ChangeDetailsPage() {
                   <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Actions</h2>
                   <div className="grid grid-cols-2 gap-3">
                     <button
-                      onClick={async () => { try { await approveChange(projectId, chId); location.reload() } catch (e: any) { setError(e.message) } }}
+                      onClick={async () => { 
+                        try { 
+                          const result = await approveChange(projectId, chId)
+                          if (result?.duplicates > 0) {
+                            setToast(`Approved: ${result.inserted} rows inserted, ${result.duplicates} duplicate rows skipped`)
+                          } else if (result?.inserted > 0) {
+                            setToast(`Approved: ${result.inserted} rows inserted`)
+                          } else {
+                            setToast('Change approved successfully')
+                          }
+                          setTimeout(() => location.reload(), 2000)
+                        } catch (e: any) { setError(e.message) } 
+                      }}
                       className="flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-all shadow-lg shadow-green-500/20 hover:shadow-green-500/30 hover:-translate-y-0.5"
                     >
                       <Check className="w-4 h-4" />
