@@ -31,7 +31,8 @@ import {
   BarChart3,
   Table2,
   AlertTriangle,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from 'lucide-react'
 
 // Event type icon mapping
@@ -367,7 +368,7 @@ export default function DatasetAuditPage() {
               {/* Summary Cards */}
               <div className="p-6 border-b border-slate-100 dark:border-slate-700/50">
                 <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">Summary</h3>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
                     <div className="flex items-center justify-between">
                       <div>
@@ -389,6 +390,18 @@ export default function DatasetAuditPage() {
                         </div>
                       </div>
                       <Table2 className="w-6 h-6 text-blue-500 dark:text-blue-400 opacity-50" />
+                    </div>
+                  </div>
+
+                  <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 border border-red-200 dark:border-red-800">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider mb-1">Rows Deleted</div>
+                        <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                          {selectedEvent.summary?.rows_deleted || 0}
+                        </div>
+                      </div>
+                      <Trash2 className="w-6 h-6 text-red-500 dark:text-red-400 opacity-50" />
                     </div>
                   </div>
 

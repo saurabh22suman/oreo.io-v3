@@ -241,6 +241,40 @@ func mapOperationToSnapshotType(op string) string {
 	}
 }
 
+// FetchDeltaOperationStats fetches the latest operation stats from Python Delta service
+// This can be called after any Delta operation to get row counts for audit events
+func FetchDeltaOperationStats(projectID, datasetID uint) (rowsAdded, rowsUpdated, rowsDeleted, totalRows int) {
+	cfg := config.Get()
+	pyBase := cfg.PythonServiceURL
+	if pyBase == "" {
+		pyBase = "http://python-service:8000"
+	}
+
+	url := fmt.Sprintf("%s/delta/stats/%d/%d", pyBase, projectID, datasetID)
+	resp, err := http.Get(url)
+	if err != nil {
+		return 0, 0, 0, 0
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, 0, 0, 0
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var stats struct {
+		RowsAdded   int `json:"rows_added"`
+		RowsUpdated int `json:"rows_updated"`
+		RowsDeleted int `json:"rows_deleted"`
+		TotalRows   int `json:"total_rows"`
+	}
+	if err := json.Unmarshal(body, &stats); err != nil {
+		return 0, 0, 0, 0
+	}
+
+	return stats.RowsAdded, stats.RowsUpdated, stats.RowsDeleted, stats.TotalRows
+}
+
 // SnapshotData returns data at a specific version (time travel)
 // GET /api/datasets/:id/snapshots/:version/data
 func SnapshotData(c *gin.Context) {
@@ -380,16 +414,44 @@ func SnapshotRestore(c *gin.Context) {
 		return
 	}
 
-	// Record audit event
+	// Extract stats from restore result
+	rowsAdded := 0
+	rowsDeleted := 0
+	totalRows := 0
+	if v, ok := result["rows_added"].(float64); ok {
+		rowsAdded = int(v)
+	}
+	if v, ok := result["rows_deleted"].(float64); ok {
+		rowsDeleted = int(v)
+	}
+	if v, ok := result["total_rows"].(float64); ok {
+		totalRows = int(v)
+	}
+
+	// Update dataset metadata with new row count
+	if gdb != nil && totalRows > 0 {
+		var meta models.DatasetMeta
+		if err := gdb.Where("dataset_id = ?", datasetID).First(&meta).Error; err == nil {
+			meta.RowCount = int64(totalRows)
+			meta.LastUpdateAt = time.Now()
+			_ = gdb.Save(&meta).Error
+		}
+	}
+
+	// Record audit event with stats
 	_ = RecordAuditEvent(
 		dataset.ProjectID,
 		uint(datasetID),
 		actorID,
 		models.AuditEventTypeRestore,
 		fmt.Sprintf("Restored to Snapshot #%d", version),
-		"Dataset was restored to a previous snapshot",
+		fmt.Sprintf("Dataset was restored to a previous snapshot. Rows: %d → %d", 
+			totalRows-rowsAdded+rowsDeleted, totalRows),
 		nil,
-		models.AuditEventSummary{},
+		models.AuditEventSummary{
+			RowsAdded:   rowsAdded,
+			RowsDeleted: rowsDeleted,
+		},
 		nil,
 	)
 

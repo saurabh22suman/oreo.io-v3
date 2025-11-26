@@ -697,6 +697,14 @@ def delta_restore_new(payload: RestoreRequest):
     Safety checks:
     - Validates version exists
     - Returns error if files were deleted by VACUUM
+    
+    Returns:
+    - status: "ok" on success
+    - restored_to_version: The version restored to
+    - rows_before: Row count before restore
+    - rows_after: Row count after restore (total_rows)
+    - rows_added: Rows added (if restoring to version with more rows)
+    - rows_deleted: Rows deleted (if restoring to version with fewer rows)
     """
     if _delta_adapter is None:
         raise HTTPException(status_code=500, detail="Delta adapter not available")
@@ -706,13 +714,39 @@ def delta_restore_new(payload: RestoreRequest):
         return {
             "status": "ok",
             "restored_to_version": result["restored_to"],
-            "method": result.get("method", "delta-rs")
+            "method": result.get("method", "delta-rs"),
+            "rows_before": result.get("rows_before", 0),
+            "rows_after": result.get("rows_after", 0),
+            "rows_added": result.get("rows_added", 0),
+            "rows_deleted": result.get("rows_deleted", 0),
+            "total_rows": result.get("total_rows", 0)
         }
     except ValueError as e:
         # Version doesn't exist or files were vacuumed
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
+
+
+@app.get("/delta/stats/{project_id}/{dataset_id}")
+def delta_operation_stats(project_id: int, dataset_id: int):
+    """Get stats from the latest Delta table operation.
+    
+    Returns operation metrics from the most recent commit including:
+    - rows_added: Number of rows added
+    - rows_updated: Number of rows updated  
+    - rows_deleted: Number of rows deleted
+    - total_rows: Current total row count
+    - operation: The operation type (WRITE, MERGE, RESTORE, etc.)
+    - version: The version number
+    """
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    
+    try:
+        return _delta_adapter.get_latest_operation_stats(project_id, dataset_id)
+    except Exception as e:
+        return {"rows_added": 0, "rows_updated": 0, "rows_deleted": 0, "total_rows": 0, "error": str(e)}
 
 
 @app.get("/delta/snapshot/{project_id}/{dataset_id}/{version}")

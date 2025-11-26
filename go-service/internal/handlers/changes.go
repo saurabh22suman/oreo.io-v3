@@ -206,6 +206,20 @@ func ChangeApprove(c *gin.Context) {
 			ds.LastUploadAt = &now
 			_ = gdb.Save(&ds).Error
 			upsertDatasetMeta(gdb, &ds)
+			
+			// Fetch Delta operation stats for audit
+			rowsAdded, rowsUpdated, _, totalRows := FetchDeltaOperationStats(ds.ProjectID, ds.ID)
+			
+			// Update dataset meta with new row count
+			if totalRows > 0 {
+				var meta models.DatasetMeta
+				if err := gdb.Where("dataset_id = ?", ds.ID).First(&meta).Error; err == nil {
+					meta.RowCount = int64(totalRows)
+					meta.LastUpdateAt = time.Now()
+					_ = gdb.Save(&meta).Error
+				}
+			}
+			
 			// Record version snapshot (delta path reference)
 			cfg = config.Get()
 			root := strings.TrimRight(cfg.DeltaDataRoot, "/\\")
@@ -213,10 +227,9 @@ func ChangeApprove(c *gin.Context) {
 				root = "/data/delta"
 			}
 			main := fmt.Sprintf("%s/%d", root, ds.ID)
-			var rowCount int64 = 0
 			verData := map[string]any{
 				"table":      main,
-				"row_count":  rowCount,
+				"row_count":  totalRows,
 				"change_id":  cr.ID,
 				"applied_at": time.Now().Format(time.RFC3339),
 			}
@@ -237,13 +250,23 @@ func ChangeApprove(c *gin.Context) {
 			if cr.UserID != 0 {
 				_ = AddNotification(cr.UserID, "Your append request has been applied successfully", models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID})
 			}
-			// Record audit event for CR merge
+			
+			// Get cells changed from payload for audit
+			var cellsChanged int
+			var payloadData struct {
+				EditedCells []map[string]interface{} `json:"edited_cells"`
+			}
+			if json.Unmarshal([]byte(cr.Payload), &payloadData) == nil {
+				cellsChanged = len(payloadData.EditedCells)
+			}
+			
+			// Record audit event for CR merge with Delta stats
 			crID := cr.ID
 			_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, models.AuditEventTypeCRMerged,
 				fmt.Sprintf("Change Request #%d merged", cr.ID),
-				fmt.Sprintf("Append data request was applied to dataset"),
+				fmt.Sprintf("%d rows added, %d cells changed", rowsAdded, cellsChanged),
 				&crID,
-				models.AuditEventSummary{RowsAdded: int(rowCount)},
+				models.AuditEventSummary{RowsAdded: rowsAdded, RowsUpdated: rowsUpdated, CellsChanged: cellsChanged},
 				nil,
 			)
 			c.JSON(200, gin.H{"ok": true, "change_request": cr})
@@ -389,7 +412,7 @@ func ChangeApprove(c *gin.Context) {
 			}
 			_ = AddNotification(cr.UserID, msg, models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID})
 		}
-		// Record audit event for CR merge (DB path)
+		// Record audit event for CR merge (DB path) with proper stats
 		crID := cr.ID
 		eventType := models.AuditEventTypeCRMerged
 		eventTitle := fmt.Sprintf("Change Request #%d merged", cr.ID)
@@ -397,11 +420,21 @@ func ChangeApprove(c *gin.Context) {
 			eventType = models.AuditEventTypeCRApproved
 			eventTitle = fmt.Sprintf("Change Request #%d approved", cr.ID)
 		}
+		
+		// Get cells changed from payload
+		var cellsChanged int
+		var payloadData struct {
+			EditedCells []map[string]interface{} `json:"edited_cells"`
+		}
+		if json.Unmarshal([]byte(cr.Payload), &payloadData) == nil {
+			cellsChanged = len(payloadData.EditedCells)
+		}
+		
 		_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, eventType,
 			eventTitle,
-			fmt.Sprintf("Append data request was processed"),
+			fmt.Sprintf("%d rows added, %d cells changed", rowCount, cellsChanged),
 			&crID,
-			models.AuditEventSummary{RowsAdded: int(rowCount)},
+			models.AuditEventSummary{RowsAdded: int(rowCount), CellsChanged: cellsChanged},
 			nil,
 		)
 		c.JSON(200, gin.H{"ok": true, "change_request": cr})

@@ -139,6 +139,7 @@ func DatasetAuditList(c *gin.Context) {
 }
 
 // fetchDeltaHistory calls Python service to get Delta table history
+// Only returns events that aren't already tracked by our audit system
 func fetchDeltaHistory(projectID, datasetID uint) []models.AuditEventListResponse {
 	var events []models.AuditEventListResponse
 
@@ -170,10 +171,25 @@ func fetchDeltaHistory(projectID, datasetID uint) []models.AuditEventListRespons
 	}
 
 	// Convert Delta history entries to audit events
+	// Skip WRITE and RESTORE operations as they are tracked via CR Merged and Restore audit events
 	for _, entry := range historyResp.History {
 		version := int64(0)
 		if v, ok := entry["version"].(float64); ok {
 			version = int64(v)
+		}
+
+		operation := "unknown"
+		if op, ok := entry["operation"].(string); ok {
+			operation = op
+		}
+
+		// Skip operations that are already tracked by our audit system:
+		// - WRITE: tracked by "CR Merged" or "Append" events
+		// - RESTORE: tracked by "Restore" audit event
+		// Only show CREATE TABLE (dataset creation) from Delta history
+		upperOp := strings.ToUpper(operation)
+		if upperOp == "WRITE" || upperOp == "RESTORE" {
+			continue
 		}
 
 		timestamp := time.Now()
@@ -185,11 +201,6 @@ func fetchDeltaHistory(projectID, datasetID uint) []models.AuditEventListRespons
 		// Also try milliseconds format from Delta
 		if tsMs, ok := entry["timestamp"].(float64); ok {
 			timestamp = time.UnixMilli(int64(tsMs))
-		}
-
-		operation := "unknown"
-		if op, ok := entry["operation"].(string); ok {
-			operation = op
 		}
 
 		// Build human-readable title based on operation

@@ -2495,13 +2495,14 @@ func AppendOpen(c *gin.Context) {
 		}
 		_ = gdb.Create(&cc).Error
 	}
-	// Record audit event for CR creation
+	// Record audit event for CR creation (stats will be recorded on merge)
 	crID := cr.ID
+	cellsChanged := len(body.EditedCells)
 	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, cr.UserID, models.AuditEventTypeCRCreated,
 		fmt.Sprintf("Change Request #%d created: %s", cr.ID, cr.Title),
-		fmt.Sprintf("%d rows appended", rowCount2),
+		fmt.Sprintf("Pending: %d rows to append, %d cells edited", rowCount2, cellsChanged),
 		&crID,
-		models.AuditEventSummary{RowsAdded: rowCount2},
+		models.AuditEventSummary{}, // Stats recorded on merge, not creation
 		nil,
 	)
 	c.JSON(201, gin.H{"ok": true, "change_request": cr})
