@@ -715,6 +715,43 @@ def delta_restore_new(payload: RestoreRequest):
         raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
 
 
+@app.get("/delta/snapshot/{project_id}/{dataset_id}/{version}")
+def delta_snapshot_data(project_id: int, dataset_id: int, version: int, 
+                        limit: int = 50, offset: int = 0):
+    """Get data from a Delta table at a specific version (time-travel).
+    
+    This endpoint enables viewing historical snapshots of data without modifying the table.
+    Uses delta-rs native version parameter to load the table state at that point in time.
+    
+    Args:
+        project_id: Project ID containing the dataset
+        dataset_id: Dataset ID
+        version: The version number to read (0-based, from Delta history)
+        limit: Maximum rows to return (default 50, max 500)
+        offset: Pagination offset (default 0)
+    
+    Returns:
+        columns: List of column names
+        data: List of row dictionaries
+        total: Total row count at this version
+        version: The version being read
+    """
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    
+    # Clamp limit
+    limit = max(1, min(limit, 500))
+    offset = max(0, offset)
+    
+    try:
+        result = _delta_adapter.read_at_version(project_id, dataset_id, version, limit, offset)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read version {version}: {str(e)}")
+
+
 class DeltaMergePayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
     table: Optional[str] = None

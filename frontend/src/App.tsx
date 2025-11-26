@@ -29,6 +29,7 @@ import ProjectQueryPage from './pages/ProjectQueryPage'
 import ProjectSettingsPage from './pages/ProjectSettingsPage'
 import InboxPage from './pages/InboxPage'
 import DatasetAuditPage from './pages/DatasetAuditPage'
+import DatasetSnapshotPage from './pages/DatasetSnapshotPage'
 
 function RootRedirect() {
   const { user, ready } = useUser()
@@ -79,6 +80,7 @@ export default function App() {
         <Route path="/projects/:id/datasets/:datasetId" element={<DatasetDetailsPage />} />
         <Route path="/projects/:id/datasets/:datasetId/settings" element={<DatasetSettingsPage />} />
         <Route path="/projects/:id/datasets/:datasetId/audit" element={<DatasetAuditPage />} />
+        <Route path="/projects/:id/datasets/:datasetId/snapshots" element={<DatasetSnapshotPage />} />
         <Route path="/projects/:id/members" element={<MembersPage />} />
         <Route path="/projects/:id/datasets/new" element={<ProjectRoleGuard allow={['owner', 'contributor']}><DatasetCreatePage /></ProjectRoleGuard>} />
         <Route path="/projects/:id/datasets/new/schema" element={<ProjectRoleGuard allow={['owner', 'contributor']}><DatasetSchemaRulesPage /></ProjectRoleGuard>} />

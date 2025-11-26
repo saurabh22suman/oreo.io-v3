@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose, DialogDescription } from './ui/dialog'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef, GridApi, CellValueChangedEvent, ICellRendererParams } from 'ag-grid-community'
 import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community'
 ModuleRegistry.registerModules([AllCommunityModule])
 import 'ag-grid-community/styles/ag-theme-quartz.css'
-import { ChevronLeft, ChevronRight, Download, FileText, FileSpreadsheet, RotateCcw, Save } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, FileText, FileSpreadsheet, RotateCcw, Save, ArrowRight } from 'lucide-react'
 
 type EditedCell = {
   rowIndex: number
@@ -35,22 +36,57 @@ const EditedCellRenderer = (params: any) => {
   const rowIndex = node?.rowIndex ?? -1
   const c = colDef?.field
   const editInfo = editedCellMap?.get(`${rowIndex}|${c}`)
+  const cellRef = useRef<HTMLDivElement>(null)
+  const [showTooltip, setShowTooltip] = useState(false)
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+
+  const handleMouseEnter = () => {
+    if (cellRef.current && editInfo) {
+      const rect = cellRef.current.getBoundingClientRect()
+      // Position tooltip above the cell
+      setTooltipPos({
+        x: rect.left,
+        y: rect.top - 8
+      })
+      setShowTooltip(true)
+    }
+  }
+
+  const handleMouseLeave = () => {
+    setShowTooltip(false)
+  }
 
   if (!editInfo) {
     return <span>{value}</span>
   }
 
   return (
-    <div className="group relative w-full h-full flex items-center">
+    <div
+      ref={cellRef}
+      className="w-full h-full flex items-center cursor-help"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       <span>{value}</span>
-      <div className="invisible group-hover:visible absolute z-50 bottom-full left-0 mb-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg shadow-xl text-xs whitespace-nowrap pointer-events-none">
-        <div className="flex items-center gap-2">
-          <span className="text-slate-400 line-through">{String(editInfo.oldValue)}</span>
-          <span className="text-slate-500">→</span>
-          <span className="text-green-400 font-semibold">{String(editInfo.newValue)}</span>
-        </div>
-        <div className="absolute bottom-0 left-4 transform translate-y-1/2 rotate-45 w-2 h-2 bg-slate-900 border-r border-b border-slate-700"></div>
-      </div>
+      {showTooltip && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            left: `${tooltipPos.x}px`,
+            top: `${tooltipPos.y}px`,
+            transform: 'translateY(-100%)',
+          }}
+          className="z-[9999] px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg shadow-xl text-xs whitespace-nowrap pointer-events-none"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-red-400 line-through">{String(editInfo.oldValue ?? '')}</span>
+            <ArrowRight className="w-3 h-3 text-slate-500" />
+            <span className="text-green-400 font-semibold">{String(editInfo.newValue ?? '')}</span>
+          </div>
+          <div className="absolute bottom-0 left-4 transform translate-y-1/2 rotate-45 w-2 h-2 bg-slate-900 border-r border-b border-slate-700"></div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

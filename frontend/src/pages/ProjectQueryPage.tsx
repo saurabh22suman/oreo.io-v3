@@ -52,10 +52,10 @@ export default function ProjectQueryPage() {
 
                 <FeatureCard
                     icon={<RotateCcw className="w-8 h-8" />}
-                    title="Restore"
-                    description="Rollback datasets to previous versions or recover deleted items."
+                    title="Snapshots"
+                    description="View previous snapshots of data or restore it."
                     color="blue"
-                    to="#" // Placeholder
+                    to={datasetId ? `/projects/${id}/datasets/${datasetId}/snapshots` : '#'}
                 />
 
                 <FeatureCard

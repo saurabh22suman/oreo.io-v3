@@ -89,14 +89,14 @@ func DatasetAuditList(c *gin.Context) {
 
 	for _, evt := range dbEvents {
 		allEvents = append(allEvents, models.AuditEventListResponse{
-			AuditID:    fmt.Sprintf("evt_%d", evt.ID),
-			SnapshotID: evt.SnapshotID,
-			Type:       evt.EventType,
-			Title:      evt.Title,
+			AuditID:     fmt.Sprintf("evt_%d", evt.ID),
+			SnapshotID:  evt.SnapshotID,
+			Type:        evt.EventType,
+			Title:       evt.Title,
 			Description: evt.Description,
-			CreatedBy:  fmt.Sprintf("user_%d", evt.ActorID),
-			ActorEmail: evt.ActorEmail,
-			Timestamp:  evt.CreatedAt,
+			CreatedBy:   fmt.Sprintf("user_%d", evt.ActorID),
+			ActorEmail:  evt.ActorEmail,
+			Timestamp:   evt.CreatedAt,
 			Summary: models.AuditEventSummary{
 				RowsAdded:    evt.RowsAdded,
 				RowsUpdated:  evt.RowsUpdated,
@@ -305,14 +305,14 @@ func handleDeltaEventDetail(c *gin.Context, auditIDStr string) {
 	// For Delta events, we return a synthetic response based on the version info
 	// The actual Delta log data was already fetched and included in metadata during list
 	response := models.AuditEventDetailResponse{
-		AuditID:    auditIDStr,
-		SnapshotID: fmt.Sprintf("v%d", version),
-		Type:       "delta_operation",
-		Title:      fmt.Sprintf("Delta Version %d", version),
+		AuditID:     auditIDStr,
+		SnapshotID:  fmt.Sprintf("v%d", version),
+		Type:        "delta_operation",
+		Title:       fmt.Sprintf("Delta Version %d", version),
 		Description: "This event was recorded in the Delta Lake transaction log.",
-		CreatedBy:  "system",
-		Timestamp:  time.Now(), // Will be overwritten if we fetch from Delta
-		Summary:    models.AuditEventSummary{},
+		CreatedBy:   "system",
+		Timestamp:   time.Now(), // Will be overwritten if we fetch from Delta
+		Summary:     models.AuditEventSummary{},
 	}
 
 	// For version 0, it's typically a table creation

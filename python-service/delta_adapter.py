@@ -532,6 +532,56 @@ class DeltaStorageAdapter:
         
         return hist
 
+    def read_at_version(self, project_id: int, dataset_id: int, version: int, 
+                        limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+        """Read data from the main table at a specific version (time-travel).
+        
+        Uses delta-rs version parameter to load historical table state.
+        Returns rows as a list of dicts plus metadata.
+        """
+        path = self._main_path(project_id, dataset_id)
+        
+        try:
+            # Load Delta table at specific version
+            dt = DeltaTable(path, version=version)
+            
+            # Get total row count at this version
+            full_table = dt.to_pyarrow_table()
+            total_rows = full_table.num_rows
+            columns = [f.name for f in full_table.schema]
+            
+            # Apply pagination by slicing the table
+            if offset >= total_rows:
+                data = []
+            else:
+                end = min(offset + limit, total_rows)
+                sliced = full_table.slice(offset, end - offset)
+                data = sliced.to_pylist()
+            
+            logger.info(json.dumps({
+                "event": "read_at_version",
+                "project_id": project_id,
+                "dataset_id": dataset_id,
+                "version": version,
+                "offset": offset,
+                "limit": limit,
+                "returned": len(data),
+                "total": total_rows
+            }))
+            
+            return {
+                "columns": columns,
+                "data": data,
+                "total": total_rows,
+                "limit": limit,
+                "offset": offset,
+                "version": version
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to read at version {version}: {e}")
+            raise ValueError(f"Cannot read version {version}: {str(e)}")
+
     def restore(self, project_id: int, dataset_id: int, version: int) -> Dict[str, Any]:
         """Restore the main table to a previous version using delta-rs.
         

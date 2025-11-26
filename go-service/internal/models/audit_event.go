@@ -7,16 +7,16 @@ import (
 // AuditEvent stores normalized audit events for the audit timeline
 // Events are aggregated from multiple sources: change_requests, delta_log, validation_runs, etc.
 type AuditEvent struct {
-	ID          uint64    `json:"id" gorm:"primaryKey;autoIncrement:true"`
-	ProjectID   uint      `json:"project_id" gorm:"index;not null"`
-	DatasetID   uint      `json:"dataset_id" gorm:"index;not null"`
-	EventType   string    `json:"event_type" gorm:"size:50;index"`  // edit, append, cr_created, cr_approved, cr_rejected, cr_merged, restore, schema_change, rule_change, validation
-	Title       string    `json:"title" gorm:"size:500"`            // Human-readable title
-	Description string    `json:"description" gorm:"type:text"`     // Detailed description
-	ActorID     uint      `json:"actor_id" gorm:"index"`            // User who performed the action
-	ActorEmail  string    `json:"actor_email" gorm:"size:255"`      // Cached actor email for display
-	SnapshotID  string    `json:"snapshot_id" gorm:"size:100"`      // Reference to delta snapshot (e.g., "snap_14")
-	Version     int64     `json:"version"`                          // Delta version number (internal, not exposed directly in UI)
+	ID          uint64 `json:"id" gorm:"primaryKey;autoIncrement:true"`
+	ProjectID   uint   `json:"project_id" gorm:"index;not null"`
+	DatasetID   uint   `json:"dataset_id" gorm:"index;not null"`
+	EventType   string `json:"event_type" gorm:"size:50;index"` // edit, append, cr_created, cr_approved, cr_rejected, cr_merged, restore, schema_change, rule_change, validation
+	Title       string `json:"title" gorm:"size:500"`           // Human-readable title
+	Description string `json:"description" gorm:"type:text"`    // Detailed description
+	ActorID     uint   `json:"actor_id" gorm:"index"`           // User who performed the action
+	ActorEmail  string `json:"actor_email" gorm:"size:255"`     // Cached actor email for display
+	SnapshotID  string `json:"snapshot_id" gorm:"size:100"`     // Reference to delta snapshot (e.g., "snap_14")
+	Version     int64  `json:"version"`                         // Delta version number (internal, not exposed directly in UI)
 
 	// Related entity references
 	ChangeRequestID *uint  `json:"change_request_id" gorm:"index"` // If event is related to a CR

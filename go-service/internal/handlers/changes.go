@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/config"
+	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
 	"gorm.io/gorm"
 )
@@ -176,8 +176,11 @@ func ChangeApprove(c *gin.Context) {
 		}
 		// Delta backend: stream upload directly to python /delta/append-file
 		if strings.EqualFold(ds.StorageBackend, "delta") {
-			cfg := config.Get(); pyBase := cfg.PythonServiceURL
-			if strings.TrimSpace(pyBase) == "" { pyBase = "http://python-service:8000" }
+			cfg := config.Get()
+			pyBase := cfg.PythonServiceURL
+			if strings.TrimSpace(pyBase) == "" {
+				pyBase = "http://python-service:8000"
+			}
 			var mpBuf bytes.Buffer
 			mw := multipart.NewWriter(&mpBuf)
 			// Use hierarchical path (project_id + dataset_id) for proper main table location
@@ -199,15 +202,17 @@ func ChangeApprove(c *gin.Context) {
 				return
 			}
 			// Update timestamps and meta
-		now := time.Now()
-		ds.LastUploadAt = &now
-		_ = gdb.Save(&ds).Error
-		upsertDatasetMeta(gdb, &ds)
-		// Record version snapshot (delta path reference)
-		cfg = config.Get()
-		root := strings.TrimRight(cfg.DeltaDataRoot, "/\\")
-		if root == "" { root = "/data/delta" }
-		main := fmt.Sprintf("%s/%d", root, ds.ID)
+			now := time.Now()
+			ds.LastUploadAt = &now
+			_ = gdb.Save(&ds).Error
+			upsertDatasetMeta(gdb, &ds)
+			// Record version snapshot (delta path reference)
+			cfg = config.Get()
+			root := strings.TrimRight(cfg.DeltaDataRoot, "/\\")
+			if root == "" {
+				root = "/data/delta"
+			}
+			main := fmt.Sprintf("%s/%d", root, ds.ID)
 			var rowCount int64 = 0
 			verData := map[string]any{
 				"table":      main,
@@ -217,8 +222,10 @@ func ChangeApprove(c *gin.Context) {
 			}
 			if b, err := json.Marshal(verData); err == nil {
 				approvers := cr.ReviewerStates
-				if strings.TrimSpace(approvers) == "" { approvers = cr.Reviewers }
-				_ = gdb.Create(&models.DatasetVersion{ DatasetID: ds.ID, Data: string(b), EditedBy: cr.UserID, EditedAt: time.Now(), Status: "approved", Approvers: approvers }).Error
+				if strings.TrimSpace(approvers) == "" {
+					approvers = cr.Reviewers
+				}
+				_ = gdb.Create(&models.DatasetVersion{DatasetID: ds.ID, Data: string(b), EditedBy: cr.UserID, EditedAt: time.Now(), Status: "approved", Approvers: approvers}).Error
 			}
 			cr.Status = "completed"
 			cr.Summary = "Applied append at " + time.Now().Format(time.RFC3339)
@@ -227,7 +234,9 @@ func ChangeApprove(c *gin.Context) {
 				return
 			}
 			// Notify requester
-			if cr.UserID != 0 { _ = AddNotification(cr.UserID, "Your append request has been applied successfully", models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID}) }
+			if cr.UserID != 0 {
+				_ = AddNotification(cr.UserID, "Your append request has been applied successfully", models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID})
+			}
 			// Record audit event for CR merge
 			crID := cr.ID
 			_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, models.AuditEventTypeCRMerged,
@@ -338,9 +347,9 @@ func ChangeApprove(c *gin.Context) {
 
 		// Record a dataset version snapshot (table reference and row count) on approved change
 		// Compute row count from main table if available
-	var rowCount int64
-	_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", main)).Row().Scan(&rowCount)
-	fmt.Printf("[ChangeApprove] version snapshot: table=%s row_count=%d\n", main, rowCount)
+		var rowCount int64
+		_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", main)).Row().Scan(&rowCount)
+		fmt.Printf("[ChangeApprove] version snapshot: table=%s row_count=%d\n", main, rowCount)
 		verData := map[string]any{
 			"table":      main,
 			"row_count":  rowCount,
@@ -362,7 +371,7 @@ func ChangeApprove(c *gin.Context) {
 			}).Error
 		}
 		// Mark change status
-	if usedDB {
+		if usedDB {
 			cr.Status = "completed"
 		} else {
 			cr.Status = "approved"

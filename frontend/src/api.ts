@@ -465,3 +465,65 @@ export async function getAuditEventValidation(auditId: string): Promise<Record<s
   if (!r.ok) throw new Error(await r.text())
   return r.json()
 }
+
+// =====================
+// Snapshot APIs
+// =====================
+
+export interface SnapshotSummary {
+  rows_added: number
+  rows_updated: number
+  rows_deleted: number
+  cells_changed: number
+}
+
+export interface SnapshotEntry {
+  version: number
+  timestamp: string
+  title: string
+  type: string
+  created_by: string
+  actor_email?: string
+  summary: SnapshotSummary
+  operation?: string
+  operation_metrics?: Record<string, any>
+}
+
+export interface SnapshotCalendar {
+  [date: string]: SnapshotEntry[]
+}
+
+// Get snapshot calendar for a dataset (grouped by date)
+export async function getSnapshotCalendar(
+  datasetId: number
+): Promise<{ calendar: SnapshotCalendar; versions: SnapshotEntry[] }> {
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/snapshots/calendar`, { headers: { ...authHeaders() } })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Get snapshot data at a specific version (time travel query)
+export async function getSnapshotData(
+  datasetId: number,
+  version: number,
+  limit = 50,
+  offset = 0
+): Promise<{ data: any[]; columns: string[]; total: number; version: number }> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/snapshots/${version}/data?${params.toString()}`, { headers: { ...authHeaders() } })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Restore dataset to a specific version
+export async function restoreSnapshot(
+  datasetId: number,
+  version: number
+): Promise<{ ok: boolean; restored_to_version: number; new_version: number }> {
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/snapshots/${version}/restore`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+  })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
