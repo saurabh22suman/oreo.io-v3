@@ -12,7 +12,7 @@ import {
   ChevronLeft, Database, BarChart3, Table2, RefreshCw, Download,
   ChevronRight, ChevronLeft as PrevIcon, Edit3, Type, Hash, Calendar,
   ToggleLeft, FileSpreadsheet, FileText, ChevronDown, MoreVertical,
-  Filter, Copy, Pin, Clock, ArrowUp, ArrowDown, ArrowUpDown, X, Plus
+  Filter, Copy, Pin, Clock, ArrowUp, ArrowDown, ArrowUpDown, X, Plus, Edit2
 } from 'lucide-react'
 
 // Custom Header Component with Sort Icons and Context Menu
@@ -450,6 +450,15 @@ export default function DatasetViewerPage() {
             </div>
 
             <div className="flex gap-3">
+              <Link
+                to={`/projects/${projectId}/datasets/${dsId}/live-edit`}
+                className="flex items-center gap-2 px-3 py-1.5 bg-amber-900/50 hover:bg-amber-800/50 border border-amber-700/50 text-amber-200 text-sm font-medium rounded-lg transition-colors"
+                title="Live Edit (Experimental)"
+              >
+                <Edit2 className="w-4 h-4" />
+                Live Edit
+                <span className="text-[10px] bg-amber-800 text-amber-200 px-1.5 py-0.5 rounded">Beta</span>
+              </Link>
               <button
                 onClick={handleRefresh}
                 className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm font-medium rounded-lg transition-colors"

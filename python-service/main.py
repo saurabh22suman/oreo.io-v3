@@ -1501,3 +1501,333 @@ def delta_query(req: DeltaQueryRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Query execution failed: {str(e)}")
+
+
+# ==================== Live Edit Endpoints ====================
+
+try:
+    from live_edit_service import LiveEditService
+    from live_edit_models import (
+        StartSessionRequest,
+        CellEditRequest,
+        BulkEditRequest,
+        SessionMode,
+    )
+    _live_edit_service = LiveEditService()
+except Exception as e:
+    import traceback
+    print(f"[LiveEditServiceInitError] {type(e).__name__}: {e}")
+    traceback.print_exc()
+    _live_edit_service = None
+
+
+class LiveEditStartRequest(BaseModel):
+    """Request to start a live edit session"""
+    project_id: int
+    mode: str = "full_table"  # "full_table" or "row_selection"
+    rows: Optional[List[int]] = None
+
+
+class LiveEditCellRequest(BaseModel):
+    """Request to save a single cell edit"""
+    row_id: str
+    column: str
+    new_value: Any
+    old_value: Optional[Any] = None
+    client_ts: Optional[str] = None
+
+
+class LiveEditBulkRequest(BaseModel):
+    """Request to save bulk cell edits"""
+    edits: List[Dict[str, Any]]
+
+
+class LiveEditSubmitRequest(BaseModel):
+    """Request to submit live edit changes as a change request"""
+    project_id: int
+    title: str
+    comment: Optional[str] = ""
+    reviewer_ids: List[int]
+    edits: Dict[str, Any]  # { edited_cells: [...], deleted_rows: [...] }
+
+
+@app.post("/datasets/{dataset_id}/live-sessions")
+def start_live_session(dataset_id: int, request: LiveEditStartRequest):
+    """
+    Start a new live edit session
+    
+    POST /datasets/{dataset_id}/live-sessions
+    
+    Returns: session_id, staging_path, editable_columns, rules_map, created_at, expires_at
+    """
+    if _live_edit_service is None:
+        raise HTTPException(status_code=500, detail="Live Edit service not available")
+    
+    try:
+        # Convert to internal request format
+        mode = SessionMode.FULL_TABLE if request.mode == "full_table" else SessionMode.ROW_SELECTION
+        internal_request = StartSessionRequest(
+            user_id="user_001",  # TODO: Get from auth context
+            mode=mode,
+            rows=request.rows or []
+        )
+        
+        response = _live_edit_service.start_session(
+            internal_request, 
+            str(request.project_id), 
+            str(dataset_id)
+        )
+        return response.dict()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start session: {str(e)}")
+
+
+@app.get("/datasets/{dataset_id}/live-sessions/{session_id}")
+def get_live_session(dataset_id: int, session_id: str):
+    """
+    Get live edit session details
+    
+    GET /datasets/{dataset_id}/live-sessions/{session_id}
+    
+    Returns: LiveEditSession
+    """
+    if _live_edit_service is None:
+        raise HTTPException(status_code=500, detail="Live Edit service not available")
+    
+    session = _live_edit_service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    return session.dict()
+
+
+@app.delete("/datasets/{dataset_id}/live-sessions/{session_id}")
+def delete_live_session(dataset_id: int, session_id: str):
+    """
+    Delete/abort a live edit session
+    
+    DELETE /datasets/{dataset_id}/live-sessions/{session_id}
+    
+    Returns: {ok: true}
+    """
+    if _live_edit_service is None:
+        raise HTTPException(status_code=500, detail="Live Edit service not available")
+    
+    try:
+        success = _live_edit_service.delete_session(session_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete session: {str(e)}")
+
+
+@app.post("/datasets/{dataset_id}/live-sessions/{session_id}/edits")
+def save_live_edit_cell(
+    dataset_id: int,
+    session_id: str,
+    request: LiveEditCellRequest
+):
+    """
+    Save a single cell edit
+    
+    POST /datasets/{dataset_id}/live-sessions/{session_id}/edits
+    
+    Returns: {status, validation, edit_id}
+    """
+    if _live_edit_service is None:
+        raise HTTPException(status_code=500, detail="Live Edit service not available")
+    
+    try:
+        internal_request = CellEditRequest(
+            row_id=request.row_id,
+            column=request.column,
+            new_value=request.new_value,
+            client_ts=request.client_ts
+        )
+        
+        response = _live_edit_service.save_cell_edit(session_id, internal_request, "user_001")
+        
+        if response.status == "error":
+            raise HTTPException(status_code=422, detail=response.dict())
+        
+        return response.dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save edit: {str(e)}")
+
+
+@app.post("/datasets/{dataset_id}/live-sessions/{session_id}/edits/batch")
+def save_live_edit_bulk(
+    dataset_id: int,
+    session_id: str,
+    request: LiveEditBulkRequest
+):
+    """
+    Save multiple edits in batch
+    
+    POST /datasets/{dataset_id}/live-sessions/{session_id}/edits/batch
+    
+    Returns: {results: [{edit_id, valid, messages}, ...]}
+    """
+    if _live_edit_service is None:
+        raise HTTPException(status_code=500, detail="Live Edit service not available")
+    
+    try:
+        internal_request = BulkEditRequest(edits=[
+            CellEditRequest(
+                row_id=e.get("row_id", ""),
+                column=e.get("column", ""),
+                new_value=e.get("new_value")
+            ) for e in request.edits
+        ])
+        
+        response = _live_edit_service.save_bulk_edits(session_id, internal_request, "user_001")
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save bulk edits: {str(e)}")
+
+
+@app.post("/datasets/{dataset_id}/live-sessions/{session_id}/preview")
+def get_live_edit_preview(dataset_id: int, session_id: str):
+    """
+    Generate preview summary for a session
+    
+    POST /datasets/{dataset_id}/live-sessions/{session_id}/preview
+    
+    Returns: {summary, diffs, deleted_rows, validation_summary}
+    """
+    if _live_edit_service is None:
+        raise HTTPException(status_code=500, detail="Live Edit service not available")
+    
+    try:
+        preview = _live_edit_service.generate_preview(session_id)
+        return preview.dict()
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate preview: {str(e)}")
+
+
+@app.get("/datasets/{dataset_id}/live-sessions/{session_id}/edits")
+def get_live_session_edits(dataset_id: int, session_id: str):
+    """
+    Get all edits for a session
+    
+    GET /datasets/{dataset_id}/live-sessions/{session_id}/edits
+    
+    Returns: List[CellEdit]
+    """
+    if _live_edit_service is None:
+        raise HTTPException(status_code=500, detail="Live Edit service not available")
+    
+    edits = _live_edit_service.get_session_edits(session_id)
+    return [edit.dict() for edit in edits]
+
+
+# ==================== Live Edit Apply Endpoint (Called by Go service on CR approval) ====================
+
+class LiveEditApplyRequest(BaseModel):
+    """Request to apply live edit changes to a dataset"""
+    session_id: str
+    project_id: int
+    dataset_id: int
+    edited_cells: List[Dict[str, Any]] = []
+    deleted_rows: List[str] = []
+
+
+@app.post("/live-edit/apply")
+def apply_live_edit_changes(request: LiveEditApplyRequest):
+    """
+    Apply live edit changes to the dataset (called when CR is approved)
+    
+    POST /live-edit/apply
+    
+    This endpoint is called by the Go service when a live_edit change request is approved.
+    It applies all the staged edits and deletions to the main Delta table.
+    
+    Request body:
+    {
+        "session_id": "sess_abc123",
+        "project_id": 1,
+        "dataset_id": 1,
+        "edited_cells": [
+            {"row_id": "0", "column": "amount", "old_value": "100", "new_value": "200"},
+            ...
+        ],
+        "deleted_rows": ["5", "10"]
+    }
+    
+    Returns: {ok: true, rows_updated: N, rows_deleted: M}
+    """
+    if _live_edit_service is None:
+        raise HTTPException(status_code=500, detail="Live Edit service not available")
+    
+    try:
+        result = _live_edit_service.apply_changes(
+            session_id=request.session_id,
+            project_id=str(request.project_id),
+            dataset_id=str(request.dataset_id),
+            edited_cells=request.edited_cells,
+            deleted_rows=request.deleted_rows
+        )
+        
+        if not result.get("ok"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Unknown error"))
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to apply changes: {str(e)}")
+
+
+class LiveEditRowsRequest(BaseModel):
+    """Request to fetch specific rows from a dataset"""
+    project_id: int
+    dataset_id: int
+    row_ids: List[str]
+
+
+@app.post("/live-edit/rows")
+def get_live_edit_rows(request: LiveEditRowsRequest):
+    """
+    Fetch specific rows from a dataset by row IDs
+    
+    POST /live-edit/rows
+    
+    This endpoint is called by the Go service to fetch actual row data for preview
+    in the Change Request details page.
+    
+    Request body:
+    {
+        "project_id": 1,
+        "dataset_id": 1,
+        "row_ids": ["0", "5", "10"]
+    }
+    
+    Returns: {ok: true, rows: [...], columns: [...]}
+    """
+    if _live_edit_service is None:
+        raise HTTPException(status_code=500, detail="Live Edit service not available")
+    
+    try:
+        result = _live_edit_service.get_rows_by_ids(
+            project_id=str(request.project_id),
+            dataset_id=str(request.dataset_id),
+            row_ids=request.row_ids
+        )
+        
+        if not result.get("ok"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Unknown error"))
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch rows: {str(e)}")
+

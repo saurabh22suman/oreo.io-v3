@@ -26,15 +26,18 @@ type Props = {
     invalidCells?: Array<{ row: number; column: string }>
     invalidRows?: number[]
     editedCells?: EditedCell[]
+    deletedRowIds?: Set<number>
     className?: string
     style?: React.CSSProperties
 }
 
 const EditedCellRenderer = (params: any) => {
-    const { value, editedCellMap, node, colDef } = params
+    const { value, editedCellMap, deletedRowIds, node, colDef } = params
     const rowIndex = node?.rowIndex ?? -1
+    const rowId = node?.data?._row_id ?? rowIndex
     const c = colDef?.field
-    const editInfo = editedCellMap?.get(`${rowIndex}|${c}`)
+    const editInfo = editedCellMap?.get(`${rowId}|${c}`) || editedCellMap?.get(`${rowIndex}|${c}`)
+    const isDeleted = deletedRowIds?.has(rowId) || deletedRowIds?.has(rowIndex)
     const cellRef = useRef<HTMLDivElement>(null)
     const [showTooltip, setShowTooltip] = useState(false)
     const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
@@ -53,6 +56,15 @@ const EditedCellRenderer = (params: any) => {
 
     const handleMouseLeave = () => {
         setShowTooltip(false)
+    }
+
+    // Deleted row styling
+    if (isDeleted) {
+        return (
+            <div className="w-full h-full flex items-center">
+                <span className="line-through text-red-400 opacity-60">{value}</span>
+            </div>
+        )
     }
 
     if (!editInfo) {
@@ -102,6 +114,7 @@ export default function AgGridTable({
     invalidCells = [],
     invalidRows = [],
     editedCells: externalEditedCells = [],
+    deletedRowIds: externalDeletedRowIds,
     className = '',
     style
 }: Props) {
@@ -111,6 +124,7 @@ export default function AgGridTable({
     const [localRows, setLocalRows] = useState<any[]>(rows || [])
     const originalRowsRef = useRef<any[]>(Array.isArray(rows) ? JSON.parse(JSON.stringify(rows)) : [])
     const [editedCells, setEditedCells] = useState<EditedCell[]>(externalEditedCells || [])
+    const deletedRowIds = externalDeletedRowIds || new Set<number>()
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1)
@@ -149,27 +163,51 @@ export default function AgGridTable({
 
     const colDefs = useMemo<ColDef[]>(() => {
         return columns.map((c) => ({
-            headerName: c,
+            headerName: c === '_change_type' ? 'Type' : (c === '_row_id' ? 'Row ID' : c),
             field: c,
             colId: c,
             valueGetter: (p: any) => p?.data?.[c],
             valueSetter: (p: any) => { if (!p?.data) return false; p.data[c] = p.newValue; return true },
-            editable: !!allowEdit,
+            editable: !!allowEdit && c !== '_change_type' && c !== '_row_id',
             resizable: true,
             suppressSizeToFit: false,
-            cellRenderer: EditedCellRenderer,
-            cellRendererParams: { editedCellMap },
+            // Pin Type and Row ID columns to left
+            pinned: c === '_change_type' ? 'left' : (c === '_row_id' ? 'left' : undefined),
+            width: c === '_change_type' ? 100 : (c === '_row_id' ? 80 : undefined),
+            cellRenderer: c === '_change_type' ? (params: any) => {
+                const value = params.value
+                if (value === 'Deleted') {
+                    return (
+                        <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-900/50 text-red-300 border border-red-700">
+                            Deleted
+                        </span>
+                    )
+                }
+                return (
+                    <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-900/50 text-blue-300 border border-blue-700">
+                        Edited
+                    </span>
+                )
+            } : EditedCellRenderer,
+            cellRendererParams: { editedCellMap, deletedRowIds },
             cellStyle: (p: any) => {
                 const ri = p?.rowIndex
+                const rowId = p?.data?._row_id ?? ri
                 const key = `${typeof ri === 'number' ? ri : -1}|${c}`
+                const keyById = `${rowId}|${c}`
+
+                // Deleted rows (red background with reduced opacity)
+                if (deletedRowIds.has(ri) || deletedRowIds.has(rowId)) {
+                    return { backgroundColor: '#7F1D1D40', color: '#FCA5A5' }
+                }
 
                 // Invalid cells (red)
                 if ((typeof ri === 'number' && invalidRowSet.has(ri)) || invalidCellSet.has(key)) {
                     return { backgroundColor: '#7F1D1D', color: '#FCA5A5' }
                 }
 
-                // Edited cells (blue/highlight)
-                if (editedCellMap.has(key)) {
+                // Edited cells (blue/highlight) - skip for _change_type and _row_id columns
+                if (c !== '_change_type' && c !== '_row_id' && (editedCellMap.has(key) || editedCellMap.has(keyById))) {
                     return { backgroundColor: '#1e3a5f', color: '#93c5fd', fontWeight: '600' }
                 }
 
@@ -177,7 +215,7 @@ export default function AgGridTable({
             },
             cellClass: 'text-sm text-slate-300 font-mono border-r border-slate-800',
         }))
-    }, [columns, allowEdit, invalidCellSet, invalidRowSet, editedCellMap])
+    }, [columns, allowEdit, invalidCellSet, invalidRowSet, editedCellMap, deletedRowIds])
 
     const defaultColDef = useMemo<ColDef>(() => ({
         sortable: true,

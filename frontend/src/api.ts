@@ -527,3 +527,140 @@ export async function restoreSnapshot(
   if (!r.ok) throw new Error(await r.text())
   return r.json()
 }
+
+// ==================== Live Edit API ====================
+
+export type LiveEditSession = {
+  session_id: string
+  staging_path: string
+  editable_columns: string[]
+  rules_map: Record<string, any[]>
+  created_at: string
+  expires_at: string
+}
+
+export type CellEdit = {
+  row_id: string
+  column: string
+  old_value: any
+  new_value: any
+}
+
+export type DeletedRow = {
+  row_id: string
+  row_data: any
+}
+
+export type LiveEditPayload = {
+  edited_cells: CellEdit[]
+  deleted_rows: DeletedRow[]
+}
+
+// Start a new live edit session
+export async function startLiveEditSession(
+  datasetId: number,
+  projectId: number,
+  mode: 'full_table' | 'row_selection' = 'full_table',
+  rows?: number[]
+): Promise<LiveEditSession> {
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/live-sessions`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project_id: projectId, mode, rows })
+  })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Get live edit session details
+export async function getLiveEditSession(
+  datasetId: number,
+  sessionId: string
+): Promise<LiveEditSession> {
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/live-sessions/${sessionId}`, {
+    headers: { ...authHeaders() }
+  })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Delete/abort a live edit session
+export async function deleteLiveEditSession(
+  datasetId: number,
+  sessionId: string
+): Promise<{ ok: boolean }> {
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/live-sessions/${sessionId}`, {
+    method: 'DELETE',
+    headers: { ...authHeaders() }
+  })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Save a single cell edit
+export async function saveLiveEditCell(
+  datasetId: number,
+  sessionId: string,
+  edit: { row_id: string; column: string; new_value: any; old_value?: any }
+): Promise<{ status: string; validation: { valid: boolean; messages: string[] }; edit_id: string }> {
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/live-sessions/${sessionId}/edits`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(edit)
+  })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Save bulk edits
+export async function saveLiveEditBulk(
+  datasetId: number,
+  sessionId: string,
+  edits: Array<{ row_id: string; column: string; new_value: any }>
+): Promise<{ results: Array<{ edit_id: string; valid: boolean; messages?: string[] }> }> {
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/live-sessions/${sessionId}/edits/batch`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ edits })
+  })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Get session edits preview/summary
+export async function getLiveEditPreview(
+  datasetId: number,
+  sessionId: string
+): Promise<{
+  summary: { rows_changed: number; cells_changed: number; rows_deleted: number }
+  diffs: Array<{ row_id: string; column: string; old: any; new: any }>
+  deleted_rows: Array<{ row_id: string; row_data: any }>
+  validation_summary: { valid: number; warnings: number; errors: number }
+}> {
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/live-sessions/${sessionId}/preview`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' }
+  })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Submit live edit changes as a change request
+export async function submitLiveEditCR(
+  datasetId: number,
+  payload: {
+    project_id: number
+    title: string
+    comment?: string
+    reviewer_ids: number[]
+    edits: LiveEditPayload
+  }
+): Promise<{ change_request_id: number; status: string }> {
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/data/live-edit/open`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}

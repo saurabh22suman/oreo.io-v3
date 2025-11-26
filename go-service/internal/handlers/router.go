@@ -215,6 +215,8 @@ func SetupRouter() *gin.Engine {
 				ds.POST("/:datasetId/append/json/validate", AppendJSONValidate)
 				// Preview sample from last upload
 				ds.GET("/:datasetId/sample", DatasetSample)
+				// Live Edit flow
+				ds.POST("/:datasetId/live-edit/submit", LiveEditSubmit)
 				// Change Requests (approvals workflow)
 				chg := proj.Group("/:id/changes")
 				{

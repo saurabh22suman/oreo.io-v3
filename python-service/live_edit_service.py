@@ -532,3 +532,192 @@ class LiveEditService:
                 }))
         
         return cleaned
+
+    def apply_changes(
+        self,
+        session_id: str,
+        project_id: str,
+        dataset_id: str,
+        edited_cells: List[Dict[str, Any]],
+        deleted_rows: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Apply live edit changes to the dataset (on CR approval)
+        
+        This method:
+        1. Generates UPDATE statements for edited cells
+        2. Generates DELETE statements for deleted rows  
+        3. Applies changes to the Delta table
+        4. Updates session status
+        
+        Args:
+            session_id: The live edit session ID
+            project_id: Project ID
+            dataset_id: Dataset ID
+            edited_cells: List of cell edits with row_id, column, old_value, new_value
+            deleted_rows: List of row IDs to delete
+            
+        Returns:
+            Dict with status and counts
+        """
+        try:
+            if duckdb is None:
+                raise RuntimeError("DuckDB required for applying changes")
+            
+            from deltalake import write_deltalake
+            
+            main_path = os.path.join(
+                self._get_dataset_path(project_id, dataset_id),
+                "main"
+            )
+            
+            if not os.path.exists(main_path):
+                return {"ok": False, "error": "dataset_not_found"}
+            
+            # Connect to DuckDB
+            conn = duckdb.connect()
+            conn.execute("INSTALL delta; LOAD delta;")
+            
+            rows_updated = 0
+            rows_deleted = 0
+            
+            # Read current data using DuckDB delta_scan
+            current_df = conn.execute(f"SELECT * FROM delta_scan('{main_path}')").df()
+            
+            # Ensure _row_id column exists for matching
+            if "_row_id" not in current_df.columns:
+                current_df["_row_id"] = range(len(current_df))
+            
+            # Apply edits
+            for edit in edited_cells:
+                row_id = edit.get("row_id")
+                column = edit.get("column")
+                new_value = edit.get("new_value")
+                
+                if row_id is not None and column and column in current_df.columns:
+                    # Find the row and update
+                    mask = current_df["_row_id"] == row_id
+                    if mask.any():
+                        current_df.loc[mask, column] = new_value
+                        rows_updated += 1
+            
+            # Apply deletes
+            if deleted_rows:
+                rows_before = len(current_df)
+                deleted_ids = [int(rid) if isinstance(rid, str) and rid.isdigit() else rid for rid in deleted_rows]
+                current_df = current_df[~current_df["_row_id"].isin(deleted_ids)]
+                rows_deleted = rows_before - len(current_df)
+            
+            # Drop the _row_id column before writing back (if it was added)
+            if "_row_id" in current_df.columns:
+                current_df = current_df.drop(columns=["_row_id"])
+            
+            # Convert DataFrame to PyArrow Table for write_deltalake
+            if pa is not None:
+                arrow_table = pa.Table.from_pandas(current_df, preserve_index=False)
+                # Write back to Delta table (overwrite mode)
+                write_deltalake(main_path, arrow_table, mode="overwrite")
+            else:
+                raise RuntimeError("PyArrow required for writing to Delta table")
+            
+            # Update session status if session exists
+            session = self.get_session(session_id)
+            if session:
+                session.status = SessionStatus.COMPLETED
+                session.updated_at = datetime.utcnow()
+            
+            logger.info(json.dumps({
+                "event": "live_edit_applied",
+                "session_id": session_id,
+                "project_id": project_id,
+                "dataset_id": dataset_id,
+                "rows_updated": rows_updated,
+                "rows_deleted": rows_deleted
+            }))
+            
+            return {
+                "ok": True,
+                "rows_updated": rows_updated,
+                "rows_deleted": rows_deleted
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to apply live edit changes: {e}")
+            return {"ok": False, "error": str(e)}
+
+    def get_rows_by_ids(
+        self,
+        project_id: str,
+        dataset_id: str,
+        row_ids: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Fetch specific rows from a dataset by their row IDs
+        
+        Args:
+            project_id: Project ID
+            dataset_id: Dataset ID
+            row_ids: List of row IDs to fetch
+            
+        Returns:
+            Dict with ok, rows, and columns
+        """
+        try:
+            if duckdb is None:
+                raise RuntimeError("DuckDB required for fetching rows")
+            
+            main_path = os.path.join(
+                self._get_dataset_path(project_id, dataset_id),
+                "main"
+            )
+            
+            if not os.path.exists(main_path):
+                return {"ok": False, "error": "dataset_not_found", "rows": [], "columns": []}
+            
+            # Connect to DuckDB and load delta extension
+            conn = duckdb.connect()
+            conn.execute("INSTALL delta; LOAD delta;")
+            
+            # Read all data and filter by row_id
+            df = conn.execute(f"SELECT * FROM delta_scan('{main_path}')").df()
+            
+            # Add _row_id column if not present
+            if "_row_id" not in df.columns:
+                df["_row_id"] = range(len(df))
+            
+            # Convert row_ids to integers for matching
+            int_row_ids = []
+            for rid in row_ids:
+                try:
+                    int_row_ids.append(int(rid))
+                except (ValueError, TypeError):
+                    int_row_ids.append(rid)
+            
+            # Filter to only requested rows
+            filtered_df = df[df["_row_id"].isin(int_row_ids)]
+            
+            # Get columns
+            columns = list(df.columns)
+            
+            # Convert to list of dicts
+            rows = filtered_df.to_dict(orient='records')
+            
+            conn.close()
+            
+            logger.info(json.dumps({
+                "event": "get_rows_by_ids",
+                "project_id": project_id,
+                "dataset_id": dataset_id,
+                "requested_count": len(row_ids),
+                "returned_count": len(rows)
+            }))
+            
+            return {
+                "ok": True,
+                "rows": rows,
+                "columns": columns
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch rows by IDs: {e}")
+            return {"ok": False, "error": str(e), "rows": [], "columns": []}

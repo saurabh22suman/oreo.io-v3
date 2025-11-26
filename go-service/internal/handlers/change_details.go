@@ -3,9 +3,11 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -128,6 +130,82 @@ func ChangePreview(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "not_found"})
 		return
 	}
+
+	// Handle live_edit type preview
+	if cr.Type == "live_edit" {
+		var payload struct {
+			SessionID   string           `json:"session_id"`
+			EditedCells []map[string]any `json:"edited_cells"`
+			DeletedRows []string         `json:"deleted_rows"`
+		}
+		if err := json.Unmarshal([]byte(cr.Payload), &payload); err != nil {
+			c.JSON(400, gin.H{"error": "invalid_payload"})
+			return
+		}
+
+		// Get affected row IDs
+		rowIdsSet := make(map[string]bool)
+		for _, edit := range payload.EditedCells {
+			if rowId, ok := edit["row_id"]; ok {
+				rowIdsSet[fmt.Sprintf("%v", rowId)] = true
+			}
+		}
+		for _, rowId := range payload.DeletedRows {
+			rowIdsSet[rowId] = true
+		}
+		rowIds := make([]string, 0, len(rowIdsSet))
+		for rid := range rowIdsSet {
+			rowIds = append(rowIds, rid)
+		}
+
+		// Fetch actual row data from Python service
+		var rowData []map[string]any
+		var columns []string
+		
+		if len(rowIds) > 0 {
+			// Call Python service to get row data
+			pyURL := os.Getenv("PYTHON_SERVICE_URL")
+			if pyURL == "" {
+				pyURL = "http://python-service:8001"
+			}
+			
+			fetchReq := map[string]any{
+				"project_id": pid,
+				"dataset_id": cr.DatasetID,
+				"row_ids":    rowIds,
+			}
+			fetchBody, _ := json.Marshal(fetchReq)
+			
+			resp, err := http.Post(pyURL+"/live-edit/rows", "application/json", bytes.NewReader(fetchBody))
+			if err == nil && resp.StatusCode == 200 {
+				var fetchResp struct {
+					Ok      bool             `json:"ok"`
+					Rows    []map[string]any `json:"rows"`
+					Columns []string         `json:"columns"`
+				}
+				json.NewDecoder(resp.Body).Decode(&fetchResp)
+				resp.Body.Close()
+				if fetchResp.Ok {
+					rowData = fetchResp.Rows
+					columns = fetchResp.Columns
+				}
+			}
+		}
+
+		c.JSON(200, gin.H{
+			"type":          "live_edit",
+			"data":          rowData,
+			"edited_cells":  payload.EditedCells,
+			"deleted_rows":  payload.DeletedRows,
+			"edit_count":    len(payload.EditedCells),
+			"delete_count":  len(payload.DeletedRows),
+			"columns":       columns,
+			"rows":          len(rowData),
+			"total_rows":    len(rowData),
+		})
+		return
+	}
+
 	if cr.Type != "append" || cr.Payload == "" {
 		c.JSON(400, gin.H{"error": "no_preview"})
 		return

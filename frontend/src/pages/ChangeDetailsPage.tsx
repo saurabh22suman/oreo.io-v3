@@ -21,7 +21,7 @@ export default function ChangeDetailsPage() {
   const [project, setProject] = useState<any>(null)
   const [change, setChange] = useState<any>(null)
   const [reviewerStates, setReviewerStates] = useState<any[] | null>(null)
-  const [preview, setPreview] = useState<{ data: any[]; columns: string[] } | null>(null)
+  const [preview, setPreview] = useState<{ data: any[]; columns: string[]; type?: string; edited_cells?: any[]; deleted_rows?: string[]; edit_count?: number; delete_count?: number } | null>(null)
   const [comments, setComments] = useState<any[]>([])
   const [comment, setComment] = useState('')
   const [error, setError] = useState('')
@@ -41,7 +41,7 @@ export default function ChangeDetailsPage() {
         const base = ch?.change || ch
         setChange({ ...base, requestor_email: ch?.requestor_email, requestor_name: ch?.requestor_name })
         if (ch?.reviewer_states) setReviewerStates(ch.reviewer_states as any[])
-        try { const pv = await fetchJSON(`${API_BASE}/projects/${projectId}/changes/${chId}/preview`); setPreview({ data: pv.data || [], columns: pv.columns || [] }) } catch { }
+        try { const pv = await fetchJSON(`${API_BASE}/projects/${projectId}/changes/${chId}/preview`); setPreview(pv) } catch { }
         try { const cs = await fetchJSON(`${API_BASE}/projects/${projectId}/changes/${chId}/comments`); setComments(cs) } catch { }
       } catch (e: any) { setError(e.message) }
     })()
@@ -144,9 +144,14 @@ export default function ChangeDetailsPage() {
             <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-white dark:bg-slate-800/50">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary" />
-                Data Preview
+                {(preview as any)?.type === 'live_edit' ? 'Changes Preview' : 'Data Preview'}
                 {preview && preview.data.length > 0 && (
-                  <span className="text-xs font-normal text-slate-500 ml-2">({preview.data.length} rows shown)</span>
+                  <span className="text-xs font-normal text-slate-500 ml-2">
+                    {(preview as any)?.type === 'live_edit' 
+                      ? `(${(preview as any)?.edit_count || 0} edits, ${(preview as any)?.delete_count || 0} deletions)`
+                      : `(${preview.data.length} rows shown)`
+                    }
+                  </span>
                 )}
               </h2>
               {preview && preview.data.length > 0 && (
@@ -160,7 +165,130 @@ export default function ChangeDetailsPage() {
               )}
             </div>
             <div className="flex-1 bg-slate-50/50 dark:bg-slate-900/50 p-0 overflow-hidden">
-              {preview ? (
+              {preview && (preview as any)?.type === 'live_edit' ? (
+                /* Live Edit Preview - show actual row data with edits highlighted */
+                <div className="h-full flex flex-col">
+                  {/* Show AG Grid if we have row data */}
+                  {(preview as any)?.data?.length > 0 ? (() => {
+                    // Transform data to include Type column and properly order columns
+                    const editedCellsRaw = (preview as any)?.edited_cells || []
+                    const deletedRowsRaw = (preview as any)?.deleted_rows || []
+                    const deletedRowSet = new Set(deletedRowsRaw.map((id: string) => parseInt(id, 10)))
+                    
+                    // Build a map of row_id -> set of edited columns
+                    const editedRowsMap = new Map<number, Set<string>>()
+                    for (const edit of editedCellsRaw) {
+                      const rowId = parseInt(String(edit.row_id), 10)
+                      if (!editedRowsMap.has(rowId)) {
+                        editedRowsMap.set(rowId, new Set())
+                      }
+                      editedRowsMap.get(rowId)?.add(edit.column)
+                    }
+                    
+                    // Transform rows to add _change_type column
+                    const transformedRows = (preview as any).data.map((row: any) => {
+                      const rowId = row._row_id
+                      let changeType = 'Edited'
+                      if (deletedRowSet.has(rowId)) {
+                        changeType = 'Deleted'
+                      }
+                      return {
+                        _change_type: changeType,
+                        _row_id: rowId,
+                        ...row
+                      }
+                    })
+                    
+                    // Order columns: _change_type, _row_id, then rest
+                    const originalColumns = (preview as any).columns || []
+                    const orderedColumns = ['_change_type', '_row_id', ...originalColumns.filter((c: string) => c !== '_row_id')]
+                    
+                    // Convert edited_cells to match row index in transformedRows
+                    const editedCellsForGrid = editedCellsRaw.map((edit: any) => {
+                      const rowId = parseInt(String(edit.row_id), 10)
+                      // Find the index in transformedRows
+                      const rowIndex = transformedRows.findIndex((r: any) => r._row_id === rowId)
+                      return {
+                        rowIndex: rowIndex >= 0 ? rowIndex : rowId,
+                        column: edit.column,
+                        oldValue: edit.old_value,
+                        newValue: edit.new_value
+                      }
+                    })
+                    
+                    // Build deletedRowIds based on index in transformedRows
+                    const deletedRowIndices = new Set<number>()
+                    transformedRows.forEach((row: any, idx: number) => {
+                      if (deletedRowSet.has(row._row_id)) {
+                        deletedRowIndices.add(idx)
+                      }
+                    })
+                    
+                    return (
+                      <AgGridTable
+                        rows={transformedRows}
+                        columns={orderedColumns}
+                        pageSize={50}
+                        allowEdit={false}
+                        compact={false}
+                        editedCells={editedCellsForGrid}
+                        deletedRowIds={deletedRowIndices}
+                        className="h-full border-0 rounded-none"
+                        title=""
+                      />
+                    )
+                  })() : (
+                    /* Fallback: show changes summary if no row data available */
+                    <div className="h-full overflow-auto p-6 space-y-4">
+                      {/* Edited Cells Section */}
+                      {(preview as any)?.edited_cells?.length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                            Cell Edits ({(preview as any).edited_cells.length})
+                          </h3>
+                          <div className="space-y-2">
+                            {(preview as any).edited_cells.map((edit: any, idx: number) => (
+                              <div key={idx} className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                                <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">Row {edit.row_id}</div>
+                                <div className="text-sm font-medium text-slate-700 dark:text-slate-300">{edit.column}</div>
+                                <div className="flex items-center gap-2 ml-auto">
+                                  <span className="text-red-500 line-through text-sm">{String(edit.old_value ?? '')}</span>
+                                  <span className="text-slate-400">→</span>
+                                  <span className="text-green-500 font-semibold text-sm">{String(edit.new_value ?? '')}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Deleted Rows Section */}
+                      {(preview as any)?.deleted_rows?.length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                            Row Deletions ({(preview as any).deleted_rows.length})
+                          </h3>
+                          <div className="flex flex-wrap gap-2">
+                            {(preview as any).deleted_rows.map((rowId: string, idx: number) => (
+                              <span key={idx} className="px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm font-mono">
+                                Row {rowId}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {(preview as any)?.edited_cells?.length === 0 && (preview as any)?.deleted_rows?.length === 0 && (
+                        <div className="flex items-center justify-center h-full text-slate-400">
+                          <span>No changes in this request</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : preview ? (
                 <AgGridTable
                   rows={preview.data}
                   columns={preview.columns}

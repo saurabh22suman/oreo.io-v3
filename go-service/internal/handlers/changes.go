@@ -465,6 +465,96 @@ func ChangeApprove(c *gin.Context) {
 		return
 	}
 
+	// Handle live_edit type
+	if cr.Type == "live_edit" {
+		var ds models.Dataset
+		if err := gdb.Where("project_id = ?", pid).First(&ds, cr.DatasetID).Error; err != nil {
+			c.JSON(404, gin.H{"error": "dataset_not_found"})
+			return
+		}
+
+		// Apply the live edit changes via Python service
+		if err := ApplyLiveEditChanges(gdb, &cr, &ds, actingUID); err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Update dataset timestamp
+		now := time.Now()
+		ds.LastUploadAt = &now
+		_ = gdb.Save(&ds).Error
+		upsertDatasetMeta(gdb, &ds)
+
+		// Parse payload for audit details
+		var payload struct {
+			SessionID   string           `json:"session_id"`
+			EditedCells []map[string]any `json:"edited_cells"`
+			DeletedRows []string         `json:"deleted_rows"`
+		}
+		_ = json.Unmarshal([]byte(cr.Payload), &payload)
+
+		// Record version snapshot
+		cfg := config.Get()
+		root := strings.TrimRight(cfg.DeltaDataRoot, "/\\")
+		if root == "" {
+			root = "/data/delta"
+		}
+		mainTable := fmt.Sprintf("%s/%d", root, ds.ID)
+		verData := map[string]any{
+			"table":      mainTable,
+			"change_id":  cr.ID,
+			"applied_at": time.Now().Format(time.RFC3339),
+			"type":       "live_edit",
+		}
+		if b, err := json.Marshal(verData); err == nil {
+			approvers := cr.ReviewerStates
+			if strings.TrimSpace(approvers) == "" {
+				approvers = cr.Reviewers
+			}
+			_ = gdb.Create(&models.DatasetVersion{
+				DatasetID: ds.ID,
+				Data:      string(b),
+				EditedBy:  cr.UserID,
+				EditedAt:  time.Now(),
+				Status:    "approved",
+				Approvers: approvers,
+			}).Error
+		}
+
+		// Mark CR as completed
+		cr.Status = "completed"
+		cr.Summary = fmt.Sprintf("Live edit applied at %s: %d cells edited, %d rows deleted",
+			time.Now().Format(time.RFC3339), len(payload.EditedCells), len(payload.DeletedRows))
+		if err := gdb.Save(&cr).Error; err != nil {
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+
+		// Notify requester
+		if cr.UserID != 0 {
+			_ = AddNotification(cr.UserID, "Your live edit request has been applied successfully",
+				models.JSONB{
+					"type":              "live_edit_completed",
+					"project_id":        uint(pid),
+					"dataset_id":        cr.DatasetID,
+					"change_request_id": cr.ID,
+				})
+		}
+
+		// Record audit event
+		crID := cr.ID
+		_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, models.AuditEventTypeCRMerged,
+			fmt.Sprintf("Live Edit Change Request #%d merged", cr.ID),
+			fmt.Sprintf("%d cells edited, %d rows deleted", len(payload.EditedCells), len(payload.DeletedRows)),
+			&crID,
+			models.AuditEventSummary{CellsChanged: len(payload.EditedCells), RowsDeleted: len(payload.DeletedRows)},
+			nil,
+		)
+
+		c.JSON(200, gin.H{"ok": true, "change_request": cr})
+		return
+	}
+
 	// Unknown type: mark approved without side effects for now
 	cr.Status = "approved"
 	if err := gdb.Save(&cr).Error; err != nil {
