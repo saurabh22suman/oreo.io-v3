@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { getProject, getDataset, previewAppend, appendDatasetDataTop, validateEditedJSONTop, listMembers, myProjectRole, currentUser } from '../api'
 import Alert from '../components/Alert'
 import AgGridDialog from '../components/AgGridDialog'
-import { ChevronLeft, Upload, FileCheck, Edit3, Eye, Send, X, AlertCircle, Users, File as FileIcon } from 'lucide-react'
+import { ChevronLeft, Upload, FileCheck, Edit3, Eye, Send, X, AlertCircle, Users, File as FileIcon, Loader2 } from 'lucide-react'
 
 export default function DatasetAppendFlowPage() {
   const { id, datasetId } = useParams()
@@ -30,6 +30,7 @@ export default function DatasetAppendFlowPage() {
   const [role, setRole] = useState<'owner' | 'contributor' | 'viewer' | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [editedCells, setEditedCells] = useState<Array<{ rowIndex: number; column: string; oldValue: any; newValue: any }>>([])
+  const [submitting, setSubmitting] = useState(false)
 
 
   const typeMap = useMemo(() => {
@@ -433,19 +434,21 @@ export default function DatasetAppendFlowPage() {
 
             <div className="bg-slate-50 dark:bg-slate-900 px-6 py-4 flex gap-3 justify-end border-t border-slate-200 dark:border-slate-700">
               <button
-                className="px-6 py-3 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-white font-semibold rounded-xl transition-all"
+                className="px-6 py-3 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-white font-semibold rounded-xl transition-all disabled:opacity-50"
                 onClick={() => setSubmitDialog(false)}
+                disabled={submitting}
               >
                 Cancel
               </button>
               <button
-                disabled={!file || selectedReviewerIds.length === 0}
+                disabled={!file || selectedReviewerIds.length === 0 || submitting}
                 className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 onClick={async () => {
                   if (!file) return
                   setError('')
                   setValidationDetails(null)
                   resetValidationMarks()
+                  setSubmitting(true)
                   try {
                     if (rows.length) {
                       const normalized = normalizeRowsBySchema(rows)
@@ -495,10 +498,20 @@ export default function DatasetAppendFlowPage() {
                       if (res.ok) { setSubmitDialog(false); resetAppendState(); setToast('Change Request submitted') } else { setSubmitDialog(false); setError('Submit failed') }
                     }
                   } catch (e: any) { setSubmitDialog(false); setError(e?.message || 'Validation failed') }
+                  finally { setSubmitting(false) }
                 }}
               >
-                <Send className="w-5 h-5" />
-                Submit Request
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Validating records...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-5 h-5" />
+                    Submit Request
+                  </>
+                )}
               </button>
             </div>
           </div>

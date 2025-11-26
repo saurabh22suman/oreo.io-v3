@@ -83,7 +83,7 @@ export default function AuthForm({ type, onSubmit, switchForm }: { type: 'login'
           </button>
         </div>
 
-        {type === 'register' && passwordTouched && form.password && (
+        {type === 'register' && form.password && (
           <div className="mt-3 p-3 rounded-lg bg-white/5 border border-white/10 text-xs space-y-2">
             <div className={`flex items-center gap-2 ${passwordValidation.minLength ? 'text-emerald-400' : 'text-slate-400'}`}>
               {passwordValidation.minLength ? <Check size={14} /> : <X size={14} />}

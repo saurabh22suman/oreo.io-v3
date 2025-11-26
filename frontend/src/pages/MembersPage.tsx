@@ -124,7 +124,12 @@ export default function MembersPage() {
               </h3>
             </div>
             <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {items.map(m => (
+              {[...items].sort((a, b) => {
+                // Show logged-in user at top
+                if (a.id === meId) return -1;
+                if (b.id === meId) return 1;
+                return 0;
+              }).map(m => (
                 <div key={m.id} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-sm">

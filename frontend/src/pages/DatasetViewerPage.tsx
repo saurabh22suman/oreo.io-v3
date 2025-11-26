@@ -17,14 +17,18 @@ import {
 
 // Custom Header Component with Sort Icons and Context Menu
 const CustomHeader = (props: any) => {
-  const { displayName, column, api, setFilterColumn } = props;
+  const { displayName, column, api, setFilterColumn, sortKey } = props;
   const type = props.columnType || 'text';
   const [showMenu, setShowMenu] = useState(false);
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [currentSort, setCurrentSort] = useState<string | null | undefined>(column.getSort());
 
-  const sortState = column.getSort();
+  // Update sort state when sortKey changes (triggered by parent)
+  useEffect(() => {
+    setCurrentSort(column.getSort());
+  }, [sortKey, column]);
 
   const Icon = {
     text: Type,
@@ -33,7 +37,7 @@ const CustomHeader = (props: any) => {
     boolean: ToggleLeft
   }[type] || Type;
 
-  const SortIcon = sortState === 'asc' ? ArrowUp : sortState === 'desc' ? ArrowDown : ArrowUpDown;
+  const SortIcon = currentSort === 'asc' ? ArrowUp : currentSort === 'desc' ? ArrowDown : ArrowUpDown;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -86,12 +90,26 @@ const CustomHeader = (props: any) => {
   };
 
   const handleSort = () => {
-    if (!sortState) {
-      column.setSort('asc');
-    } else if (sortState === 'asc') {
-      column.setSort('desc');
+    const colId = column.getColId();
+    let newSort: 'asc' | 'desc' | null = null;
+    
+    if (!currentSort) {
+      newSort = 'asc';
+    } else if (currentSort === 'asc') {
+      newSort = 'desc';
     } else {
-      column.setSort(null);
+      newSort = null;
+    }
+    
+    api.applyColumnState({
+      state: [{ colId, sort: newSort }],
+      defaultState: { sort: null }
+    });
+    setCurrentSort(newSort);
+    
+    // Trigger parent to update sortKey for other headers
+    if (props.onSortChanged) {
+      props.onSortChanged();
     }
   };
 
@@ -104,7 +122,7 @@ const CustomHeader = (props: any) => {
           onClick={handleSort}
           className="opacity-0 group-hover:opacity-100 transition-opacity"
         >
-          <SortIcon className={`w-3.5 h-3.5 ${sortState ? 'text-blue-400' : 'text-slate-500'}`} />
+          <SortIcon className={`w-3.5 h-3.5 ${currentSort ? 'text-blue-400' : 'text-slate-500'}`} />
         </button>
       </div>
 
@@ -174,6 +192,8 @@ export default function DatasetViewerPage() {
   const [filterColumn, setFilterColumn] = useState<any>(null)
   const [filterCondition, setFilterCondition] = useState('contains')
   const [filterValue, setFilterValue] = useState('')
+  const [activeFilters, setActiveFilters] = useState<Array<{ field: string; name: string; condition: string; value: string }>>([])
+  const [sortKey, setSortKey] = useState(0)
 
   async function loadData(offset: number, limit: number) {
     try {
@@ -283,11 +303,16 @@ export default function DatasetViewerPage() {
         sortable: true,
         filter: true,
         headerComponent: CustomHeader,
-        headerComponentParams: { columnType: columnTypes[c], setFilterColumn },
+        headerComponentParams: { 
+          columnType: columnTypes[c], 
+          setFilterColumn,
+          sortKey,
+          onSortChanged: () => setSortKey(k => k + 1)
+        },
         cellClass: 'text-sm text-slate-300 font-mono border-r border-slate-800',
       }
     })]
-  }, [columns, columnTypes, columnMappings])
+  }, [columns, columnTypes, columnMappings, sortKey])
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
@@ -338,9 +363,59 @@ export default function DatasetViewerPage() {
 
   const applyFilter = () => {
     if (!api || !filterColumn || !filterValue) return;
-    api.setGridOption('quickFilterText', filterValue);
+    
+    // Add to active filters
+    const newFilter = {
+      field: filterColumn.field,
+      name: filterColumn.name,
+      condition: filterCondition,
+      value: filterValue
+    };
+    
+    // Build filter model from all active filters including new one
+    const updatedFilters = [...activeFilters.filter(f => f.field !== filterColumn.field), newFilter];
+    setActiveFilters(updatedFilters);
+    
+    const filterModel: any = {};
+    updatedFilters.forEach(f => {
+      filterModel[f.field] = {
+        type: f.condition === 'equals' ? 'equals' : 
+              f.condition === 'is one of' ? 'equals' :
+              'contains',
+        filter: f.value
+      };
+    });
+    api.setFilterModel(filterModel);
     setFilterColumn(null);
     setFilterValue('');
+    setFilterCondition('contains');
+  };
+
+  const removeFilter = (field: string) => {
+    if (!api) return;
+    const updatedFilters = activeFilters.filter(f => f.field !== field);
+    setActiveFilters(updatedFilters);
+    
+    if (updatedFilters.length === 0) {
+      api.setFilterModel(null);
+    } else {
+      const filterModel: any = {};
+      updatedFilters.forEach(f => {
+        filterModel[f.field] = {
+          type: f.condition === 'equals' ? 'equals' : 
+                f.condition === 'is one of' ? 'equals' :
+                'contains',
+          filter: f.value
+        };
+      });
+      api.setFilterModel(filterModel);
+    }
+  };
+
+  const clearAllFilters = () => {
+    if (!api) return;
+    api.setFilterModel(null);
+    setActiveFilters([]);
   };
 
   useEffect(() => {
@@ -391,6 +466,32 @@ export default function DatasetViewerPage() {
         {error && <Alert type="error" message={error} onClose={() => setError('')} />}
 
         <div className="bg-[#0f172a] rounded-lg border border-slate-800 overflow-hidden flex flex-col h-[calc(100vh-220px)]">
+          {/* Active Filters Display */}
+          {activeFilters.length > 0 && (
+            <div className="px-4 py-2 border-b border-slate-800 bg-[#1e293b]/30 flex items-center gap-2 flex-wrap">
+              {activeFilters.map((f, idx) => (
+                <div key={f.field} className="flex items-center gap-1 bg-[#0f172a] border border-slate-700 rounded px-2 py-1 text-xs">
+                  <span className="text-slate-400">{f.name}</span>
+                  <span className="text-slate-500">{f.condition === 'is one of' ? 'is one of' : f.condition}</span>
+                  <span className="text-blue-400 font-medium">{f.value}</span>
+                  <button 
+                    onClick={() => removeFilter(f.field)}
+                    className="ml-1 p-0.5 hover:bg-slate-700 rounded"
+                  >
+                    <X className="w-3 h-3 text-slate-400" />
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={() => setFilterColumn({ name: 'column', field: '', type: 'text' })}
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-white px-2 py-1 hover:bg-slate-800 rounded transition-colors"
+              >
+                <Plus className="w-3 h-3" />
+                Add filter
+              </button>
+            </div>
+          )}
+          
           {filterColumn && (
             <div className="p-4 border-b border-slate-800 bg-[#1e293b]/50">
               <div className="flex items-center gap-3 mb-3">

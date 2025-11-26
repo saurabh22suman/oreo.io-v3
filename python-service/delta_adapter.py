@@ -194,7 +194,10 @@ class DeltaStorageAdapter:
         return path
 
     def append_to_main(self, project_id: int, dataset_id: int, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Append rows to the main Delta table.
+        """Append rows to the main Delta table using MERGE semantics.
+        
+        Uses DuckDB-based MERGE to prevent duplicate rows.
+        A row is considered duplicate if ALL column values already exist in the table.
         
         WARNING: Only use this for approved, validated data!
         For change requests, use staging tables instead.
@@ -212,23 +215,84 @@ class DeltaStorageAdapter:
         except Exception:
             pass
         
-        try:
-            write_deltalake(path, at, mode="append")
-        except ValueError as e:
-            if "Schema of data does not match" in str(e):
-                # Try schema evolution if table is empty
-                at = self._handle_schema_mismatch(path, at)
-            else:
-                raise
+        # Check if main table exists
+        main_exists = os.path.exists(os.path.join(path, "_delta_log"))
+        
+        if not main_exists:
+            # No existing table, just write as new
+            try:
+                write_deltalake(path, at, mode="overwrite")
+            except ValueError as e:
+                if "Schema of data does not match" in str(e):
+                    at = self._handle_schema_mismatch(path, at)
+                else:
+                    raise
+            
+            logger.info(json.dumps({
+                "event": "append_to_main",
+                "project_id": project_id,
+                "dataset_id": dataset_id,
+                "rows": len(rows),
+                "method": "new_table"
+            }))
+            return {"ok": True, "inserted": len(rows), "duplicates": 0}
+        
+        # Use DuckDB MERGE to prevent duplicates
+        con = duckdb.connect()
+        con.execute("INSTALL delta; LOAD delta;")
+        
+        # Register existing table as target
+        con.execute(f"CREATE OR REPLACE VIEW tgt AS SELECT * FROM delta_scan('{path}')")
+        
+        # Register new rows as source
+        con.register("src_table", at)
+        con.execute("CREATE OR REPLACE VIEW src AS SELECT * FROM src_table")
+        
+        # Get all columns for comparison
+        all_cols = [field.name for field in at.schema]
+        
+        # Build condition to check if ALL columns match (duplicate detection)
+        # Handle NULL values properly with IS NOT DISTINCT FROM
+        col_conditions = " AND ".join([
+            f"(tgt.\"{c}\" IS NOT DISTINCT FROM src.\"{c}\")" for c in all_cols
+        ])
+        
+        # Select columns for output
+        select_src = ", ".join([f"src.\"{c}\" as \"{c}\"" for c in all_cols])
+        select_tgt = ", ".join([f"tgt.\"{c}\" as \"{c}\"" for c in all_cols])
+        
+        # Count duplicates first
+        dup_count_sql = f"""
+            SELECT COUNT(*) as dup_count FROM src
+            WHERE EXISTS (SELECT 1 FROM tgt WHERE {col_conditions})
+        """
+        dup_count = con.execute(dup_count_sql).fetchone()[0]
+        
+        # MERGE: Keep all existing rows + only new rows that don't already exist
+        merge_sql = f"""
+            SELECT {select_tgt} FROM tgt
+            UNION ALL
+            SELECT {select_src} FROM src
+            WHERE NOT EXISTS (SELECT 1 FROM tgt WHERE {col_conditions})
+        """
+        
+        merged_table = con.execute(merge_sql).fetch_arrow_table()
+        inserted_count = len(rows) - dup_count
+        
+        # Write merged result back
+        write_deltalake(path, merged_table, mode="overwrite")
         
         logger.info(json.dumps({
             "event": "append_to_main",
             "project_id": project_id,
             "dataset_id": dataset_id,
-            "rows": len(rows)
+            "rows": len(rows),
+            "inserted": inserted_count,
+            "duplicates": dup_count,
+            "method": "merge"
         }))
         
-        return {"ok": True, "inserted": len(rows)}
+        return {"ok": True, "inserted": inserted_count, "duplicates": dup_count}
 
     # ==================== Staging Table Operations ====================
 
