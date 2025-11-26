@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/config"
+	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
 	"gorm.io/gorm"
 )
@@ -176,8 +176,11 @@ func ChangeApprove(c *gin.Context) {
 		}
 		// Delta backend: stream upload directly to python /delta/append-file
 		if strings.EqualFold(ds.StorageBackend, "delta") {
-			cfg := config.Get(); pyBase := cfg.PythonServiceURL
-			if strings.TrimSpace(pyBase) == "" { pyBase = "http://python-service:8000" }
+			cfg := config.Get()
+			pyBase := cfg.PythonServiceURL
+			if strings.TrimSpace(pyBase) == "" {
+				pyBase = "http://python-service:8000"
+			}
 			var mpBuf bytes.Buffer
 			mw := multipart.NewWriter(&mpBuf)
 			// Use hierarchical path (project_id + dataset_id) for proper main table location
@@ -199,26 +202,43 @@ func ChangeApprove(c *gin.Context) {
 				return
 			}
 			// Update timestamps and meta
-		now := time.Now()
-		ds.LastUploadAt = &now
-		_ = gdb.Save(&ds).Error
-		upsertDatasetMeta(gdb, &ds)
-		// Record version snapshot (delta path reference)
-		cfg = config.Get()
-		root := strings.TrimRight(cfg.DeltaDataRoot, "/\\")
-		if root == "" { root = "/data/delta" }
-		main := fmt.Sprintf("%s/%d", root, ds.ID)
-			var rowCount int64 = 0
+			now := time.Now()
+			ds.LastUploadAt = &now
+			_ = gdb.Save(&ds).Error
+			upsertDatasetMeta(gdb, &ds)
+			
+			// Fetch Delta operation stats for audit
+			rowsAdded, rowsUpdated, _, totalRows := FetchDeltaOperationStats(ds.ProjectID, ds.ID)
+			
+			// Update dataset meta with new row count
+			if totalRows > 0 {
+				var meta models.DatasetMeta
+				if err := gdb.Where("dataset_id = ?", ds.ID).First(&meta).Error; err == nil {
+					meta.RowCount = int64(totalRows)
+					meta.LastUpdateAt = time.Now()
+					_ = gdb.Save(&meta).Error
+				}
+			}
+			
+			// Record version snapshot (delta path reference)
+			cfg = config.Get()
+			root := strings.TrimRight(cfg.DeltaDataRoot, "/\\")
+			if root == "" {
+				root = "/data/delta"
+			}
+			main := fmt.Sprintf("%s/%d", root, ds.ID)
 			verData := map[string]any{
 				"table":      main,
-				"row_count":  rowCount,
+				"row_count":  totalRows,
 				"change_id":  cr.ID,
 				"applied_at": time.Now().Format(time.RFC3339),
 			}
 			if b, err := json.Marshal(verData); err == nil {
 				approvers := cr.ReviewerStates
-				if strings.TrimSpace(approvers) == "" { approvers = cr.Reviewers }
-				_ = gdb.Create(&models.DatasetVersion{ DatasetID: ds.ID, Data: string(b), EditedBy: cr.UserID, EditedAt: time.Now(), Status: "approved", Approvers: approvers }).Error
+				if strings.TrimSpace(approvers) == "" {
+					approvers = cr.Reviewers
+				}
+				_ = gdb.Create(&models.DatasetVersion{DatasetID: ds.ID, Data: string(b), EditedBy: cr.UserID, EditedAt: time.Now(), Status: "approved", Approvers: approvers}).Error
 			}
 			cr.Status = "completed"
 			cr.Summary = "Applied append at " + time.Now().Format(time.RFC3339)
@@ -227,7 +247,28 @@ func ChangeApprove(c *gin.Context) {
 				return
 			}
 			// Notify requester
-			if cr.UserID != 0 { _ = AddNotification(cr.UserID, "Your append request has been applied successfully", models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID}) }
+			if cr.UserID != 0 {
+				_ = AddNotification(cr.UserID, "Your append request has been applied successfully", models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID})
+			}
+			
+			// Get cells changed from payload for audit
+			var cellsChanged int
+			var payloadData struct {
+				EditedCells []map[string]interface{} `json:"edited_cells"`
+			}
+			if json.Unmarshal([]byte(cr.Payload), &payloadData) == nil {
+				cellsChanged = len(payloadData.EditedCells)
+			}
+			
+			// Record audit event for CR merge with Delta stats
+			crID := cr.ID
+			_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, models.AuditEventTypeCRMerged,
+				fmt.Sprintf("Change Request #%d merged", cr.ID),
+				fmt.Sprintf("%d rows added, %d cells changed", rowsAdded, cellsChanged),
+				&crID,
+				models.AuditEventSummary{RowsAdded: rowsAdded, RowsUpdated: rowsUpdated, CellsChanged: cellsChanged},
+				nil,
+			)
 			c.JSON(200, gin.H{"ok": true, "change_request": cr})
 			return
 		}
@@ -329,9 +370,9 @@ func ChangeApprove(c *gin.Context) {
 
 		// Record a dataset version snapshot (table reference and row count) on approved change
 		// Compute row count from main table if available
-	var rowCount int64
-	_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", main)).Row().Scan(&rowCount)
-	fmt.Printf("[ChangeApprove] version snapshot: table=%s row_count=%d\n", main, rowCount)
+		var rowCount int64
+		_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", main)).Row().Scan(&rowCount)
+		fmt.Printf("[ChangeApprove] version snapshot: table=%s row_count=%d\n", main, rowCount)
 		verData := map[string]any{
 			"table":      main,
 			"row_count":  rowCount,
@@ -353,7 +394,7 @@ func ChangeApprove(c *gin.Context) {
 			}).Error
 		}
 		// Mark change status
-	if usedDB {
+		if usedDB {
 			cr.Status = "completed"
 		} else {
 			cr.Status = "approved"
@@ -371,6 +412,31 @@ func ChangeApprove(c *gin.Context) {
 			}
 			_ = AddNotification(cr.UserID, msg, models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID})
 		}
+		// Record audit event for CR merge (DB path) with proper stats
+		crID := cr.ID
+		eventType := models.AuditEventTypeCRMerged
+		eventTitle := fmt.Sprintf("Change Request #%d merged", cr.ID)
+		if !usedDB {
+			eventType = models.AuditEventTypeCRApproved
+			eventTitle = fmt.Sprintf("Change Request #%d approved", cr.ID)
+		}
+		
+		// Get cells changed from payload
+		var cellsChanged int
+		var payloadData struct {
+			EditedCells []map[string]interface{} `json:"edited_cells"`
+		}
+		if json.Unmarshal([]byte(cr.Payload), &payloadData) == nil {
+			cellsChanged = len(payloadData.EditedCells)
+		}
+		
+		_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, eventType,
+			eventTitle,
+			fmt.Sprintf("%d rows added, %d cells changed", rowCount, cellsChanged),
+			&crID,
+			models.AuditEventSummary{RowsAdded: int(rowCount), CellsChanged: cellsChanged},
+			nil,
+		)
 		c.JSON(200, gin.H{"ok": true, "change_request": cr})
 		return
 	}
@@ -488,6 +554,15 @@ func ChangeReject(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
+	// Record audit event for CR rejection
+	crID := cr.ID
+	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, models.AuditEventTypeCRRejected,
+		fmt.Sprintf("Change Request #%d rejected", cr.ID),
+		fmt.Sprintf("Change request was rejected by reviewer"),
+		&crID,
+		models.AuditEventSummary{},
+		nil,
+	)
 	c.JSON(200, gin.H{"ok": true, "change_request": cr})
 }
 
@@ -542,6 +617,15 @@ func ChangeWithdraw(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
+	// Record audit event for CR withdrawal
+	crID := cr.ID
+	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, uid, models.AuditEventTypeCRWithdrawn,
+		fmt.Sprintf("Change Request #%d withdrawn", cr.ID),
+		fmt.Sprintf("Change request was withdrawn by the requester"),
+		&crID,
+		models.AuditEventSummary{},
+		nil,
+	)
 	c.JSON(200, gin.H{"ok": true, "change_request": cr})
 }
 

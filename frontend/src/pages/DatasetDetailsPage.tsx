@@ -117,7 +117,7 @@ export default function DatasetDetailsPage() {
       </div>
 
       {/* Action Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <ActionCard
           to={`/projects/${projectId}/datasets/${dsId}/view`}
           icon={<Eye className="w-8 h-8" />}
@@ -134,7 +134,7 @@ export default function DatasetDetailsPage() {
         />
 
         <ActionCard
-          to={`/projects/${projectId}/query?dataset=${dsId}`}
+          to={`/projects/${projectId}/labs?dataset=${dsId}`}
           icon={<Terminal className="w-8 h-8" />}
           title="Experimental"
           description="Explore beta features"

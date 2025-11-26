@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -15,13 +16,12 @@ import (
 	"strings"
 	"time"
 	"unicode"
-	"log"
 
 	"github.com/gin-gonic/gin"
-	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/config"
-	"github.com/oreo-io/oreo.io-v2/go-service/internal/utils"
+	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
+	"github.com/oreo-io/oreo.io-v2/go-service/internal/utils"
 	"gorm.io/gorm"
 )
 
@@ -283,7 +283,7 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 	} else if strings.TrimSpace(tbl) != "" {
 		_ = gdb.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", tbl)).Row().Scan(&rows)
 	}
-	
+
 	// Infer columns count from schema
 	cols := 0
 	if strings.TrimSpace(ds.Schema) != "" {
@@ -294,7 +294,7 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 			}
 		}
 	}
-	
+
 	// Fallback: for non-delta, sample one row to infer columns count if schema failed
 	if cols == 0 && rows > 0 && !strings.EqualFold(ds.StorageBackend, "delta") {
 		if r1, err := gdb.Raw(fmt.Sprintf("SELECT data FROM %s LIMIT 1", tbl)).Rows(); err == nil {
@@ -316,7 +316,7 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 			}
 		}
 	}
-	
+
 	// Resolve owner name
 	ownerName := ""
 	var proj models.Project
@@ -327,13 +327,13 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 		}
 	}
 	now := time.Now()
-	
+
 	// Compose table location string - always show schema.table format
 	tableLoc := ""
 	s := strings.TrimSpace(ds.TargetSchema)
 	t := strings.TrimSpace(ds.TargetTable)
 	d := strings.TrimSpace(ds.TargetDatabase)
-	
+
 	// Always use schema.table format for user-facing display
 	switch {
 	case d != "" && s != "" && t != "":
@@ -344,7 +344,7 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 		// Fallback to physical table if target fields not set
 		tableLoc = datasetPhysicalTable(ds)
 	}
-	
+
 	var meta models.DatasetMeta
 	if err := gdb.Where("dataset_id = ?", ds.ID).First(&meta).Error; err != nil {
 		meta = models.DatasetMeta{ProjectID: ds.ProjectID, DatasetID: ds.ID, OwnerName: ownerName, RowCount: rows, ColumnCount: cols, LastUpdateAt: now, TableLocation: tableLoc}
@@ -361,7 +361,9 @@ func upsertDatasetMeta(gdb *gorm.DB, ds *models.Dataset) {
 
 // ensureDeltaTable calls the Python service to create an empty Delta table for this dataset.
 func ensureDeltaTable(ds *models.Dataset) error {
-	if ds == nil { return fmt.Errorf("nil dataset") }
+	if ds == nil {
+		return fmt.Errorf("nil dataset")
+	}
 	pyBase := getPythonServiceURL()
 	// Build schema object from ds.Schema if JSON; if empty or invalid use {} to satisfy pydantic Dict expectation
 	var schemaObj any
@@ -382,13 +384,17 @@ func ensureDeltaTable(ds *models.Dataset) error {
 	req, _ := http.NewRequest(http.MethodPost, pyBase+"/delta/ensure", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
-	if err != nil || resp == nil { return fmt.Errorf("python_unreachable") }
+	if err != nil || resp == nil {
+		return fmt.Errorf("python_unreachable")
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Attempt to read error body for diagnostic surface
 		b, _ := io.ReadAll(resp.Body)
 		msg := strings.TrimSpace(string(b))
-		if msg == "" { msg = resp.Status }
+		if msg == "" {
+			msg = resp.Status
+		}
 		return fmt.Errorf("ensure_failed: %s", msg)
 	}
 	return nil
@@ -479,6 +485,15 @@ func ingestBytesToTable(gdb *gorm.DB, content []byte, filename, table string) er
 	}
 }
 
+// countStagingRows counts rows in a staging table
+func countStagingRows(gdb *gorm.DB, table string) int {
+	var count int64
+	if err := gdb.Table(table).Count(&count).Error; err != nil {
+		return 0
+	}
+	return int(count)
+}
+
 // List datasets within a project
 func DatasetsList(c *gin.Context) {
 	gdb := dbpkg.Get()
@@ -530,7 +545,8 @@ func DatasetsCreate(c *gin.Context) {
 		return
 	}
 	// Capture default storage backend (env driven) for dataset row
-	cfg := config.Get(); backend := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
+	cfg := config.Get()
+	backend := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
 	if backend == "" {
 		backend = "postgres"
 	}
@@ -654,8 +670,11 @@ func DatasetsCreateTop(c *gin.Context) {
 			return
 		}
 	}
-	cfg := config.Get(); backend := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
-	if backend == "" { backend = "postgres" }
+	cfg := config.Get()
+	backend := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
+	if backend == "" {
+		backend = "postgres"
+	}
 	ds := models.Dataset{
 		ProjectID:      body.ProjectID,
 		Name:           dsName,
@@ -732,8 +751,11 @@ func DatasetsPrepare(c *gin.Context) {
 			return
 		}
 	}
-	cfg := config.Get(); backend := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
-	if backend == "" { backend = "postgres" }
+	cfg := config.Get()
+	backend := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
+	if backend == "" {
+		backend = "postgres"
+	}
 	ds := models.Dataset{ProjectID: uint(pid), Name: name, Source: source, TargetSchema: schemaName, TargetTable: tableName, StorageBackend: backend}
 	if err := gdb.Create(&ds).Error; err != nil {
 		log.Printf("DatasetsPrepare: create dataset record failed: %v", err)
@@ -847,7 +869,9 @@ func DatasetsPrepare(c *gin.Context) {
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 				b, _ := io.ReadAll(resp.Body)
 				msg := strings.TrimSpace(string(b))
-				if msg == "" { msg = resp.Status }
+				if msg == "" {
+					msg = resp.Status
+				}
 				_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
 				c.JSON(500, gin.H{"error": "ingest_failed", "message": msg})
 				return
@@ -972,13 +996,13 @@ func DatasetsFinalize(c *gin.Context) {
 	}
 
 	var body struct {
-		ProjectID  int    `json:"project_id"`
-		StagingID  string `json:"staging_id"`
-		Name       string `json:"name"`
-		Schema     string `json:"schema"`       // JSON schema string
-		Table      string `json:"table"`        // Target table name
+		ProjectID    int    `json:"project_id"`
+		StagingID    string `json:"staging_id"`
+		Name         string `json:"name"`
+		Schema       string `json:"schema"`        // JSON schema string
+		Table        string `json:"table"`         // Target table name
 		TargetSchema string `json:"target_schema"` // Target schema name (e.g., "public")
-		Source     string `json:"source"`
+		Source       string `json:"source"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(400, gin.H{"error": "invalid_payload"})
@@ -1018,7 +1042,7 @@ func DatasetsFinalize(c *gin.Context) {
 	// Check for duplicate table
 	if schemaName != "" && tableName != "" {
 		var existing models.Dataset
-		if err := gdb.Where("project_id = ? AND LOWER(target_schema) = ? AND LOWER(target_table) = ?", 
+		if err := gdb.Where("project_id = ? AND LOWER(target_schema) = ? AND LOWER(target_table) = ?",
 			body.ProjectID, strings.ToLower(schemaName), tableName).First(&existing).Error; err == nil {
 			c.JSON(409, gin.H{"error": "dataset_exists", "message": "A dataset for this schema.table already exists."})
 			return
@@ -1282,7 +1306,7 @@ func DatasetDataGet(c *gin.Context) {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
-	
+
 	// Handle Delta storage backend
 	if strings.EqualFold(ds.StorageBackend, "delta") {
 		nStr := c.Query("limit")
@@ -1295,7 +1319,7 @@ func DatasetDataGet(c *gin.Context) {
 		}
 		n, _ := strconv.Atoi(nStr)
 		off, _ := strconv.Atoi(offStr)
-		
+
 		// Get the table location from metadata
 		gdb := dbpkg.Get()
 		if gdb == nil {
@@ -1303,25 +1327,25 @@ func DatasetDataGet(c *gin.Context) {
 				gdb = dbpkg.Get()
 			}
 		}
-		
+
 		var meta models.DatasetMeta
 		if err := gdb.Where("dataset_id = ?", ds.ID).First(&meta).Error; err != nil {
 			c.JSON(500, gin.H{"error": "metadata_not_found"})
 			return
 		}
-		
+
 		tableLocation := meta.TableLocation
 		if tableLocation == "" {
 			// Fallback to dataset physical table
 			tableLocation = datasetPhysicalTable(ds)
 		}
-		
+
 		// Query Delta table via Python service
 		pyBase := getPythonServiceURL()
 		if pyBase == "" {
 			pyBase = "http://python-service:8000"
 		}
-		
+
 		// Build query request
 		queryReq := map[string]any{
 			"sql": fmt.Sprintf("SELECT * FROM %s", tableLocation),
@@ -1331,36 +1355,36 @@ func DatasetDataGet(c *gin.Context) {
 			"limit":  n,
 			"offset": off,
 		}
-		
+
 		body, _ := json.Marshal(queryReq)
 		req, _ := http.NewRequest(http.MethodPost, pyBase+"/delta/query", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil || resp == nil {
 			c.JSON(502, gin.H{"error": "python_unreachable"})
 			return
 		}
 		defer resp.Body.Close()
-		
+
 		if resp.StatusCode != 200 {
 			b, _ := io.ReadAll(resp.Body)
 			c.JSON(resp.StatusCode, gin.H{"error": "delta_query_failed", "details": string(b)})
 			return
 		}
-		
+
 		// Parse Python service response
 		var deltaResp struct {
 			Columns []string        `json:"columns"`
 			Rows    [][]interface{} `json:"rows"`
 			Total   int             `json:"total"`
 		}
-		
+
 		if err := json.NewDecoder(resp.Body).Decode(&deltaResp); err != nil {
 			c.JSON(500, gin.H{"error": "invalid_response"})
 			return
 		}
-		
+
 		// Convert rows to map format expected by frontend
 		dataRows := make([]map[string]interface{}, 0, len(deltaResp.Rows))
 		for _, row := range deltaResp.Rows {
@@ -1372,14 +1396,14 @@ func DatasetDataGet(c *gin.Context) {
 			}
 			dataRows = append(dataRows, rowMap)
 		}
-		
+
 		c.JSON(200, gin.H{
 			"data":    dataRows,
 			"columns": deltaResp.Columns,
 		})
 		return
 	}
-	
+
 	gdb := dbpkg.Get()
 	if gdb == nil {
 		if _, err := dbpkg.Init(); err == nil {
@@ -2050,12 +2074,23 @@ func AppendUpload(c *gin.Context) {
 		return
 	}
 	// Create staging table and ingest upload content
+	stagingTbl := dsStagingTable(ds.ID, cr.ID)
 	_ = ensureStagingTable(gdb, ds.ID, cr.ID)
-	_ = ingestBytesToTable(gdb, up.Content, up.Filename, dsStagingTable(ds.ID, cr.ID))
+	_ = ingestBytesToTable(gdb, up.Content, up.Filename, stagingTbl)
+	rowCount := countStagingRows(gdb, stagingTbl)
 	// Notify reviewer if present
 	if reviewerID != 0 {
 		_ = AddNotification(reviewerID, "You were requested to review a change", models.JSONB{"type": "reviewer_assigned", "project_id": uint(pid), "dataset_id": ds.ID, "change_request_id": cr.ID, "title": "Append data"})
 	}
+	// Record audit event for CR creation
+	crID := cr.ID
+	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, cr.UserID, models.AuditEventTypeCRCreated,
+		fmt.Sprintf("Change Request #%d created: %s", cr.ID, cr.Title),
+		fmt.Sprintf("%d rows appended", rowCount),
+		&crID,
+		models.AuditEventSummary{RowsAdded: rowCount},
+		nil,
+	)
 	c.JSON(201, gin.H{"ok": true, "change_request": cr})
 }
 
@@ -2432,8 +2467,10 @@ func AppendOpen(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "db"})
 		return
 	}
+	stagingTbl2 := dsStagingTable(ds.ID, cr.ID)
 	_ = ensureStagingTable(gdb, ds.ID, cr.ID)
-	_ = ingestBytesToTable(gdb, up.Content, up.Filename, dsStagingTable(ds.ID, cr.ID))
+	_ = ingestBytesToTable(gdb, up.Content, up.Filename, stagingTbl2)
+	rowCount2 := countStagingRows(gdb, stagingTbl2)
 	// Notify reviewers
 	reviewers := []uint{}
 	if firstReviewer != 0 {
@@ -2458,6 +2495,16 @@ func AppendOpen(c *gin.Context) {
 		}
 		_ = gdb.Create(&cc).Error
 	}
+	// Record audit event for CR creation (stats will be recorded on merge)
+	crID := cr.ID
+	cellsChanged := len(body.EditedCells)
+	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, cr.UserID, models.AuditEventTypeCRCreated,
+		fmt.Sprintf("Change Request #%d created: %s", cr.ID, cr.Title),
+		fmt.Sprintf("Pending: %d rows to append, %d cells edited", rowCount2, cellsChanged),
+		&crID,
+		models.AuditEventSummary{}, // Stats recorded on merge, not creation
+		nil,
+	)
 	c.JSON(201, gin.H{"ok": true, "change_request": cr})
 }
 
@@ -2664,8 +2711,15 @@ func AppendJSON(c *gin.Context) {
 		return
 	}
 	// Create staging table and ingest JSON rows
+	stagingTbl3 := dsStagingTable(ds.ID, cr.ID)
 	_ = ensureStagingTable(gdb, ds.ID, cr.ID)
-	_ = ingestBytesToTable(gdb, jb, fname, dsStagingTable(ds.ID, cr.ID))
+	_ = ingestBytesToTable(gdb, jb, fname, stagingTbl3)
+	// For edited rows, count cells changed (each row has edits)
+	rowCount3 := len(body.Rows)
+	cellsEdited := 0
+	for _, row := range body.Rows {
+		cellsEdited += len(row)
+	}
 	// Notify reviewers for edited-rows path
 	reviewers := []uint{}
 	if firstReviewer != 0 {
@@ -2675,6 +2729,15 @@ func AppendJSON(c *gin.Context) {
 		reviewers = reviewersAll
 	}
 	_ = AddNotificationsBulk(reviewers, "You were requested to review a change", models.JSONB{"type": "reviewer_assigned", "project_id": uint(pid), "dataset_id": ds.ID, "change_request_id": cr.ID, "title": "Append data (edited)"})
+	// Record audit event for CR creation
+	crID := cr.ID
+	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, cr.UserID, models.AuditEventTypeCRCreated,
+		fmt.Sprintf("Change Request #%d created: %s", cr.ID, cr.Title),
+		fmt.Sprintf("%d rows appended, %d cells edited", rowCount3, cellsEdited),
+		&crID,
+		models.AuditEventSummary{RowsAdded: rowCount3, CellsChanged: cellsEdited},
+		nil,
+	)
 	c.JSON(201, gin.H{"ok": true, "change_request": cr})
 }
 

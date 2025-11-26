@@ -532,17 +532,136 @@ class DeltaStorageAdapter:
         
         return hist
 
+    def get_latest_operation_stats(self, project_id: int, dataset_id: int) -> Dict[str, Any]:
+        """Get operation metrics from the latest Delta table commit.
+        
+        Returns stats like rows_added, rows_updated, rows_deleted from Delta's
+        operationMetrics in the transaction log.
+        """
+        path = self._main_path(project_id, dataset_id)
+        
+        try:
+            dt = DeltaTable(path)
+            hist = dt.history(limit=1)  # Get only the latest entry
+            
+            if not hist:
+                return {"rows_added": 0, "rows_updated": 0, "rows_deleted": 0, "total_rows": 0}
+            
+            latest = hist[0]
+            metrics = latest.get("operationMetrics", {})
+            
+            # Extract metrics based on operation type
+            rows_added = 0
+            rows_updated = 0
+            rows_deleted = 0
+            
+            # For WRITE/append operations
+            if "numOutputRows" in metrics:
+                rows_added = int(metrics["numOutputRows"])
+            
+            # For MERGE operations
+            if "numTargetRowsInserted" in metrics:
+                rows_added = int(metrics["numTargetRowsInserted"])
+            if "numTargetRowsUpdated" in metrics:
+                rows_updated = int(metrics["numTargetRowsUpdated"])
+            if "numTargetRowsDeleted" in metrics:
+                rows_deleted = int(metrics["numTargetRowsDeleted"])
+            
+            # For RESTORE operations - calculate diff
+            if latest.get("operation") == "RESTORE":
+                # Get current row count
+                total_rows = len(dt.to_pyarrow_table())
+                return {
+                    "rows_added": rows_added,
+                    "rows_updated": rows_updated, 
+                    "rows_deleted": rows_deleted,
+                    "total_rows": total_rows,
+                    "operation": "RESTORE",
+                    "version": latest.get("version", 0)
+                }
+            
+            # Get current total row count
+            total_rows = len(dt.to_pyarrow_table())
+            
+            return {
+                "rows_added": rows_added,
+                "rows_updated": rows_updated,
+                "rows_deleted": rows_deleted,
+                "total_rows": total_rows,
+                "operation": latest.get("operation", "UNKNOWN"),
+                "version": latest.get("version", 0)
+            }
+            
+        except Exception as e:
+            logger.warn(f"Failed to get operation stats for {path}: {e}")
+            return {"rows_added": 0, "rows_updated": 0, "rows_deleted": 0, "total_rows": 0}
+
+    def read_at_version(self, project_id: int, dataset_id: int, version: int, 
+                        limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+        """Read data from the main table at a specific version (time-travel).
+        
+        Uses delta-rs version parameter to load historical table state.
+        Returns rows as a list of dicts plus metadata.
+        """
+        path = self._main_path(project_id, dataset_id)
+        
+        try:
+            # Load Delta table at specific version
+            dt = DeltaTable(path, version=version)
+            
+            # Get total row count at this version
+            full_table = dt.to_pyarrow_table()
+            total_rows = full_table.num_rows
+            columns = [f.name for f in full_table.schema]
+            
+            # Apply pagination by slicing the table
+            if offset >= total_rows:
+                data = []
+            else:
+                end = min(offset + limit, total_rows)
+                sliced = full_table.slice(offset, end - offset)
+                data = sliced.to_pylist()
+            
+            logger.info(json.dumps({
+                "event": "read_at_version",
+                "project_id": project_id,
+                "dataset_id": dataset_id,
+                "version": version,
+                "offset": offset,
+                "limit": limit,
+                "returned": len(data),
+                "total": total_rows
+            }))
+            
+            return {
+                "columns": columns,
+                "data": data,
+                "total": total_rows,
+                "limit": limit,
+                "offset": offset,
+                "version": version
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to read at version {version}: {e}")
+            raise ValueError(f"Cannot read version {version}: {str(e)}")
+
     def restore(self, project_id: int, dataset_id: int, version: int) -> Dict[str, Any]:
         """Restore the main table to a previous version using delta-rs.
         
         Safety checks:
         - Validates that the version exists
         - Returns error if files have been removed by VACUUM
+        
+        Returns stats about the restore operation including new row count.
         """
         path = self._main_path(project_id, dataset_id)
         
         try:
             dt = DeltaTable(path)
+            
+            # Get current row count before restore
+            rows_before = len(dt.to_pyarrow_table())
             
             # Get history to validate version exists
             history = dt.history()
@@ -552,18 +671,33 @@ class DeltaStorageAdapter:
             # Use delta-rs native restore (writes version as new commit)
             dt.restore(version)
             
+            # Reload to get new state
+            dt = DeltaTable(path)
+            rows_after = len(dt.to_pyarrow_table())
+            
+            # Calculate diff
+            rows_added = max(0, rows_after - rows_before)
+            rows_deleted = max(0, rows_before - rows_after)
+            
             logger.info(json.dumps({
                 "event": "restore",
                 "project_id": project_id,
                 "dataset_id": dataset_id,
                 "version": version,
+                "rows_before": rows_before,
+                "rows_after": rows_after,
                 "method": "delta-rs"
             }))
             
             return {
                 "ok": True,
                 "restored_to": version,
-                "method": "delta-rs"
+                "method": "delta-rs",
+                "rows_before": rows_before,
+                "rows_after": rows_after,
+                "rows_added": rows_added,
+                "rows_deleted": rows_deleted,
+                "total_rows": rows_after
             }
             
         except Exception as e:

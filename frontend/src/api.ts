@@ -390,3 +390,140 @@ export async function checkTableExists(schema: string, table: string): Promise<{
   const r = await fetch(`${API_BASE}/check_table_exists?${params.toString()}`, { headers: { ...authHeaders() } })
   if (!r.ok) throw new Error(await r.text()); return r.json()
 }
+
+// =====================
+// Audit Page APIs
+// =====================
+
+export interface AuditEventSummary {
+  rows_added: number
+  rows_updated: number
+  rows_deleted: number
+  cells_changed: number
+  warnings: number
+  errors: number
+}
+
+export interface AuditEventListItem {
+  audit_id: string
+  snapshot_id: string
+  type: string
+  title: string
+  created_by: string
+  actor_email: string
+  timestamp: string
+  summary: AuditEventSummary
+  metadata?: Record<string, any>
+}
+
+export interface AuditEventDetail extends AuditEventListItem {
+  description?: string
+  diff_path?: string
+  validation_path?: string
+  metadata_path?: string
+  diff?: Record<string, any>
+  validation?: Record<string, any>
+  related_cr?: {
+    id: number
+    title: string
+    type: string
+    status: string
+  }
+}
+
+// List audit events for a dataset
+export async function listDatasetAuditEvents(
+  datasetId: number,
+  opts?: { limit?: number; offset?: number; type?: string }
+): Promise<{ events: AuditEventListItem[]; total: number; limit: number; offset: number }> {
+  const params = new URLSearchParams()
+  if (opts?.limit) params.set('limit', String(opts.limit))
+  if (opts?.offset) params.set('offset', String(opts.offset))
+  if (opts?.type) params.set('type', opts.type)
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/audit?${params.toString()}`, { headers: { ...authHeaders() } })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Get details for a specific audit event
+export async function getAuditEvent(auditId: string): Promise<AuditEventDetail> {
+  const r = await fetch(`${API_BASE}/audit/${auditId}`, { headers: { ...authHeaders() } })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Get diff for an audit event
+export async function getAuditEventDiff(auditId: string): Promise<Record<string, any>> {
+  const r = await fetch(`${API_BASE}/audit/${auditId}/diff`, { headers: { ...authHeaders() } })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Get validation report for an audit event
+export async function getAuditEventValidation(auditId: string): Promise<Record<string, any>> {
+  const r = await fetch(`${API_BASE}/audit/${auditId}/validation`, { headers: { ...authHeaders() } })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// =====================
+// Snapshot APIs
+// =====================
+
+export interface SnapshotSummary {
+  rows_added: number
+  rows_updated: number
+  rows_deleted: number
+  cells_changed: number
+}
+
+export interface SnapshotEntry {
+  version: number
+  timestamp: string
+  title: string
+  type: string
+  created_by: string
+  actor_email?: string
+  summary: SnapshotSummary
+  operation?: string
+  operation_metrics?: Record<string, any>
+}
+
+export interface SnapshotCalendar {
+  [date: string]: SnapshotEntry[]
+}
+
+// Get snapshot calendar for a dataset (grouped by date)
+export async function getSnapshotCalendar(
+  datasetId: number
+): Promise<{ calendar: SnapshotCalendar; versions: SnapshotEntry[] }> {
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/snapshots/calendar`, { headers: { ...authHeaders() } })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Get snapshot data at a specific version (time travel query)
+export async function getSnapshotData(
+  datasetId: number,
+  version: number,
+  limit = 50,
+  offset = 0
+): Promise<{ data: any[]; columns: string[]; total: number; version: number }> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/snapshots/${version}/data?${params.toString()}`, { headers: { ...authHeaders() } })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Restore dataset to a specific version
+export async function restoreSnapshot(
+  datasetId: number,
+  version: number
+): Promise<{ ok: boolean; restored_to_version: number; new_version: number }> {
+  const r = await fetch(`${API_BASE}/datasets/${datasetId}/snapshots/${version}/restore`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+  })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}

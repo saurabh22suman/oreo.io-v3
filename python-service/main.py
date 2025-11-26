@@ -650,9 +650,33 @@ def delta_query_legacy(payload: DeltaQueryPayload):
 
 @app.get("/delta/history/{table}")
 def delta_history(table: str):
+    """Get Delta table history using table name (legacy endpoint)."""
     if _delta_adapter is None:
         raise HTTPException(status_code=500, detail="Delta adapter not available")
-    return {"history": _delta_adapter.history(table)}
+    # Parse table name if it contains project/dataset info
+    # Format could be: "project_id/dataset_id" or just a table name
+    parts = table.split("/")
+    if len(parts) == 2:
+        try:
+            project_id = int(parts[0])
+            dataset_id = int(parts[1])
+            return {"history": _delta_adapter.history(project_id, dataset_id)}
+        except ValueError:
+            pass
+    # Fallback: treat as simple table name (not supported by current adapter)
+    return {"history": []}
+
+
+@app.get("/delta/history/{project_id}/{dataset_id}")
+def delta_history_by_ids(project_id: int, dataset_id: int):
+    """Get Delta table history using project and dataset IDs."""
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    try:
+        return {"history": _delta_adapter.history(project_id, dataset_id)}
+    except Exception as e:
+        # Table might not exist yet
+        return {"history": []}
 
 
 class RestoreRequest(BaseModel):
@@ -673,6 +697,14 @@ def delta_restore_new(payload: RestoreRequest):
     Safety checks:
     - Validates version exists
     - Returns error if files were deleted by VACUUM
+    
+    Returns:
+    - status: "ok" on success
+    - restored_to_version: The version restored to
+    - rows_before: Row count before restore
+    - rows_after: Row count after restore (total_rows)
+    - rows_added: Rows added (if restoring to version with more rows)
+    - rows_deleted: Rows deleted (if restoring to version with fewer rows)
     """
     if _delta_adapter is None:
         raise HTTPException(status_code=500, detail="Delta adapter not available")
@@ -682,13 +714,76 @@ def delta_restore_new(payload: RestoreRequest):
         return {
             "status": "ok",
             "restored_to_version": result["restored_to"],
-            "method": result.get("method", "delta-rs")
+            "method": result.get("method", "delta-rs"),
+            "rows_before": result.get("rows_before", 0),
+            "rows_after": result.get("rows_after", 0),
+            "rows_added": result.get("rows_added", 0),
+            "rows_deleted": result.get("rows_deleted", 0),
+            "total_rows": result.get("total_rows", 0)
         }
     except ValueError as e:
         # Version doesn't exist or files were vacuumed
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
+
+
+@app.get("/delta/stats/{project_id}/{dataset_id}")
+def delta_operation_stats(project_id: int, dataset_id: int):
+    """Get stats from the latest Delta table operation.
+    
+    Returns operation metrics from the most recent commit including:
+    - rows_added: Number of rows added
+    - rows_updated: Number of rows updated  
+    - rows_deleted: Number of rows deleted
+    - total_rows: Current total row count
+    - operation: The operation type (WRITE, MERGE, RESTORE, etc.)
+    - version: The version number
+    """
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    
+    try:
+        return _delta_adapter.get_latest_operation_stats(project_id, dataset_id)
+    except Exception as e:
+        return {"rows_added": 0, "rows_updated": 0, "rows_deleted": 0, "total_rows": 0, "error": str(e)}
+
+
+@app.get("/delta/snapshot/{project_id}/{dataset_id}/{version}")
+def delta_snapshot_data(project_id: int, dataset_id: int, version: int, 
+                        limit: int = 50, offset: int = 0):
+    """Get data from a Delta table at a specific version (time-travel).
+    
+    This endpoint enables viewing historical snapshots of data without modifying the table.
+    Uses delta-rs native version parameter to load the table state at that point in time.
+    
+    Args:
+        project_id: Project ID containing the dataset
+        dataset_id: Dataset ID
+        version: The version number to read (0-based, from Delta history)
+        limit: Maximum rows to return (default 50, max 500)
+        offset: Pagination offset (default 0)
+    
+    Returns:
+        columns: List of column names
+        data: List of row dictionaries
+        total: Total row count at this version
+        version: The version being read
+    """
+    if _delta_adapter is None:
+        raise HTTPException(status_code=500, detail="Delta adapter not available")
+    
+    # Clamp limit
+    limit = max(1, min(limit, 500))
+    offset = max(0, offset)
+    
+    try:
+        result = _delta_adapter.read_at_version(project_id, dataset_id, version, limit, offset)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read version {version}: {str(e)}")
 
 
 class DeltaMergePayload(BaseModel):

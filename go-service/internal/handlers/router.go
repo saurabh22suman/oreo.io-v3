@@ -12,7 +12,7 @@ import (
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/config"
 	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
-	"github.com/oreo-io/oreo.io-v2/go-service/internal/service"
+	services "github.com/oreo-io/oreo.io-v2/go-service/internal/service"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/storage"
 )
 
@@ -49,7 +49,9 @@ func SetupRouter() *gin.Engine {
 	// Initialize storage adapter (DEFAULT_STORAGE_BACKEND="delta" or "postgres") once and inject into context
 	cfg := config.Get()
 	backendName := strings.ToLower(strings.TrimSpace(cfg.DefaultStorageBackend))
-	if backendName == "" { backendName = "postgres" }
+	if backendName == "" {
+		backendName = "postgres"
+	}
 	adapter := storage.NewAdapter(backendName)
 	r.Use(func(c *gin.Context) { c.Set("storage_adapter", adapter); c.Next() })
 	gdb := dbpkg.Get()
@@ -80,6 +82,7 @@ func SetupRouter() *gin.Engine {
 			&models.ProjectActivity{},
 			&models.DataQualityRule{},
 			&models.DataQualityResult{},
+			&models.AuditEvent{},
 		)
 
 		// Only migrate jobs table and start worker when using Postgres (skip for sqlite tests)
@@ -234,6 +237,10 @@ func SetupRouter() *gin.Engine {
 		RegisterSecurityRoutes(r)
 		// Jobs (background tasks)
 		RegisterJobsRoutes(r)
+		// Audit routes (dataset timeline & event details)
+		RegisterAuditRoutes(r)
+		// Snapshot routes (time-travel and restore)
+		RegisterSnapshotRoutes(r)
 
 		// Note: Datasets APIs are currently nested under projects routes.
 
