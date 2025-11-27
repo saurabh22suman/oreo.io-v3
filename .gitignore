@@ -1,8 +1,22 @@
 # General
 .DS_Store
 Thumbs.db
+
+# Environment & Secrets (NEVER COMMIT)
 .env
 .env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets/
+config/secrets.yaml
+
+# Docker Compose with real secrets
+docker-compose.dev.yml
+docker-compose.override.yml
+
+# Python
 .venv/
 venv/
 env/
@@ -26,6 +40,12 @@ python-service/.ruff_cache/
 # Docker
 *.local.yml
 \n# npm cache\nfrontend/.npm-cache/\n
+## Local data artifacts (do not commit)
+delta-data/
+metadata/*.db
+metadata/*.sqlite
+metadata/*.sqlite3
+
 ## Playwright artifacts (root)
 frontend/test-results/
 frontend/playwright-report/
@@ -36,3 +56,7 @@ frontend/**/trace.zip
 .playwright-mcp/
 cookies.txt
 
+
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md

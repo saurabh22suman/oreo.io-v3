@@ -1,42 +1,30 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import ProjectModal from '../components/ProjectModal'
 import { listProjects, currentUser } from '../api'
 import { useNavigate } from 'react-router-dom'
-import { useCollapse } from '../context/CollapseContext'
-// MembersPopover removed from Projects list per UX requirements
+import Card from '../components/Card'
+import { FolderOpen, Plus, Search, Clock, Database, ArrowRight, User } from 'lucide-react'
 
 type Project = {
   id: string
   name: string
   description?: string
+  role?: string
+  datasetCount?: number
+  updated_at?: string
+  modified?: string
+  last_activity?: string
+  lastModified?: string
 }
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
-  const [sortBy, setSortBy] = useState<'name'|'datasets'|'modified'>('name')
-  const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc')
-  const [user, setUser] = useState(null)
+  const [sortBy, setSortBy] = useState<'name' | 'datasets' | 'modified'>('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [searchQuery, setSearchQuery] = useState('')
   const navigate = useNavigate()
-  const { collapsed } = useCollapse()
-  const tableRef = useRef<HTMLTableElement | null>(null)
-
-  // column widths: persist percentages in localStorage, but keep px widths while dragging for smooth UX
-  const STORAGE_KEY = 'projects.table.columnWidths.v1'
-  // savedPctWidths holds persisted percentages (0-100)
-  const [savedPctWidths, setSavedPctWidths] = useState<{name?: number; datasets?: number; modified?: number}>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) return JSON.parse(raw)
-    } catch (e) {}
-    return {}
-  })
-
-  // transient px widths while dragging
-  const [columnPxDuringDrag, setColumnPxDuringDrag] = useState<{name?: number; datasets?: number; modified?: number} | null>(null)
-
-  const resizing = useRef<{col?: string; startX?: number; startWidth?: number} | null>(null)
 
   async function load() {
     setLoading(true)
@@ -53,174 +41,188 @@ export default function ProjectsPage() {
   useEffect(() => { load() }, [])
 
   useEffect(() => {
-    const handler = (e: any) => { try { const pid = e?.detail?.projectId; if(!pid) load(); else load() } catch {} }
+    const handler = (e: any) => { try { const pid = e?.detail?.projectId; if (!pid) load(); else load() } catch { } }
     window.addEventListener('dataset:created', handler)
     return () => window.removeEventListener('dataset:created', handler)
   }, [])
 
-  useEffect(() => {
-    currentUser().then(u => setUser(u)).catch(() => setUser(null))
-  }, [])
+  const filteredAndSorted = useMemo(() => {
+    let result = [...projects]
 
-  const sorted = useMemo(() => {
-    const copy = [...projects]
-    copy.sort((a, b) => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter(p => p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q))
+    }
+
+    result.sort((a, b) => {
       if (sortBy === 'name') return sortDir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
-      if (sortBy === 'datasets') return sortDir === 'asc' ? (a['datasetCount']||0) - (b['datasetCount']||0) : (b['datasetCount']||0) - (a['datasetCount']||0)
-      if (sortBy === 'modified') return sortDir === 'asc' ? (new Date(a['modified'] || 0).getTime() - new Date(b['modified'] || 0).getTime()) : (new Date(b['modified'] || 0).getTime() - new Date(a['modified'] || 0).getTime())
-      return 0
-    })
-    return copy
-  }, [projects, sortBy, sortDir])
+      if (sortBy === 'datasets') return sortDir === 'asc' ? (a.datasetCount || 0) - (b.datasetCount || 0) : (b.datasetCount || 0) - (a.datasetCount || 0)
 
-  useEffect(() => {
-    // mouse move updates px widths transiently; mouse up converts to percentages and persists
-    function onMove(e: MouseEvent) {
-      if (!resizing.current || !resizing.current.col) return
-      const delta = (e.clientX - (resizing.current.startX || 0))
-      const raw = Math.max(80, (resizing.current.startWidth || 0) + delta)
-      // snap to 8px grid for stable widths
-      const snapped = Math.round(raw / 8) * 8
-      const newW = Math.max(60, snapped)
-      setColumnPxDuringDrag(prev => ({ ...(prev||{}), [resizing.current!.col!]: newW }))
-    }
-
-    function onUp() {
-      // convert current px widths into percentages relative to table width and persist
-      try {
-        const table = tableRef.current
-        if (!table) { resizing.current = null; setColumnPxDuringDrag(null); return }
-        const total = table.getBoundingClientRect().width || table.clientWidth || 1
-        const finalPx: {[k:string]: number} = {}
-        const cols: Array<'name'|'datasets'|'modified'> = ['name','datasets','modified']
-        cols.forEach((col, idx) => {
-          if (columnPxDuringDrag && typeof columnPxDuringDrag[col] === 'number') {
-            finalPx[col] = columnPxDuringDrag[col] as number
-          } else {
-            const th = table.querySelectorAll('th')[idx] as HTMLElement | undefined
-            finalPx[col] = th ? Math.max(60, th.getBoundingClientRect().width) : 0
-          }
-        })
-        const pctObj: {[k:string]: number} = {}
-        cols.forEach(col => { pctObj[col] = Math.round((finalPx[col] / total) * 10000) / 100 })
-        setSavedPctWidths(pctObj as any)
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(pctObj)) } catch (e) {}
-      } finally {
-        resizing.current = null
-        setColumnPxDuringDrag(null)
+      const getTime = (p: Project) => {
+        const v = p.modified || p.updated_at || p.last_activity || p.lastModified
+        return v ? new Date(v).getTime() : 0
       }
-    }
 
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-  }, [columnPxDuringDrag])
+      return sortDir === 'asc' ? getTime(a) - getTime(b) : getTime(b) - getTime(a)
+    })
+    return result
+  }, [projects, sortBy, sortDir, searchQuery])
 
-  function startResize(col: 'name'|'datasets'|'modified', e: React.MouseEvent) {
-    const table = tableRef.current
-    let startWidth = 0
-    if (table) {
-      const ths = table.querySelectorAll('th')
-      const idx = col === 'name' ? 0 : col === 'datasets' ? 1 : 2
-      const th = ths[idx] as HTMLElement | undefined
-      startWidth = th ? th.getBoundingClientRect().width : 0
-    }
-    resizing.current = { col, startX: e.clientX, startWidth: startWidth }
-    // initialize transient px width state
-    setColumnPxDuringDrag(prev => ({ ...(prev||{}), [col]: startWidth }))
-    e.preventDefault()
-  }
-
-  function onRowKeyDown(e: React.KeyboardEvent, id: string) {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/projects/${id}`) }
+  const getLastModified = (p: Project) => {
+    const v = p.modified || p.updated_at || p.last_activity || p.lastModified
+    return v ? new Date(v).toLocaleDateString() : '—'
   }
 
   return (
-        <>
-      {/* Intro section */}
-      <div className="mb-6 flex flex-col md:flex-row gap-6 items-start">
-        <div className="w-36 flex-shrink-0">
-          {/* tutorial illustration */}
-          <img src="/images/tutorial_image.png" alt="Tutorial" className="w-full mascot-bounce" />
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Header Section with Mascot */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 text-white shadow-2xl shadow-slate-900/20">
+        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-bold border border-white/10 text-blue-200">
+                Workspaces
+              </span>
+            </div>
+            <h1 className="text-4xl font-bold mb-3 tracking-tight">Projects</h1>
+            <p className="text-slate-300 max-w-md text-sm leading-relaxed">
+              Manage your data workspaces and collaborations. Create new projects to organize your datasets and invite team members.
+            </p>
+
+            <div className="mt-8">
+              <button
+                onClick={() => setOpen(true)}
+                className="group relative px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-300 hover:-translate-y-0.5 flex items-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Create New Project
+              </button>
+            </div>
+          </div>
+
+          {/* Mascot Image */}
+          <div className="hidden md:block relative w-56 h-56 -mr-4 -mb-8">
+            <img
+              src="/images/oreo_rabbit.png"
+              alt="Oreo Mascot"
+              className="w-full h-full object-contain drop-shadow-2xl transform hover:scale-105 transition-transform duration-500 opacity-90"
+            />
+          </div>
         </div>
-        <div className="flex-1 rounded-lg p-5" style={{ background: 'linear-gradient(180deg,#ffffff 0%, #fbfdff 100%)' }}>
-          <h1 className="text-3xl font-extrabold text-slate-900">Projects</h1>
-          <p className="muted-small mt-2 max-w-2xl">Organize related datasets into projects, invite members, and collaborate with clear ownership and roles.</p>
-        </div>
-        <div className="self-start">
-          <button onClick={() => setOpen(true)} className="create-cta inline-flex items-center px-5 py-2 rounded-md">+ Create Project</button>
+
+        {/* Decorative background elements */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
+      </div>
+
+      {/* Search and Filter Bar */}
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search projects..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+          />
         </div>
       </div>
 
-      {loading ? (
-        <div>Loading...</div>
-      ) : (
-        <div className="projects-table overflow-auto rounded-md">
-          <table ref={tableRef} className="min-w-full bg-white">
-            <thead>
-              <tr className="text-left text-sm text-slate-600">
-                <th className="p-3" style={{ width: '40%' }}>
-                  <div className="flex items-center gap-2">
-                    <button aria-label="Sort by name" className="sort-btn" onClick={() => { setSortBy('name'); setSortDir(sortBy==='name' && sortDir==='asc' ? 'desc' : 'asc') }}>
-                      Name
-                    </button>
-                    {sortBy==='name' && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                        {sortDir==='asc' ? <path d="M7 14l5-5 5 5H7z" fill="#374151"/> : <path d="M7 10l5 5 5-5H7z" fill="#374151"/>}
-                      </svg>
-                    )}
-                    {/* fixed widths per spec; resizer disabled */}
-                  </div>
-                </th>
-                <th className="p-3 text-right" style={{ width: '10%' }}>
-                  <div className="flex items-center justify-end gap-2">
-                    <button aria-label="Sort by datasets" className="sort-btn" onClick={() => { setSortBy('datasets'); setSortDir(sortBy==='datasets' && sortDir==='asc' ? 'desc' : 'asc') }}>Datasets</button>
-                    {sortBy==='datasets' && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                        {sortDir==='asc' ? <path d="M7 14l5-5 5 5H7z" fill="#374151"/> : <path d="M7 10l5 5 5-5H7z" fill="#374151"/>}
-                      </svg>
-                    )}
-                    {/* fixed widths per spec; resizer disabled */}
-                  </div>
-                </th>
-                <th className="p-3 text-right" style={{ width: '20%' }}>
-                  <div className="flex items-center justify-end gap-2">
-                    <span className="text-sm text-slate-600">Role</span>
-                  </div>
-                </th>
-                <th className="p-3 text-right" style={{ width: '30%' }}>
-                  <div className="flex items-center justify-end gap-2">
-                    <button aria-label="Sort by modified" className="sort-btn" onClick={() => { setSortBy('modified'); setSortDir(sortBy==='modified' && sortDir==='asc' ? 'desc' : 'asc') }}>Last Modified</button>
-                    {sortBy==='modified' && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                        {sortDir==='asc' ? <path d="M7 14l5-5 5 5H7z" fill="#374151"/> : <path d="M7 10l5 5 5-5H7z" fill="#374151"/>}
-                      </svg>
-                    )}
-                    {/* fixed widths per spec; resizer disabled */}
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-        {sorted.map((p) => (
-                <tr key={p.id} className="border-t row-clickable" onClick={() => navigate(`/projects/${p.id}`)} onKeyDown={(e)=>onRowKeyDown(e, p.id)} tabIndex={0} role="button">
-                  <td className="p-2 compact name-col"> <div className="font-semibold text-slate-800 name-cell truncate" title={p.name}>{p.name}</div></td>
-                    <td className="p-2 compact text-right">{p['datasetCount'] || 0}</td>
-                    <td className="p-2 compact text-right"><div className="text-sm text-slate-700">{p['role'] || ''}</div></td>
-                    <td className="p-2 compact text-right">{
-                    (()=>{
-                      const v = p['modified'] || p['updated_at'] || p['last_activity'] || p['lastModified']
-                      return v ? new Date(v).toLocaleString() : '-'
-                    })()
-                  }</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Projects Table Card */}
+      <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-white dark:bg-slate-800/50">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <FolderOpen className="w-5 h-5 text-primary" />
+            All Projects
+            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-xs text-slate-600 dark:text-slate-300 font-medium">
+              {projects.length}
+            </span>
+          </h2>
         </div>
-      )}
+
+        {loading ? (
+          <div className="p-12 text-center text-slate-500">Loading projects...</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-700">
+                  <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:text-primary transition-colors" onClick={() => { setSortBy('name'); setSortDir(sortBy === 'name' && sortDir === 'asc' ? 'desc' : 'asc') }}>
+                    Name {sortBy === 'name' && (sortDir === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right cursor-pointer hover:text-primary transition-colors" onClick={() => { setSortBy('datasets'); setSortDir(sortBy === 'datasets' && sortDir === 'asc' ? 'desc' : 'asc') }}>
+                    Datasets {sortBy === 'datasets' && (sortDir === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">
+                    Role
+                  </th>
+                  <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right cursor-pointer hover:text-primary transition-colors" onClick={() => { setSortBy('modified'); setSortDir(sortBy === 'modified' && sortDir === 'asc' ? 'desc' : 'asc') }}>
+                    Last Modified {sortBy === 'modified' && (sortDir === 'asc' ? '↑' : '↓')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                {filteredAndSorted.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-12 text-center text-slate-500">
+                      {searchQuery ? 'No projects match your search.' : 'No projects found. Create one to get started.'}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredAndSorted.map((p) => (
+                    <tr
+                      key={p.id}
+                      onClick={() => navigate(`/projects/${p.id}`)}
+                      className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                    >
+                      <td className="py-2 px-6">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm">
+                            <FolderOpen className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="font-semibold text-slate-900 dark:text-white group-hover:text-primary transition-colors">
+                              {p.name}
+                            </div>
+                            {p.description && (
+                              <div className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[200px] sm:max-w-xs">
+                                {p.description}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-2 px-6 text-right">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium">
+                          <Database className="w-3.5 h-3.5" />
+                          {p.datasetCount || 0}
+                        </div>
+                      </td>
+                      <td className="py-2 px-6 text-right">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${p.role === 'owner' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' :
+                          p.role === 'contributor' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                            'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                          }`}>
+                          {(p.role || 'Viewer').charAt(0).toUpperCase() + (p.role || 'viewer').slice(1)}
+                        </span>
+                      </td>
+                      <td className="py-2 px-6 text-right text-sm text-slate-500 dark:text-slate-400">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Clock className="w-3.5 h-3.5" />
+                          {getLastModified(p)}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       <ProjectModal open={open} onClose={() => setOpen(false)} onCreate={() => load()} />
-  </>
+    </div>
   )
 }

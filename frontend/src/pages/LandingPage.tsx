@@ -1,17 +1,13 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import {
-	BookOpen, Star as StarIcon, Database, Users, Lock, Rocket,
-	ShieldCheck, GitMerge, ArrowRight, Sparkles, Calendar
+	Table, ShieldCheck, History, FileJson,
+	ArrowRight, CheckCircle2, Layout
 } from 'lucide-react'
 
 export default function LandingPage() {
-	const parallaxRef = useRef<HTMLDivElement | null>(null)
-	const rabbitRef = useRef<HTMLDivElement | null>(null)
-
 	useEffect(() => {
-		// Reveal-on-scroll
 		const io = new IntersectionObserver((entries) => {
 			entries.forEach(e => {
 				if (e.isIntersecting) {
@@ -24,117 +20,113 @@ export default function LandingPage() {
 		return () => io.disconnect()
 	}, [])
 
-	useEffect(() => {
-		// Parallax for mascot
-		const wrap = parallaxRef.current
-		const rabbit = rabbitRef.current
-		if (!wrap || !rabbit) return
-		const onMove = (e: MouseEvent) => {
-			const rect = wrap.getBoundingClientRect()
-			const x = (e.clientX - rect.left) / rect.width - 0.5
-			const y = (e.clientY - rect.top) / rect.height - 0.5
-			rabbit.style.transform = `translate(${x * 8}px, ${y * 8}px)`
-		}
-		const onLeave = () => { rabbit.style.transform = 'translate(0,0)' }
-		wrap.addEventListener('mousemove', onMove)
-		wrap.addEventListener('mouseleave', onLeave)
-		return () => {
-			wrap.removeEventListener('mousemove', onMove)
-			wrap.removeEventListener('mouseleave', onLeave)
-		}
-	}, [])
-
-	// No analytics charts on landing now
-
 	return (
-		<div className="min-h-screen flex flex-col bg-white">
+		<div className="min-h-screen flex flex-col bg-[#0B0F19] text-white overflow-x-hidden font-sans selection:bg-cyan-500/30">
 			<Navbar />
 
-			{/* Hero with animated background */}
-			<section className="relative hero-gradient overflow-hidden">
-				{/* background layers */}
-				<div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-					<div className="absolute inset-0 opacity-[0.07]" style={{
-						backgroundImage: 'linear-gradient(to right, rgba(15,23,42,.25) 1px, transparent 1px), linear-gradient(to bottom, rgba(15,23,42,.25) 1px, transparent 1px)',
-						backgroundSize: '40px 40px',
-						animation: 'gridMove 30s linear infinite'
-					}} />
-					<div className="absolute -top-20 -left-20 h-80 w-80 rounded-full bg-indigo-500/25 blur-3xl" style={{ animation: 'blob 18s ease-in-out infinite' }} />
-					<div className="absolute -bottom-16 -right-10 h-72 w-72 rounded-full bg-sky-400/25 blur-3xl" style={{ animation: 'blob 22s ease-in-out infinite reverse' }} />
-					<div className="absolute left-1/2 top-1/2 h-[620px] w-[620px] rounded-full opacity-[0.06]" style={{
-						transform: 'translate(-50%, -50%)',
-						background: 'conic-gradient(from 0deg at 50% 50%, rgba(99,102,241,.25), rgba(56,189,248,.25), rgba(168,85,247,.25), rgba(99,102,241,.25))',
-						animation: 'spinSlow 40s linear infinite'
-					}} />
+			{/* Hero Section */}
+			<section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
+				{/* Background Elements */}
+				<div className="absolute inset-0 z-0 pointer-events-none">
+					<img src="/images/Data_universe.png" alt="Background" className="w-full h-full object-cover opacity-20" />
+					<div className="absolute inset-0 bg-gradient-to-b from-[#0B0F19] via-[#0B0F19]/90 to-[#0B0F19]"></div>
 				</div>
 
-				<div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
-					<div className="grid md:grid-cols-2 gap-10 items-center">
-						{/* Left copy */}
-						<div className="reveal">
-							<div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
-								<span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-								New: Collaborative review flows
-							</div>
-							<h1 className="mt-5 text-4xl sm:text-5xl lg:text-6xl tracking-tight font-semibold text-slate-900">Welcome to oreo.io</h1>
-							<p className="mt-4 text-base sm:text-lg text-slate-600 max-w-xl">Modern, secure, and collaborative data platform for teams. Bring your datasets, review changes, and ship confidently with automated approvals.</p>
-							<div className="mt-8 flex flex-col sm:flex-row gap-3">
-								<a href="/register" className="relative btn-shine inline-flex items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 via-sky-500 to-violet-500 px-5 py-3 text-sm font-medium text-white shadow-[0_0_0_1px_rgba(0,0,0,.05)_inset,0_10px_30px_-10px_rgba(99,102,241,.35)]">Create account</a>
-								<a href="/docs" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-900 hover:bg-slate-50 transition">
-									<BookOpen className="w-4 h-4" /> Read docs
-								</a>
-							</div>
-							<div className="mt-6 flex items-center gap-2 text-slate-600">
-								<StarIcon className="w-4 h-4 text-amber-500" />
-								<span className="text-sm">Loved by early users for speed and simplicity.</span>
-							</div>
-						</div>
+				<div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+					<div className="reveal inline-flex items-center gap-2 px-4 py-2 rounded-full bg-azure-blue/10 border border-azure-blue/20 backdrop-blur-md mb-8">
+						<span className="flex h-2 w-2 rounded-full bg-azure-blue animate-pulse" />
+						<span className="text-sm font-medium text-cyan-100">Simple for Users. Powerful for Data</span>
+					</div>
 
-						{/* Right visual card with parallax mascot */}
-						<div className="relative reveal">
-							<div id="heroParallax" ref={parallaxRef} className="relative mx-auto max-w-md">
-								<div className="absolute -top-8 -left-10 h-48 w-48 bg-indigo-500/20 blur-3xl" style={{ animation: 'blob 12s ease-in-out infinite' }} />
-								<div className="absolute bottom-8 -right-8 h-56 w-56 bg-sky-400/20 blur-3xl" style={{ animation: 'blob 16s ease-in-out infinite reverse' }} />
-								<div className="relative rounded-2xl border border-slate-200 bg-white/80 backdrop-blur-xl shadow-2xl">
-									<div className="absolute inset-px rounded-2xl bg-gradient-to-b from-white/50 to-transparent pointer-events-none" />
-									<div className="p-6">
-										<div className="grid grid-cols-3 gap-4">
-											<div className="col-span-2">
-												<h3 className="text-base font-medium tracking-tight text-slate-900">Meet Oreo, your dutch rabbit guide</h3>
-												<p className="mt-1 text-sm text-slate-600">He keeps your data tidy, approvals swift, and dashboards happy.</p>
+					<h1 className="reveal text-5xl md:text-7xl font-bold tracking-tight mb-6">
+						Your Data, <br />
+						<span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-azure-blue">Validated & Editable.</span>
+					</h1>
+
+					<p className="reveal mt-6 text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
+						Forget the SQL overhead.
+						<b>Oreo</b> provides an intuitive spreadsheet interface for business users, with built-in validation, governance, and full change tracking.
+					</p>
+
+					<div className="reveal mt-10 flex flex-col sm:flex-row gap-4 justify-center items-center">
+						<a href="/register" className="group relative px-8 py-4 bg-azure-blue hover:bg-azure-blue/90 rounded-full font-semibold text-white transition-all shadow-[0_0_40px_-10px_rgba(0,120,212,0.5)] hover:shadow-[0_0_60px_-15px_rgba(0,120,212,0.6)] hover:-translate-y-1">
+							<span className="relative z-10 flex items-center gap-2">
+								Let's Get Started <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+							</span>
+						</a>
+					</div>
+
+					{/* Hero Visual - The "Live Editor" Mockup */}
+					<div className="reveal mt-20 relative max-w-5xl mx-auto">
+						<div className="absolute -inset-1 bg-gradient-to-r from-cyan-500 to-azure-blue rounded-[2rem] blur opacity-20"></div>
+						<div className="relative rounded-[2rem] bg-[#0F131F] border border-white/10 shadow-2xl overflow-hidden">
+							{/* Mockup Header */}
+							<div className="h-12 bg-white/5 border-b border-white/5 flex items-center px-6 gap-4">
+								<div className="flex gap-2">
+									<div className="w-3 h-3 rounded-full bg-red-500/50"></div>
+									<div className="w-3 h-3 rounded-full bg-yellow-500/50"></div>
+									<div className="w-3 h-3 rounded-full bg-green-500/50"></div>
+								</div>
+								<div className="flex-1 text-center text-xs font-mono text-slate-500">user_transactions.data — Oreo Editor</div>
+							</div>
+
+							{/* Mockup Body */}
+							<div className="p-8 grid md:grid-cols-3 gap-8">
+								{/* Left: The Editor UI */}
+								<div className="md:col-span-2 space-y-4">
+									<div className="flex items-center justify-between mb-4">
+										<h3 className="text-lg font-semibold text-white flex items-center gap-2">
+											<Table className="w-5 h-5 text-azure-blue" /> Data Grid
+										</h3>
+										<span className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Live Mode</span>
+									</div>
+
+									{/* Fake Table */}
+									<div className="border border-white/10 rounded-lg overflow-hidden bg-[#0B0F19]">
+										<div className="grid grid-cols-3 bg-white/5 text-xs font-medium text-slate-400 p-3 border-b border-white/10">
+											<div>user_id</div>
+											<div>status</div>
+											<div>amount</div>
+										</div>
+										<div className="divide-y divide-white/5 text-sm text-slate-300">
+											<div className="grid grid-cols-3 p-3 hover:bg-white/5 transition-colors cursor-text group">
+												<div className="font-mono text-slate-500">u_8392</div>
+												<div className="text-emerald-400">active</div>
+												<div>$1,240.00</div>
 											</div>
-											<div className="relative">
-												<div className="absolute right-2 top-2 h-0 w-0">
-													<span className="absolute left-1/2 top-1/2 -ml-4 -mt-4 inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 ring-1 ring-slate-200" style={{ animation: 'orbit 10s linear infinite' }}>
-														<ShieldCheck className="w-4 h-4 text-emerald-600" />
-													</span>
-													<span className="absolute left-1/2 top-1/2 -ml-4 -mt-4 inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 ring-1 ring-slate-200" style={{ animation: 'orbit 14s linear infinite reverse' }}>
-														<GitMerge className="w-4 h-4 text-sky-600" />
-													</span>
+											<div className="grid grid-cols-3 p-3 hover:bg-white/5 transition-colors cursor-text group bg-azure-blue/10">
+												<div className="font-mono text-slate-500">u_8393</div>
+												<div className="text-yellow-400 flex items-center gap-2">
+													pending
+													<span className="opacity-0 group-hover:opacity-100 text-[10px] bg-azure-blue px-1 rounded text-white">EDIT</span>
 												</div>
+												<div className="border border-azure-blue rounded px-1 bg-[#0B0F19]">$450.50|</div>
+											</div>
+											<div className="grid grid-cols-3 p-3 hover:bg-white/5 transition-colors cursor-text group">
+												<div className="font-mono text-slate-500">u_8394</div>
+												<div className="text-red-400">blocked</div>
+												<div>$0.00</div>
 											</div>
 										</div>
-										<div className="mt-6 relative">
-											<div className="absolute -inset-8 -z-10 rounded-3xl bg-gradient-to-tr from-indigo-500/10 via-violet-500/10 to-sky-/10 blur-2xl" />
-											<div className="mx-auto flex items-center justify-center">
-												<div ref={rabbitRef} className="w-56 h-56" style={{ animation: 'floatY 5s ease-in-out infinite' }}>
-													<img src="/images/dutch_rabbit.svg" alt="Oreo mascot" className="w-full h-full object-contain" />
-												</div>
-											</div>
+									</div>
+								</div>
+
+								{/* Right: The Mascot/Validator */}
+								<div className="relative flex flex-col items-center justify-center text-center space-y-4 border-l border-white/5 pl-8">
+									<div className="w-32 h-32 relative">
+										<div className="absolute inset-0 bg-cyan-500/20 rounded-full blur-xl animate-pulse"></div>
+										<img src="/images/oreo_rabbit.png" alt="Oreo" className="relative z-10 w-full h-full object-contain" />
+									</div>
+									<div>
+										<h4 className="text-white font-medium">Oreo Validator</h4>
+										<p className="text-xs text-slate-400 mt-1">Schema enforcement active.</p>
+									</div>
+									<div className="w-full bg-white/5 rounded-lg p-3 text-left space-y-2">
+										<div className="flex items-center gap-2 text-xs text-emerald-400">
+											<CheckCircle2 className="w-3 h-3" /> Type check passed
 										</div>
-										<div className="mt-6 grid grid-cols-3 gap-3 text-center">
-											<div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-												<div className="text-sm font-medium text-slate-900">1.3M</div>
-												<div className="text-xs text-slate-600">rows/day</div>
-											</div>
-											<div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-												<div className="text-sm font-medium text-slate-900">99.99%</div>
-												<div className="text-xs text-slate-600">uptime</div>
-											</div>
-											<div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-												<div className="text-sm font-medium text-slate-900">~120ms</div>
-												<div className="text-xs text-slate-600">queries</div>
-											</div>
+										<div className="flex items-center gap-2 text-xs text-emerald-400">
+											<CheckCircle2 className="w-3 h-3" /> Constraints satisfied
 										</div>
 									</div>
 								</div>
@@ -144,105 +136,101 @@ export default function LandingPage() {
 				</div>
 			</section>
 
-			{/* Features */}
-			<section id="features" className="relative">
-				<div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
-					<div className="max-w-3xl">
-						<h2 className="text-3xl sm:text-4xl tracking-tight font-semibold text-slate-900 reveal">What you get</h2>
-						<p className="mt-2 text-slate-600 reveal">Essential building blocks for collaborative data workflows.</p>
+			{/* Core Features */}
+			<section className="py-24 relative z-10 bg-[#0F131F]/50">
+				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+					<div className="text-center mb-16">
+						<h2 className="reveal text-3xl md:text-4xl font-bold mb-4">Why use Oreo?</h2>
+						<p className="reveal text-slate-400 max-w-2xl mx-auto">
+							Leave the complexity behind.
+							Experience data the way it was meant to be—simple, familiar, and effortless.
+						</p>
 					</div>
-					<div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-						<div className="reveal group relative rounded-2xl border border-slate-200 bg-white p-5 hover:-translate-y-1 transition will-change-transform">
-							<div className="flex items-center gap-3">
-								<div className="rounded-lg bg-indigo-500/10 p-2 ring-1 ring-indigo-300/20">
-									<Database className="w-5 h-5 text-indigo-600" />
-								</div>
-								<h3 className="font-medium text-slate-900 tracking-tight">Data Management</h3>
+
+					<div className="grid md:grid-cols-3 gap-8">
+						<div className="reveal group p-8 rounded-[2rem] bg-[#0B0F19] border border-white/10 hover:border-azure-blue/50 transition-all hover:-translate-y-1 relative overflow-hidden">
+							<div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+								<Table className="w-24 h-24 text-azure-blue" />
 							</div>
-							<p className="mt-3 text-sm text-slate-600">Upload, validate, and manage datasets with ease.</p>
+							<div className="w-12 h-12 rounded-2xl bg-azure-blue/10 flex items-center justify-center mb-6 text-azure-blue">
+								<Layout className="w-6 h-6" />
+							</div>
+							<h3 className="text-xl font-semibold mb-3">Live Data Editor</h3>
+							<p className="text-slate-400 leading-relaxed">
+								Directly edit rows in your Delta tables. Fix typos, adjust status flags, or patch data without running complex UPDATE scripts.
+							</p>
 						</div>
-						<div className="reveal group relative rounded-2xl border border-slate-200 bg-white p-5 hover:-translate-y-1 transition">
-							<div className="flex items-center gap-3">
-								<div className="rounded-lg bg-sky-500/10 p-2 ring-1 ring-sky-300/20">
-									<Users className="w-5 h-5 text-sky-600" />
-								</div>
-								<h3 className="font-medium text-slate-900 tracking-tight">Collaboration</h3>
+
+						<div className="reveal group p-8 rounded-[2rem] bg-[#0B0F19] border border-white/10 hover:border-purple-500/50 transition-all hover:-translate-y-1 relative overflow-hidden">
+							<div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+								<ShieldCheck className="w-24 h-24 text-purple-500" />
 							</div>
-							<p className="mt-3 text-sm text-slate-600">Invite teammates, assign roles, and review changes.</p>
+							<div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center mb-6 text-purple-500">
+								<FileJson className="w-6 h-6" />
+							</div>
+							<h3 className="text-xl font-semibold mb-3">Schema Governance</h3>
+							<p className="text-slate-400 leading-relaxed">
+								Oreo enforces your schema rules strictly. No more "schema drift" or accidental type mismatches corrupting your data.
+							</p>
 						</div>
-						<div className="reveal group relative rounded-2xl border border-slate-200 bg-white p-5 hover:-translate-y-1 transition">
-							<div className="flex items-center gap-3">
-								<div className="rounded-lg bg-emerald-500/10 p-2 ring-1 ring-emerald-300/20">
-									<Lock className="w-5 h-5 text-emerald-600" />
-								</div>
-								<h3 className="font-medium text-slate-900 tracking-tight">Secure Approvals</h3>
+
+						<div className="reveal group p-8 rounded-[2rem] bg-[#0B0F19] border border-white/10 hover:border-emerald-500/50 transition-all hover:-translate-y-1 relative overflow-hidden">
+							<div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+								<History className="w-24 h-24 text-emerald-500" />
 							</div>
-							<p className="mt-3 text-sm text-slate-600">Multi-reviewer approval flows ensure integrity.</p>
-						</div>
-						<div className="reveal group relative rounded-2xl border border-slate-200 bg-white p-5 hover:-translate-y-1 transition">
-							<div className="flex items-center gap-3">
-								<div className="rounded-lg bg-violet-500/10 p-2 ring-1 ring-violet-300/20">
-									<Rocket className="w-5 h-5 text-violet-600" />
-								</div>
-								<h3 className="font-medium text-slate-900 tracking-tight">Fast & Modern</h3>
+							<div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-6 text-emerald-500">
+								<History className="w-6 h-6" />
 							</div>
-							<p className="mt-3 text-sm text-slate-600">Built for speed with a robust, scalable backend.</p>
+							<h3 className="text-xl font-semibold mb-3">Audit & Time Travel</h3>
+							<p className="text-slate-400 leading-relaxed">
+								Every edit is versioned. See exactly who changed what, and roll back to any previous version of your data instantly.
+							</p>
 						</div>
 					</div>
 				</div>
 			</section>
 
-			{/* How it works */}
-			<section id="how" className="relative">
-				<div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-8">
-					<div className="grid lg:grid-cols-3 gap-10 items-start">
-						<div className="lg:col-span-2">
-							<h2 className="text-3xl tracking-tight font-semibold text-slate-900 reveal">How it works</h2>
-							<ol className="mt-6 space-y-5">
-								{['Register and create your project.','Upload datasets and define schema/rules.','Invite reviewers and submit changes for approval.','Track approvals and manage data collaboratively.'].map((t, i) => (
-									<li key={i} className="reveal flex gap-4">
-										<span className="h-7 w-7 shrink-0 rounded-full bg-slate-100 text-slate-900 flex items-center justify-center text-xs">{i+1}</span>
-										<p className="text-slate-600">{t}</p>
-									</li>
-								))}
-							</ol>
-							{/* CTA removed as requested */}
-						</div>
-						{/* Animated panel */}
+			{/* Integration / How it works */}
+			<section className="py-24 relative overflow-hidden">
+				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+					<div className="grid lg:grid-cols-2 gap-16 items-center">
 						<div className="reveal">
-							<div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4">
-								<div className="h-56 w-full rounded-lg" style={{
-									animation: 'drift 14s ease-in-out infinite',
-									background: 'radial-gradient(140px 140px at 20% 30%, rgba(99,102,241,.35), transparent 60%), radial-gradient(160px 160px at 70% 50%, rgba(56,189,248,.35), transparent 60%), radial-gradient(120px 120px at 40% 80%, rgba(168,85,247,.35), transparent 60%), linear-gradient(180deg, rgba(255,255,255,.8), rgba(255,255,255,.6))'
-								}} />
-								<div className="mt-4 grid grid-cols-3 gap-3">
-									<div className="h-20 w-full rounded-lg ring-1 ring-slate-200 bg-gradient-to-br from-indigo-500/15 to-transparent" style={{ animation: 'floatY 6s ease-in-out infinite' }} />
-									<div className="h-20 w-full rounded-lg ring-1 ring-slate-200 bg-gradient-to-br from-sky-500/15 to-transparent" style={{ animation: 'floatY 7s ease-in-out infinite' }} />
-									<div className="h-20 w-full rounded-lg ring-1 ring-slate-200 bg-gradient-to-br from-violet-500/15 to-transparent" style={{ animation: 'floatY 8s ease-in-out infinite' }} />
+							<h2 className="text-3xl md:text-4xl font-bold mb-6">Seamless Integration</h2>
+							<p className="text-slate-400 text-lg mb-8">
+								Oreo connects to your existing storage. Whether it's local files, S3, or Azure Blob Storage,
+								we provide the management layer on top of your data.
+							</p>
+
+							<div className="space-y-6">
+								<div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/5">
+									<div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold">1</div>
+									<div>
+										<h4 className="font-semibold">Connect Storage</h4>
+										<p className="text-sm text-slate-500">Point Oreo to your Delta Lake root.</p>
+									</div>
+								</div>
+								<div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/5">
+									<div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold">2</div>
+									<div>
+										<h4 className="font-semibold">Define Rules</h4>
+										<p className="text-sm text-slate-500">Set up Great Expectations suites for quality.</p>
+									</div>
+								</div>
+								<div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/5">
+									<div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">3</div>
+									<div>
+										<h4 className="font-semibold">Manage & Edit</h4>
+										<p className="text-sm text-slate-500">Use the UI to curate your datasets.</p>
+									</div>
 								</div>
 							</div>
 						</div>
-					</div>
-				</div>
-			</section>
 
-			{/* Analytics section removed as requested */}
-
-			{/* CTA */}
-			<section className="relative pb-20">
-				<div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-					<div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-indigo-500/15 via-sky-500/15 to-violet-500/15 p-8 sm:p-10 text-center">
-						<div className="absolute -inset-px rounded-3xl bg-gradient-to-b from-white/60 to-transparent pointer-events-none" />
-						<div aria-hidden className="pointer-events-none absolute -z-10 left-1/2 top-0 h-56 w-56 -translate-x-1/2 rounded-full bg-indigo-500/20 blur-3xl" style={{ animation: 'blob 18s ease-in-out infinite' }} />
-						<h3 className="text-2xl sm:text-3xl tracking-tight font-semibold text-slate-900">Ship trustworthy data, faster</h3>
-						<p className="mt-2 text-slate-600">Sign up in minutes. Your dutch rabbit will guide the way.</p>
-						<div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
-							<a href="/register" className="relative btn-shine inline-flex items-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-medium text-neutral-900 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 transition">
-								Get started free <Sparkles className="w-4 h-4" />
-							</a>
-							<a href="/docs" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-900 hover:bg-slate-50 transition">
-								Book a demo <Calendar className="w-4 h-4" />
-							</a>
+						<div className="reveal relative">
+							{/* Abstract representation of data flow */}
+							<div className="relative rounded-[2rem] bg-[#0F131F] border border-white/10 p-8 shadow-2xl">
+								<img src="/images/Data_management.png" alt="Integration" className="w-full h-auto object-contain opacity-80 hover:opacity-100 transition-opacity duration-500" />
+							</div>
 						</div>
 					</div>
 				</div>

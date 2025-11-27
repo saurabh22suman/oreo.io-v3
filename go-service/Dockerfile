@@ -8,10 +8,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
 	--mount=type=cache,target=/root/.cache/go-build \
-	go build -o server ./
+	go build -o server ./cmd/server
 
 FROM alpine:3.20
 WORKDIR /app
+# Add curl for tooling (e.g., diagnostics, CI linters)
+RUN apk add --no-cache ca-certificates curl
 COPY --from=build /app/server /app/server
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost:8080/healthz || exit 1

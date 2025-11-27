@@ -1,11 +1,10 @@
 import { Outlet } from 'react-router-dom'
 import Navbar from './Navbar'
-import Footer from './Footer'
 import Sidebar from './Sidebar'
 import { useUser } from '../context/UserContext'
 import { CollapseProvider, useCollapse } from '../context/CollapseContext'
 
-function InnerLayout(){
+function InnerLayout() {
   const { user } = useUser()
   const { collapsed } = useCollapse()
   return (
@@ -17,15 +16,14 @@ function InnerLayout(){
         )}
 
         <main className={`main flex-1 p-6 lg:p-8 overflow-auto ${user ? '' : 'max-w-full'}`}>
-          <div className="max-w-7xl mx-auto"><Outlet/></div>
+          <div className="max-w-[95%] mx-auto"><Outlet /></div>
         </main>
       </div>
-      <Footer />
     </div>
   )
 }
 
-export default function Layout(){
+export default function Layout() {
   return (
     <CollapseProvider>
       <InnerLayout />

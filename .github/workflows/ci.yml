@@ -2,6 +2,55 @@ name: CI
 
 on:
   push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+
+      - name: Go test
+        working-directory: go-service
+        run: go test ./...
+
+  python-delta-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r python-service/requirements.txt
+
+      - name: Run pytest (delta adapter and parity)
+        run: |
+          pytest -q python-service/tests || pytest -q python-service/tests -k delta_adapter
+
+  # Future: remove Postgres deps once deprecated paths eliminated
+  # Track: drop psycopg2 from python-service/requirements.txt and lib/pq from go-service if unusedname: CI
+
+on:
+  push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]

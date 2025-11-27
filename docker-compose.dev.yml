@@ -1,8 +1,20 @@
+# =====================================================================
+# SECURITY WARNING: This file contains INSECURE default passwords
+# for development convenience. DO NOT use these in production!
+#
+# For secure configuration:
+# 1. See docker-compose.dev.yml.example for template
+# 2. Generate strong secrets: openssl rand -base64 32
+# 3. Update JWT_SECRET (min 32 chars) and ADMIN_PASSWORD (min 12 chars)
+# =====================================================================
+
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: oreo
+      # INSECURE: Change this password in production!
       POSTGRES_PASSWORD: oreo
       POSTGRES_DB: oreo
     healthcheck:
@@ -14,16 +26,39 @@ services:
   go-service:
     build:
       context: ./go-service
+    restart: unless-stopped
     ports:
-      - "8081:8080"
+      - "8080:8080"
     environment:
       - PYTHON_SERVICE_URL=http://python-service:8000
-      - DATABASE_URL=postgres://oreo:oreo@db:5432/oreo?sslmode=disable
-      - JWT_SECRET=dev-secret
+      # During migration, prefer SQLite metadata DB; DATABASE_URL remains for legacy runs
+      - METADATA_DB=/data/meta/oreo.db
+      # Point Go admin delta tools at the same root as python-service
+      - DELTA_DATA_ROOT=/data/delta
+      # Default to Delta backend for data operations (adapter selection)
+      - DEFAULT_STORAGE_BACKEND=delta
+      # - DATABASE_URL=postgres://oreo:oreo@db:5432/oreo?sslmode=disable
+      
+      # Secure JWT_SECRET (32+ characters, generated with openssl)
+      - JWT_SECRET=N1OaXOyjhvN9VqHP4W60tvSmQ0kAXGBFyp978b489Sc=
+      
+      # Dev admin password (meets 12+ chars requirement)
+      - ADMIN_PASSWORD=DevAdmin123!@#
+      
+      # Google OAuth (optional)
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      
+      # Session settings
+      - SESSION_TIMEOUT=3600
+      - COOKIE_SECURE=false
+      - COOKIE_DOMAIN=localhost
+      - PORT=8080
+      - ENV=development
     depends_on:
-      - python-service
-      - db
+      python-service:
+        condition: service_healthy
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 30s
@@ -38,17 +73,25 @@ services:
             - vendor/
         - action: rebuild
           path: ./go-service/go.mod
+    volumes:
+      - ./metadata:/data/meta
+      - ./delta-data:/data/delta
 
   python-service:
     build:
       context: ./python-service
+    restart: unless-stopped
     ports:
       - "8000:8000"
+    environment:
+      - DELTA_DATA_ROOT=/data/delta
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 3s
       retries: 3
+    volumes:
+      - ./delta-data:/data/delta
     develop:
       watch:
         - action: sync
@@ -62,13 +105,15 @@ services:
   frontend:
     build:
       context: ./frontend
+    restart: unless-stopped
     ports:
       - "5173:80"
     environment:
       - VITE_API_BASE=http://go-service:8080/api
       - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     depends_on:
-      - go-service
+      go-service:
+        condition: service_healthy
 
   go-dev:
     image: golang:1.22

@@ -1,0 +1,129 @@
+# =====================================================================
+# Docker Compose Development Configuration Template
+# =====================================================================
+# SECURITY WARNING: This is a template with INSECURE defaults for 
+# demonstration purposes only. DO NOT use these values in production!
+#
+# BEFORE USING:
+# 1. Copy this file to docker-compose.dev.yml
+# 2. Replace all CHANGE_ME placeholders with secure values
+# 3. Generate strong secrets using: openssl rand -base64 32
+# 4. Never commit docker-compose.dev.yml with real secrets
+#
+# See .env.example for additional configuration options
+# =====================================================================
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: oreo
+      # SECURITY: Change this password! Default is INSECURE
+      POSTGRES_PASSWORD: CHANGE_ME_oreo_db_password
+      POSTGRES_DB: oreo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oreo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  go-service:
+    build:
+      context: ./go-service
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    environment:
+      - PYTHON_SERVICE_URL=http://python-service:8000
+      # During migration, prefer SQLite metadata DB; DATABASE_URL remains for legacy runs
+      - METADATA_DB=/data/meta/oreo.db
+      # Point Go admin delta tools at the same root as python-service
+      - DELTA_DATA_ROOT=/data/delta
+      # Default to Delta backend for data operations (adapter selection)
+      - DEFAULT_STORAGE_BACKEND=delta
+      # - DATABASE_URL=postgres://oreo:CHANGE_ME_oreo_db_password@db:5432/oreo?sslmode=disable
+      
+      # SECURITY: JWT_SECRET must be at least 32 characters (enforced by config validation)
+      # Generate with: openssl rand -base64 32
+      - JWT_SECRET=CHANGE_ME_minimum_32_characters_required_generate_with_openssl
+      
+      # SECURITY: ADMIN_PASSWORD must be at least 12 characters (enforced by config validation)
+      # Use strong password with upper, lower, digits, and special characters
+      - ADMIN_PASSWORD=CHANGE_ME_Admin123!@#Strong
+      
+      # Google OAuth (optional - leave empty to disable)
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      
+      # Session and cookie settings
+      - SESSION_TIMEOUT=3600
+      - COOKIE_SECURE=false
+      - COOKIE_DOMAIN=localhost
+      
+    depends_on:
+      python-service:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    develop:
+      watch:
+        - action: sync
+          path: ./go-service
+          target: /app
+          ignore:
+            - vendor/
+        - action: rebuild
+          path: ./go-service/go.mod
+    volumes:
+      - ./metadata:/data/meta
+      - ./delta-data:/data/delta
+
+  python-service:
+    build:
+      context: ./python-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DELTA_DATA_ROOT=/data/delta
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - ./delta-data:/data/delta
+    develop:
+      watch:
+        - action: sync
+          path: ./python-service
+          target: /app
+          ignore:
+            - __pycache__/
+        - action: rebuild
+          path: ./python-service/requirements.txt
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    environment:
+      - VITE_API_BASE=http://go-service:8080/api
+      - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+    depends_on:
+      go-service:
+        condition: service_healthy
+
+  go-dev:
+    image: golang:1.22
+    working_dir: /workspace
+    volumes:
+      - ./go-service:/workspace
+    command: ["sleep", "infinity"]

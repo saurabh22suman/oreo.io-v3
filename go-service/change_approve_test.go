@@ -1,4 +1,5 @@
 package main
+import "github.com/oreo-io/oreo.io-v2/go-service/internal/handlers"
 
 import (
 	"bytes"
@@ -9,8 +10,8 @@ import (
 	"testing"
 
 	sqlite "github.com/glebarez/sqlite"
-	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
-	"github.com/oreo-io/oreo.io-v2/go-service/models"
+	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
+	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
 	"gorm.io/gorm"
 )
 
@@ -36,7 +37,7 @@ func TestApproveAppendAppliesAndUpdatesStats(t *testing.T) {
 	_ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.ProjectRole{}, &models.Dataset{}, &models.DatasetUpload{}, &models.ChangeRequest{}, &models.DatasetMeta{}, &models.ChangeComment{}, &models.DatasetVersion{}, &models.Notification{})
 	dbpkg.Set(gdb)
 
-	r := SetupRouter()
+	r := handlers.SetupRouter()
 	token := tokenFor(t, r, "owner@test.local")
 
 	// Create project

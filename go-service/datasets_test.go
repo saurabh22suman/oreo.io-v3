@@ -1,4 +1,5 @@
 package main
+import "github.com/oreo-io/oreo.io-v2/go-service/internal/handlers"
 
 import (
 	"bytes"
@@ -11,8 +12,8 @@ import (
 	"testing"
 
 	sqlite "github.com/glebarez/sqlite"
-	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/db"
-	"github.com/oreo-io/oreo.io-v2/go-service/models"
+	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
+	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
 	"gorm.io/gorm"
 )
 
@@ -27,7 +28,7 @@ func setupDatasetsTest(t *testing.T) (token string, projectID uint) {
 	}
 	dbpkg.Set(gdb)
 
-	r := SetupRouter()
+	r := handlers.SetupRouter()
 	token = dsAuthToken(t, r)
 
 	// Create project
@@ -73,7 +74,7 @@ func dsAuthToken(t *testing.T, r http.Handler) string {
 
 func TestDatasetsCRUD(t *testing.T) {
 	token, pid := setupDatasetsTest(t)
-	r := SetupRouter()
+	r := handlers.SetupRouter()
 
 	// Create dataset
 	body, _ := json.Marshal(map[string]any{"name": "DS1", "schema": "{}"})
@@ -145,7 +146,7 @@ func TestAppendJSONValidateAndOpenTop(t *testing.T) {
 	_ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.ProjectRole{}, &models.Dataset{}, &models.DatasetUpload{}, &models.ChangeRequest{}, &models.DatasetMeta{})
 	dbpkg.Set(gdb)
 
-	r := SetupRouter()
+	r := handlers.SetupRouter()
 	token := dsAuthToken(t, r)
 
 	// Create project
@@ -211,7 +212,7 @@ func TestDatasetsRBAC(t *testing.T) {
 	gdb, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	_ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.ProjectRole{}, &models.Dataset{})
 	dbpkg.Set(gdb)
-	r := SetupRouter()
+	r := handlers.SetupRouter()
 
 	owner := tokenFor(t, r, "owner@test.local")
 	viewer := tokenFor(t, r, "viewer@test.local")
@@ -348,7 +349,7 @@ func TestDatasetUpload(t *testing.T) {
 	gdb, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	_ = gdb.AutoMigrate(&models.User{}, &models.Project{}, &models.ProjectRole{}, &models.Dataset{})
 	dbpkg.Set(gdb)
-	r := SetupRouter()
+	r := handlers.SetupRouter()
 
 	owner := tokenFor(t, r, "u@test.local")
 	// create project

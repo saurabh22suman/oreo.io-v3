@@ -1,34 +1,42 @@
-services:
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - dokploy-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+version: "3.9"
 
+services:
   go-service:
     build:
       context: ./go-service
       dockerfile: Dockerfile
-    environment:
-      - PYTHON_SERVICE_URL=http://python-service:8000
-      - DATABASE_URL=${DATABASE_URL}
-      - JWT_SECRET=${JWT_SECRET}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-    depends_on:
-      - python-service
-      - db
+    restart: unless-stopped
     networks:
       - dokploy-network
+
+    environment:
+      PYTHON_SERVICE_URL: http://python-service:8000
+      ENV: production
+      PORT: 8080
+
+      # Delta configuration
+      DELTA_DATA_ROOT: /data/delta
+      METADATA_DB: /data/meta/oreo.db
+      DEFAULT_STORAGE_BACKEND: delta
+
+      # Secrets (stored in Dokploy env vars)
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+
+      # Cookies & session
+      SESSION_TIMEOUT: 3600
+      COOKIE_SECURE: true
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN}
+
+    volumes:
+      - delta_data:/data/delta
+      - meta_data:/data/meta
+
+    depends_on:
+      python-service:
+        condition: service_healthy
+
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 30s
@@ -39,10 +47,17 @@ services:
     build:
       context: ./python-service
       dockerfile: Dockerfile
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
+    restart: unless-stopped
     networks:
       - dokploy-network
+
+    environment:
+      ENV: production
+      DELTA_DATA_ROOT: /data/delta
+
+    volumes:
+      - delta_data:/data/delta
+
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -53,17 +68,22 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    environment:
-      - VITE_API_BASE=https://api.oreo.soloengine.in
-      - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-    depends_on:
-      - go-service
+    restart: unless-stopped
     networks:
       - dokploy-network
+
+    environment:
+      VITE_API_BASE: ${FRONTEND_API_BASE}
+      VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+
+    depends_on:
+      go-service:
+        condition: service_healthy
 
 networks:
   dokploy-network:
     external: true
 
 volumes:
-  postgres_data:
+  delta_data:
+  meta_data:
