@@ -61,15 +61,8 @@ export default function Navbar() {
 						</Link>
 					</div>
 
-					{/* Desktop links */}
+					{/* Desktop links - placeholder for future navigation */}
 					<div className="hidden md:flex items-center gap-6">
-						{ready && !user && (
-							<>
-								<a href="#features" className="text-sm font-medium text-slate-400 hover:text-cyan-400 transition-colors">Features</a>
-								<a href="#how" className="text-sm font-medium text-slate-400 hover:text-cyan-400 transition-colors">How it works</a>
-								<a href="/docs" target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-slate-400 hover:text-cyan-400 transition-colors">Docs</a>
-							</>
-						)}
 					</div>
 
 					{/* Actions */}

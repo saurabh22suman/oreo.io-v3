@@ -71,6 +71,9 @@ const EditedCellRenderer = (params: any) => {
         return <span>{value}</span>
     }
 
+    // For edited cells, show the NEW value (not the original value from row data)
+    const displayValue = editInfo.newValue ?? value
+
     return (
         <div
             ref={cellRef}
@@ -78,7 +81,7 @@ const EditedCellRenderer = (params: any) => {
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
         >
-            <span>{value}</span>
+            <span>{displayValue}</span>
             {showTooltip && createPortal(
                 <div
                     style={{
