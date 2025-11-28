@@ -2,13 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Oreo.io UI Revamp - Purple Accent Theme */
+/* ============================================
+   OREO.IO UI REVAMP - Purple Accent Theme
+   Design System v2.0
+   ============================================ */
+
+/* ============================================
+   1. CSS VARIABLES / THEME TOKENS
+   ============================================ */
 
 :root {
-  /* Light Mode Variables */
+  /* Light Mode Variables (Default) */
   --bg-page: #F9F9FF;
   --bg-surface: #FFFFFF;
   --bg-surface-2: #F2F0FF;
+  --bg-surface-3: #E8E4FF;
   
   --primary: #8A63FF;
   --primary-glow: #A87CFF;
@@ -18,11 +26,12 @@
   --text-secondary: #6B7280;
   --text-muted: #9CA3AF;
   
-  --border-subtle: rgba(0,0,0,0.06);
+  --border-subtle: rgba(0, 0, 0, 0.06);
   --divider: #E5E7EB;
   
   --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
   --shadow-hover: 0 10px 15px -3px rgba(138, 99, 255, 0.1), 0 4px 6px -2px rgba(138, 99, 255, 0.05);
+  --shadow-primary: 0 4px 12px rgba(123, 75, 255, 0.3);
 }
 
 /* Dark Mode Variables */
@@ -30,6 +39,7 @@
   --bg-page: #0D0F14;
   --bg-surface: #141720;
   --bg-surface-2: #1A1E28;
+  --bg-surface-3: #212635;
   
   --primary: #7B4BFF;
   --primary-glow: #A87CFF;
@@ -39,12 +49,17 @@
   --text-secondary: #9CA3AF;
   --text-muted: #6B7280;
   
-  --border-subtle: rgba(255,255,255,0.06);
+  --border-subtle: rgba(255, 255, 255, 0.06);
   --divider: #2C3245;
   
   --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
   --shadow-hover: 0 10px 15px -3px rgba(123, 75, 255, 0.2), 0 4px 6px -2px rgba(123, 75, 255, 0.1);
+  --shadow-primary: 0 4px 12px rgba(123, 75, 255, 0.4);
 }
+
+/* ============================================
+   2. BASE STYLES
+   ============================================ */
 
 html,
 body,
@@ -52,7 +67,7 @@ body,
   height: 100%;
   font-family: 'Inter', 'IBM Plex Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  transition: background-color 0.25s ease, color 0.25s ease;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
@@ -60,70 +75,202 @@ body {
   color: var(--text);
   font-size: 14px;
   line-height: 1.5;
+  transition: background-color 250ms ease, color 250ms ease;
 }
 
-/* Typography */
+/* ============================================
+   3. TYPOGRAPHY
+   ============================================ */
+
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: 'IBM Plex Sans', 'Inter', sans-serif;
   line-height: 1.2;
   color: var(--text);
+  font-weight: 600;
 }
 
-h1 { font-size: 36px; font-weight: 700; }
-h2 { font-size: 28px; font-weight: 600; }
-h3 { font-size: 22px; font-weight: 600; }
-
-/* Components */
-
-/* Buttons */
-.btn {
-  @apply px-4 py-2 rounded-btn font-medium transition-all duration-200 flex items-center justify-center gap-2;
+h1 { 
+  font-size: 36px; 
+  font-weight: 700; 
 }
 
-.btn-primary {
-  background: var(--primary-gradient);
-  color: white;
-  box-shadow: 0 4px 12px rgba(123, 75, 255, 0.3);
+h2 { 
+  font-size: 28px; 
+  font-weight: 600; 
 }
 
-.btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(123, 75, 255, 0.4);
+h3 { 
+  font-size: 22px; 
+  font-weight: 600; 
 }
 
-.btn-primary:active {
-  transform: translateY(0);
+h4 {
+  font-size: 18px;
+  font-weight: 600;
 }
 
-.btn-secondary {
-  @apply bg-surface-3 text-text-primary hover:bg-surface-4 border border-border-subtle;
+/* ============================================
+   4. BUTTON COMPONENTS
+   ============================================ */
+
+@layer components {
+  .btn {
+    @apply px-4 py-2.5 rounded-btn font-semibold transition-all duration-200 flex items-center justify-center gap-2 text-sm;
+  }
+
+  .btn-primary {
+    background: var(--primary-gradient);
+    color: white;
+    box-shadow: var(--shadow-primary);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(123, 75, 255, 0.4);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(123, 75, 255, 0.3);
+  }
+
+  .btn-primary:disabled {
+    @apply opacity-50 cursor-not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .btn-secondary {
+    background-color: var(--bg-surface-2);
+    color: var(--text);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .btn-secondary:hover {
+    background-color: var(--bg-surface-3);
+    border-color: var(--primary);
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-current;
+  }
+
+  .btn-ghost:hover {
+    background-color: var(--bg-surface-2);
+  }
+
+  .btn-danger {
+    @apply bg-danger text-white;
+  }
+
+  .btn-danger:hover {
+    @apply bg-danger/90;
+    transform: translateY(-1px);
+  }
+
+  /* Size Variants */
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+
+  .btn-lg {
+    @apply px-6 py-3 text-base;
+  }
 }
 
-/* Cards */
-.card {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  box-shadow: var(--shadow-card);
-  transition: all 0.2s ease;
+/* ============================================
+   5. CARD COMPONENTS
+   ============================================ */
+
+@layer components {
+  .card {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    box-shadow: var(--shadow-card);
+    transition: all 200ms ease;
+  }
+
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+    border-color: rgba(123, 75, 255, 0.2);
+  }
+
+  .card-static {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    box-shadow: var(--shadow-card);
+  }
+
+  .card-interactive {
+    @apply card cursor-pointer;
+  }
+
+  .card-interactive:active {
+    transform: translateY(0);
+  }
 }
 
-.card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-hover);
-  border-color: rgba(123, 75, 255, 0.2);
+/* ============================================
+   6. INPUT COMPONENTS
+   ============================================ */
+
+@layer components {
+  .input {
+    @apply w-full px-4 py-3 rounded-input text-sm transition-all duration-200;
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text);
+  }
+
+  .input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(123, 75, 255, 0.15);
+  }
+
+  .input:disabled {
+    @apply opacity-60 cursor-not-allowed;
+    background-color: var(--bg-surface-2);
+  }
+
+  .input-error {
+    border-color: #FF5370;
+    box-shadow: 0 0 0 3px rgba(255, 83, 112, 0.15);
+  }
+
+  /* Select */
+  .select {
+    @apply input appearance-none bg-no-repeat cursor-pointer;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.75rem center;
+    background-size: 1.25em 1.25em;
+    padding-right: 2.5rem;
+  }
+
+  /* Textarea */
+  .textarea {
+    @apply input resize-none;
+    min-height: 100px;
+  }
+
+  /* Label */
+  .label {
+    @apply block text-xs font-bold uppercase tracking-wider mb-2;
+    color: var(--text-secondary);
+  }
 }
 
-/* Inputs */
-.input {
-  @apply w-full px-4 py-3 rounded-input bg-surface-1 border border-border-subtle text-text transition-all duration-200;
-}
+/* ============================================
+   7. AG GRID CUSTOMIZATION
+   ============================================ */
 
-.input:focus {
-  @apply outline-none ring-2 ring-primary/50 border-primary;
-}
-
-/* AG Grid Customization */
 .ag-theme-quartz-dark {
   --ag-background-color: var(--bg-surface);
   --ag-header-background-color: var(--bg-surface-2);
@@ -135,6 +282,9 @@ h3 { font-size: 22px; font-weight: 600; }
   --ag-header-column-separator-height: 100%;
   --ag-header-column-separator-width: 1px;
   --ag-header-column-separator-color: var(--divider);
+  --ag-cell-horizontal-border: none;
+  --ag-range-selection-border-color: var(--primary);
+  --ag-input-focus-border-color: var(--primary);
 }
 
 .ag-theme-quartz {
@@ -142,9 +292,14 @@ h3 { font-size: 22px; font-weight: 600; }
   --ag-header-background-color: var(--bg-surface-2);
   --ag-row-hover-color: rgba(138, 99, 255, 0.08);
   --ag-selected-row-background-color: rgba(138, 99, 255, 0.12);
+  --ag-range-selection-border-color: var(--primary);
+  --ag-input-focus-border-color: var(--primary);
 }
 
-/* Scrollbar */
+/* ============================================
+   8. SCROLLBAR
+   ============================================ */
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -161,4 +316,163 @@ h3 { font-size: 22px; font-weight: 600; }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--divider) transparent;
+}
+
+/* ============================================
+   9. UTILITY CLASSES
+   ============================================ */
+
+@layer utilities {
+  /* Gradient Text */
+  .text-gradient {
+    @apply text-transparent bg-clip-text;
+    background-image: var(--primary-gradient);
+  }
+
+  /* Glow Effects */
+  .glow {
+    box-shadow: 0 0 20px rgba(123, 75, 255, 0.3);
+  }
+
+  .glow-sm {
+    box-shadow: 0 0 10px rgba(123, 75, 255, 0.2);
+  }
+
+  .glow-lg {
+    box-shadow: 0 0 40px rgba(123, 75, 255, 0.4);
+  }
+
+  /* Background patterns */
+  .bg-grid-pattern {
+    background-image: 
+      linear-gradient(rgba(123, 75, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(123, 75, 255, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* Backdrop blur presets */
+  .backdrop-blur-surface {
+    @apply backdrop-blur-xl bg-opacity-80;
+  }
+}
+
+/* ============================================
+   10. ANIMATION UTILITIES
+   ============================================ */
+
+@layer utilities {
+  .animate-in {
+    animation: fadeIn 180ms ease-out forwards;
+  }
+
+  .slide-in-from-top {
+    animation: slideFromTop 220ms ease-out forwards;
+  }
+
+  .slide-in-from-bottom {
+    animation: slideFromBottom 220ms ease-out forwards;
+  }
+
+  @keyframes slideFromTop {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideFromBottom {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+/* ============================================
+   11. FOCUS STATES
+   ============================================ */
+
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ============================================
+   12. SELECTION
+   ============================================ */
+
+::selection {
+  background-color: rgba(123, 75, 255, 0.3);
+  color: inherit;
+}
+
+/* ============================================
+   13. TOAST/ALERT COMPONENTS
+   ============================================ */
+
+@layer components {
+  .toast {
+    @apply fixed bottom-4 right-4 px-4 py-3 rounded-card shadow-lg z-50;
+    animation: slideUp 220ms ease-out;
+  }
+
+  .toast-success {
+    @apply bg-success/10 border border-success/20 text-success;
+  }
+
+  .toast-error {
+    @apply bg-danger/10 border border-danger/20 text-danger;
+  }
+
+  .toast-warning {
+    @apply bg-warning/10 border border-warning/20 text-warning;
+  }
+
+  .toast-info {
+    @apply bg-info/10 border border-info/20 text-info;
+  }
+}
+
+/* ============================================
+   14. BADGE COMPONENTS
+   ============================================ */
+
+@layer components {
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold;
+  }
+
+  .badge-primary {
+    @apply bg-primary/10 text-primary border border-primary/20;
+  }
+
+  .badge-success {
+    @apply bg-success/10 text-success border border-success/20;
+  }
+
+  .badge-warning {
+    @apply bg-warning/10 text-warning border border-warning/20;
+  }
+
+  .badge-danger {
+    @apply bg-danger/10 text-danger border border-danger/20;
+  }
+
+  .badge-info {
+    @apply bg-info/10 text-info border border-info/20;
+  }
 }

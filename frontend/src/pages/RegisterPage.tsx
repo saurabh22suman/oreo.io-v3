@@ -10,7 +10,7 @@ export default function RegisterPage() {
   const [err, setErr] = useState('')
   const navigate = useNavigate()
   return (
-    <div className="bg-surface-1 min-h-screen flex flex-col animate-fade-in">
+    <div className="bg-page min-h-screen flex flex-col animate-fade-in">
       <Navbar />
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
@@ -59,8 +59,8 @@ export default function RegisterPage() {
           {/* Right side - Form */}
           <div className="w-full">
             {err && (
-              <div className="mb-6 p-4 rounded-xl bg-error/10 border border-error/20 text-error text-sm flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-error"></div>
+              <div className="mb-6 p-4 rounded-xl bg-danger/10 border border-danger/20 text-danger text-sm flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-danger"></div>
                 {err}
               </div>
             )}
