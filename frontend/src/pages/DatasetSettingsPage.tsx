@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { deleteDataset, getDataset, getDatasetStatsTop, getProject, myProjectRole } from '../api'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '../components/ui/dialog'
 import Alert from '../components/Alert'
-import { Settings, ChevronLeft, Database, User, Calendar, Table2, BarChart3, AlertTriangle, Trash2, Info } from 'lucide-react'
+import { Settings, ChevronLeft, Database, User, Calendar, Table2, BarChart3, AlertTriangle, Trash2, Info, ChevronRight } from 'lucide-react'
 
 export default function DatasetSettingsPage() {
   const { id, datasetId } = useParams()
@@ -34,220 +34,219 @@ export default function DatasetSettingsPage() {
 
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800 border-b border-slate-700">
-        <div className="max-w-[95%] mx-auto px-6 py-8">
-          <Link
-            to={`/projects/${projectId}/datasets/${dsId}`}
-            className="inline-flex items-center gap-2 text-sm font-medium text-slate-300 hover:text-white mb-6 transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back to Dataset
-          </Link>
+    <div className="space-y-8 animate-fade-in pb-12">
+      {error && <Alert type="error" message={error} onClose={() => setError('')} />}
+      {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss={true} />}
 
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-white/10 backdrop-blur-sm">
-              <Settings className="w-8 h-8 text-white" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-white">Settings</h1>
-              <p className="text-slate-300 text-sm mt-1">{dataset?.name || `Dataset #${dsId}`}</p>
-            </div>
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-sm text-text-secondary">
+        <span className="cursor-pointer hover:text-primary transition-colors" onClick={() => nav(`/projects/${projectId}/datasets`)}>Datasets</span>
+        <ChevronRight className="w-4 h-4" />
+        <span className="cursor-pointer hover:text-primary transition-colors" onClick={() => nav(`/projects/${projectId}/datasets/${dsId}`)}>{dataset?.name || 'Dataset'}</span>
+        <ChevronRight className="w-4 h-4" />
+        <span className="text-text font-medium">Settings</span>
+      </div>
+
+      {/* Header */}
+      <div className="bg-surface-1/50 backdrop-blur-sm border border-divider rounded-3xl p-8 shadow-lg shadow-black/5 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="p-3 rounded-2xl bg-surface-2 text-text-secondary">
+            <Settings className="w-8 h-8" />
+          </div>
+          <div>
+            <h1 className="text-4xl font-bold text-text font-display tracking-tight">Settings</h1>
+            <p className="text-text-secondary text-lg">Manage configuration and danger zone</p>
           </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="max-w-[95%] mx-auto px-6 py-8">
-        {error && <Alert type="error" message={error} onClose={() => setError('')} />}
-        {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss={true} />}
+      <div className="grid gap-8 grid-cols-1 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-8">
 
-        <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
-
-            {/* Metadata Section */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10">
-                  <Info className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 dark:text-white">Overview of dataset information</h3>
-                </div>
+          {/* Metadata Section */}
+          <div className="bg-surface-1 rounded-3xl shadow-lg shadow-black/5 border border-divider overflow-hidden">
+            <div className="px-8 py-6 border-b border-divider bg-surface-1/50 backdrop-blur-sm flex items-center gap-4">
+              <div className="p-2.5 rounded-xl bg-primary/10 text-primary shadow-sm border border-primary/20">
+                <Info className="w-5 h-5" />
               </div>
+              <div>
+                <h3 className="font-bold text-text text-lg">Dataset Information</h3>
+                <p className="text-sm text-text-secondary">Overview of metadata and statistics</p>
+              </div>
+            </div>
 
-              <div className="p-6 bg-slate-900 dark:bg-slate-950">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Dataset Name */}
-                  <div className="flex items-start gap-4">
-                    <div className="p-2.5 rounded-lg bg-blue-500/10 mt-1">
-                      <Database className="w-5 h-5 text-blue-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <dt className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Dataset Name</dt>
-                      <dd className="text-base font-semibold text-white break-words">{dataset?.name || '—'}</dd>
-                    </div>
+            <div className="p-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Dataset Name */}
+                <div className="flex items-start gap-4 group">
+                  <div className="p-3 rounded-xl bg-surface-2 mt-1 text-primary group-hover:bg-primary/10 transition-colors">
+                    <Database className="w-5 h-5" />
                   </div>
-
-                  {/* Owner */}
-                  <div className="flex items-start gap-4">
-                    <div className="p-2.5 rounded-lg bg-blue-500/10 mt-1">
-                      <User className="w-5 h-5 text-blue-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <dt className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Owner</dt>
-                      <dd className="text-base font-semibold text-white">{stats?.owner_name || dataset?.owner_name || '—'}</dd>
-                    </div>
+                  <div className="flex-1 min-w-0">
+                    <dt className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-1">Dataset Name</dt>
+                    <dd className="text-lg font-bold text-text break-words font-display">{dataset?.name || '—'}</dd>
                   </div>
+                </div>
 
-                  {/* Rows × Columns */}
-                  <div className="flex items-start gap-4">
-                    <div className="p-2.5 rounded-lg bg-blue-500/10 mt-1">
-                      <BarChart3 className="w-5 h-5 text-blue-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <dt className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Rows × Columns</dt>
-                      <dd className="text-base font-semibold text-white">
-                        {(stats?.row_count ?? 0).toLocaleString()} × {(stats?.column_count ?? 0).toLocaleString()}
-                      </dd>
-                    </div>
+                {/* Owner */}
+                <div className="flex items-start gap-4 group">
+                  <div className="p-3 rounded-xl bg-surface-2 mt-1 text-primary group-hover:bg-primary/10 transition-colors">
+                    <User className="w-5 h-5" />
                   </div>
-
-                  {/* Last Updated */}
-                  <div className="flex items-start gap-4">
-                    <div className="p-2.5 rounded-lg bg-blue-500/10 mt-1">
-                      <Calendar className="w-5 h-5 text-blue-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <dt className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Last Updated</dt>
-                      <dd className="text-base font-semibold text-white">
-                        {dataset?.last_upload_at
-                          ? new Date(dataset.last_upload_at).toLocaleString()
-                          : (stats as any)?.last_update_at
-                            ? new Date((stats as any).last_update_at).toLocaleString()
-                            : '—'}
-                      </dd>
-                    </div>
+                  <div className="flex-1 min-w-0">
+                    <dt className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-1">Owner</dt>
+                    <dd className="text-lg font-bold text-text font-display">{stats?.owner_name || dataset?.owner_name || '—'}</dd>
                   </div>
+                </div>
 
-                  {/* Table Location - Spans full width */}
-                  <div className="md:col-span-2 flex items-start gap-4">
-                    <div className="p-2.5 rounded-lg bg-blue-500/10 mt-1">
-                      <Table2 className="w-5 h-5 text-blue-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <dt className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Table Location</dt>
-                      <dd className="text-sm font-mono text-white break-all bg-slate-800 px-3 py-2 rounded-lg border border-slate-700">
-                        {stats?.table_location || '—'}
-                      </dd>
-                    </div>
+                {/* Rows × Columns */}
+                <div className="flex items-start gap-4 group">
+                  <div className="p-3 rounded-xl bg-surface-2 mt-1 text-primary group-hover:bg-primary/10 transition-colors">
+                    <BarChart3 className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <dt className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-1">Dimensions</dt>
+                    <dd className="text-lg font-bold text-text font-display">
+                      {(stats?.row_count ?? 0).toLocaleString()} <span className="text-text-secondary text-sm font-normal">rows</span> × {(stats?.column_count ?? 0).toLocaleString()} <span className="text-text-secondary text-sm font-normal">cols</span>
+                    </dd>
+                  </div>
+                </div>
+
+                {/* Last Updated */}
+                <div className="flex items-start gap-4 group">
+                  <div className="p-3 rounded-xl bg-surface-2 mt-1 text-primary group-hover:bg-primary/10 transition-colors">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <dt className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-1">Last Updated</dt>
+                    <dd className="text-lg font-bold text-text font-display">
+                      {dataset?.last_upload_at
+                        ? new Date(dataset.last_upload_at).toLocaleDateString()
+                        : (stats as any)?.last_update_at
+                          ? new Date((stats as any).last_update_at).toLocaleDateString()
+                          : '—'}
+                    </dd>
+                  </div>
+                </div>
+
+                {/* Table Location - Spans full width */}
+                <div className="md:col-span-2 flex items-start gap-4 group">
+                  <div className="p-3 rounded-xl bg-surface-2 mt-1 text-primary group-hover:bg-primary/10 transition-colors">
+                    <Table2 className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <dt className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2">Table Location</dt>
+                    <dd className="text-sm font-mono text-text break-all bg-surface-2 px-4 py-3 rounded-xl border border-divider group-hover:border-primary/30 transition-colors">
+                      {stats?.table_location || '—'}
+                    </dd>
                   </div>
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Danger Zone */}
-            {role === 'owner' && (
-              <div className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-900/10 overflow-hidden">
-                <div className="px-6 py-4 border-b border-red-100 dark:border-red-900/30 bg-red-50 dark:bg-red-950/30 flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-red-500/10">
-                    <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-red-700 dark:text-red-400">Danger Zone</h3>
-                    <p className="text-xs text-red-600/80 dark:text-red-400/80 mt-0.5">Irreversible actions - proceed with caution</p>
-                  </div>
+          {/* Danger Zone */}
+          {role === 'owner' && (
+            <div className="rounded-3xl border border-error/20 bg-error/5 overflow-hidden shadow-sm">
+              <div className="px-8 py-6 border-b border-error/20 bg-error/10 flex items-center gap-4">
+                <div className="p-2.5 rounded-xl bg-error/20 text-error shadow-sm">
+                  <AlertTriangle className="w-5 h-5" />
                 </div>
+                <div>
+                  <h3 className="font-bold text-error text-lg">Danger Zone</h3>
+                  <p className="text-sm text-error/80">Irreversible actions - proceed with caution</p>
+                </div>
+              </div>
 
-                <div className="p-6 flex items-center justify-between gap-4 bg-slate-950">
-                  <div>
-                    <h4 className="font-medium text-white">Delete Dataset</h4>
-                    <p className="text-sm text-slate-400 mt-1">
-                      Permanently delete this dataset and all its data.
-                    </p>
-                  </div>
+              <div className="p-8 flex items-center justify-between gap-6 flex-wrap">
+                <div>
+                  <h4 className="font-bold text-text text-lg">Delete Dataset</h4>
+                  <p className="text-text-secondary mt-1 max-w-md">
+                    Permanently delete this dataset and all its associated data, history, and settings.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDeleteOpen(true)}
+                  className="px-6 py-3 rounded-xl border-2 border-error/20 text-error hover:bg-error hover:text-white hover:border-error font-bold transition-all flex items-center gap-2 whitespace-nowrap shadow-sm hover:shadow-error/20"
+                >
+                  <Trash2 className="w-5 h-5" />
+                  Delete Dataset
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Delete confirmation modal */}
+          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <DialogContent className="max-w-md w-full p-0 overflow-hidden rounded-3xl border-0 bg-surface-1 shadow-2xl">
+              <div className="bg-error/10 p-8 flex flex-col items-center text-center border-b border-error/20">
+                <div className="w-16 h-16 rounded-full bg-error/20 flex items-center justify-center mb-4 text-error shadow-inner border border-error/10">
+                  <AlertTriangle className="w-8 h-8" />
+                </div>
+                <DialogTitle className="text-2xl font-bold text-text font-display">Delete Dataset?</DialogTitle>
+                <DialogDescription className="text-text-secondary mt-2 text-base">
+                  This will permanently delete <span className="font-bold text-text">{dataset?.name}</span>. This action cannot be undone.
+                </DialogDescription>
+              </div>
+
+              <div className="p-8">
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-text-secondary mb-2 uppercase tracking-wider">
+                    Type <span className="font-mono font-bold select-all text-text normal-case px-1.5 py-0.5 rounded bg-surface-2 border border-divider">{dataset?.name}</span> to confirm
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-3 rounded-xl border border-divider bg-surface-2 text-text focus:ring-2 focus:ring-error/20 focus:border-error outline-none transition-all shadow-sm"
+                    placeholder="Type dataset name"
+                    onChange={(e) => setConfirmName(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-3">
+                  <DialogClose asChild>
+                    <button
+                      className="px-6 py-2.5 rounded-xl font-bold text-text-secondary hover:bg-surface-2 hover:text-text transition-colors"
+                      disabled={busy}
+                    >
+                      Cancel
+                    </button>
+                  </DialogClose>
                   <button
-                    onClick={() => setDeleteOpen(true)}
-                    className="px-4 py-2 rounded-lg border border-red-600/50 text-red-500 hover:bg-red-950/50 font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
+                    className="px-8 py-2.5 rounded-xl bg-error hover:bg-error-hover text-white font-bold shadow-lg shadow-error/30 hover:shadow-error/40 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                    disabled={busy || confirmName !== dataset?.name}
+                    onClick={async () => {
+                      setBusy(true)
+                      try {
+                        await deleteDataset(projectId, dsId)
+                        setDeleteOpen(false)
+                        setToast('Dataset deleted successfully')
+                        nav(`/projects/${projectId}`)
+                      } catch (e: any) { setToast(e.message) }
+                      finally { setBusy(false) }
+                    }}
                   >
-                    <Trash2 className="w-4 h-4" />
-                    Delete Dataset
+                    {busy ? 'Deleting...' : 'Yes, Delete Dataset'}
                   </button>
                 </div>
               </div>
-            )}
-
-            {/* Delete confirmation modal */}
-            <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-              <DialogContent className="max-w-md w-full p-0 overflow-hidden rounded-2xl border-0">
-                <div className="bg-red-50 dark:bg-red-900/20 p-6 flex flex-col items-center text-center border-b border-red-100 dark:border-red-900/30">
-                  <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center mb-4 text-red-600 dark:text-red-400">
-                    <AlertTriangle className="w-6 h-6" />
-                  </div>
-                  <DialogTitle className="text-xl font-bold text-slate-900 dark:text-white">Delete Dataset?</DialogTitle>
-                  <DialogDescription className="text-slate-500 dark:text-slate-400 mt-2">
-                    This will permanently delete <span className="font-bold text-slate-900 dark:text-white">{dataset?.name}</span>. This action cannot be undone.
-                  </DialogDescription>
-                </div>
-
-                <div className="p-6 bg-white dark:bg-slate-900">
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Type <span className="font-mono font-bold select-all">{dataset?.name}</span> to confirm
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all"
-                      placeholder="Type dataset name"
-                      onChange={(e) => setConfirmName(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex items-center justify-end gap-3">
-                    <DialogClose asChild>
-                      <button
-                        className="px-4 py-2 rounded-xl font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                        disabled={busy}
-                      >
-                        Cancel
-                      </button>
-                    </DialogClose>
-                    <button
-                      className="px-6 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold shadow-lg shadow-red-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={busy || confirmName !== dataset?.name}
-                      onClick={async () => {
-                        setBusy(true)
-                        try {
-                          await deleteDataset(projectId, dsId)
-                          setDeleteOpen(false)
-                          setToast('Dataset deleted successfully')
-                          nav(`/projects/${projectId}`)
-                        } catch (e: any) { setToast(e.message) }
-                        finally { setBusy(false) }
-                      }}
-                    >
-                      {busy ? 'Deleting...' : 'Yes, Delete Dataset'}
-                    </button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+            </DialogContent>
+          </Dialog>
 
 
-            {role !== 'owner' && (
-              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-xl p-6 text-center">
-                <Info className="w-8 h-8 text-blue-600 dark:text-blue-400 mx-auto mb-3" />
-                <p className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-1">Limited Access</p>
-                <p className="text-sm text-blue-700 dark:text-blue-400">
-                  You need owner permissions to access advanced settings and delete this dataset.
-                </p>
+          {role !== 'owner' && (
+            <div className="bg-surface-2/50 border border-divider rounded-3xl p-8 text-center">
+              <div className="inline-flex p-4 rounded-full bg-surface-2 mb-4 shadow-inner">
+                <Info className="w-8 h-8 text-text-secondary" />
               </div>
-            )}
-          </div>
+              <p className="text-lg font-bold text-text mb-2">Limited Access</p>
+              <p className="text-text-secondary max-w-md mx-auto">
+                You need owner permissions to access advanced settings and delete this dataset.
+              </p>
+            </div>
+          )}
+        </div>
 
-          <div className="lg:col-span-1">
-            {/* Placeholder for future settings sidebar */}
-          </div>
+        <div className="lg:col-span-1">
+          {/* Placeholder for future settings sidebar */}
         </div>
       </div>
     </div>

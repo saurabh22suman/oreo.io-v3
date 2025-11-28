@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { getDatasetSchemaTop, setDatasetRulesTop, setDatasetSchemaTop, getProject, myProjectRole, finalizeDataset, deleteStagedUpload } from '../api'
 import Alert from '../components/Alert'
-import { Check, X, Edit2, Save } from 'lucide-react'
+import { Check, X, Edit2, Save, ArrowLeft, Loader2, Shield, Database, AlertCircle } from 'lucide-react'
 
 type ColumnSchema = {
   name: string
@@ -362,102 +362,114 @@ export default function DatasetSchemaRulesPage() {
     return (
       <div className="max-w-7xl mx-auto py-8 px-4">
         <div className="flex items-center justify-center h-64">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--divider)] border-t-[var(--primary)]"></div>
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text)]">
-            {isStagingMode ? 'Configure Schema & Rules' : 'Schema & Rules'}
-          </h1>
-          {isStagingMode && stagingState?.name && (
-            <p className="text-[var(--text-secondary)] mt-1">
-              Dataset: <span className="font-medium text-[var(--text)]">{stagingState.name}</span>
-              {stagingState.rowCount !== undefined && (
-                <span className="ml-2">({stagingState.rowCount} rows)</span>
+    <div className="max-w-7xl mx-auto py-8 px-4 animate-fade-in">
+      {/* Header */}
+      <div className="bg-surface-1/50 backdrop-blur-sm border border-divider rounded-3xl p-6 mb-8 shadow-lg shadow-black/5">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              {!isStagingMode && (
+                <Link 
+                  to={`/projects/${projectId}`} 
+                  className="p-2 rounded-full hover:bg-surface-2 text-text-secondary hover:text-text transition-colors"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </Link>
               )}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          {isStagingMode ? (
-            <>
-              <button
-                onClick={handleCancel}
-                className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
-              >
-                Cancel
-              </button>
+              <h1 className="text-3xl font-bold text-text font-display">
+                {isStagingMode ? 'Configure Schema & Rules' : 'Schema & Rules'}
+              </h1>
+            </div>
+            {isStagingMode && stagingState?.name && (
+              <p className="text-text-secondary ml-1">
+                Dataset: <span className="font-medium text-text">{stagingState.name}</span>
+                {stagingState.rowCount !== undefined && (
+                  <span className="ml-2">({stagingState.rowCount} rows)</span>
+                )}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {isStagingMode ? (
+              <>
+                <button
+                  onClick={handleCancel}
+                  className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={role === 'viewer' || creating}
+                  className="px-6 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white font-semibold shadow-lg shadow-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleCreateDataset}
+                >
+                  {creating ? 'Creating…' : 'Create Dataset'}
+                </button>
+              </>
+            ) : (
               <button
                 disabled={role === 'viewer' || creating}
-                className="btn-primary"
-                onClick={handleCreateDataset}
-              >
-                {creating ? 'Creating…' : 'Create Dataset'}
-              </button>
-            </>
-          ) : (
-            <>
-              <Link to={`/projects/${projectId}`} className="text-[var(--primary)] hover:underline text-sm">Back</Link>
-              <button
-                disabled={role === 'viewer' || creating}
-                className="btn-primary"
+                className="px-6 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white font-semibold shadow-lg shadow-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleCreateDataset}
               >
                 {creating ? 'Saving…' : 'Save Changes'}
               </button>
-            </>
-          )}
+            )}
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 mt-8 p-1 bg-surface-2/50 rounded-xl w-fit border border-divider/50">
+          <button
+            onClick={() => setActiveTab('schema')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+              activeTab === 'schema'
+                ? 'bg-surface-1 text-primary shadow-sm'
+                : 'text-text-secondary hover:text-text hover:bg-surface-1/50'
+            }`}
+          >
+            <Database className="w-4 h-4" />
+            Schema Configuration
+          </button>
+          <button
+            onClick={() => setActiveTab('rules')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+              activeTab === 'rules'
+                ? 'bg-surface-1 text-primary shadow-sm'
+                : 'text-text-secondary hover:text-text hover:bg-surface-1/50'
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            Business Rules
+          </button>
         </div>
       </div>
 
       {error && <Alert type="error" message={error} onClose={() => setError('')} />}
       {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss={true} />}
 
-      {/* Tabs */}
-      <div className="border-b border-[var(--divider)] mb-6">
-        <div className="flex gap-6">
-          <button
-            onClick={() => setActiveTab('schema')}
-            className={`pb-3 px-1 border-b-2 transition-colors font-medium ${activeTab === 'schema'
-                ? 'border-[var(--primary)] text-[var(--primary)]'
-                : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text)]'
-              }`}
-          >
-            Schema Configuration
-          </button>
-          <button
-            onClick={() => setActiveTab('rules')}
-            className={`pb-3 px-1 border-b-2 transition-colors font-medium ${activeTab === 'rules'
-                ? 'border-[var(--primary)] text-[var(--primary)]'
-                : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text)]'
-              }`}
-          >
-            Business Rules
-          </button>
-        </div>
-      </div>
-
       {/* Schema Tab */}
       {activeTab === 'schema' && (
-        <div className="card overflow-hidden">
+        <div className="bg-surface-1 rounded-3xl shadow-lg shadow-black/5 border border-divider overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-[var(--bg-page)]">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">Column Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">Data Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">Actions</th>
+                <tr className="bg-surface-2/50 border-b border-divider">
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Column Name</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Data Type</th>
+                  <th className="px-6 py-4 text-right text-xs font-semibold text-text-secondary uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--divider)]">
+              <tbody className="divide-y divide-divider">
                 {columns.map((col, idx) => (
-                  <tr key={idx} className="hover:bg-[var(--bg-page)] transition-colors">
+                  <tr key={idx} className="hover:bg-surface-2/50 transition-colors">
                     <td className="px-6 py-4">
                       {editingColumn === col.originalName ? (
                         <input
@@ -468,11 +480,11 @@ export default function DatasetSchemaRulesPage() {
                             newCols[idx].name = e.target.value
                             setColumns(newCols)
                           }}
-                          className="input-compact"
+                          className="w-full px-4 py-2 rounded-xl border border-divider bg-surface-1 text-text focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                           autoFocus
                         />
                       ) : (
-                        <span className="font-medium text-[var(--text)]">{col.name}</span>
+                        <span className="font-medium text-text">{col.name}</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
@@ -483,7 +495,7 @@ export default function DatasetSchemaRulesPage() {
                           newCols[idx].type = e.target.value
                           setColumns(newCols)
                         }}
-                        className="input-compact"
+                        className="w-full px-4 py-2 rounded-xl border border-divider bg-surface-1 text-text focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                         disabled={role === 'viewer'}
                       >
                         {DATA_TYPES.map(type => (
@@ -491,11 +503,11 @@ export default function DatasetSchemaRulesPage() {
                         ))}
                       </select>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 text-right">
                       {editingColumn === col.originalName ? (
                         <button
                           onClick={() => setEditingColumn(null)}
-                          className="text-[var(--primary)] hover:text-[var(--primary-hover)] inline-flex items-center gap-1 text-sm"
+                          className="text-primary hover:text-primary-hover inline-flex items-center gap-1 text-sm font-medium"
                         >
                           <Save className="h-4 w-4" />
                           Save
@@ -503,7 +515,7 @@ export default function DatasetSchemaRulesPage() {
                       ) : (
                         <button
                           onClick={() => setEditingColumn(col.originalName)}
-                          className="text-[var(--text-secondary)] hover:text-[var(--primary)] inline-flex items-center gap-1 text-sm"
+                          className="text-text-secondary hover:text-primary inline-flex items-center gap-1 text-sm font-medium"
                           disabled={role === 'viewer'}
                         >
                           <Edit2 className="h-4 w-4" />
@@ -516,11 +528,11 @@ export default function DatasetSchemaRulesPage() {
               </tbody>
             </table>
           </div>
-          <div className="px-6 py-4 bg-[var(--bg-page)] border-t border-[var(--divider)] flex justify-end">
+          <div className="px-6 py-4 bg-surface-2/30 border-t border-divider flex justify-end">
             <button
               onClick={handleSaveSchema}
               disabled={role === 'viewer'}
-              className="btn-primary"
+              className="px-6 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white font-medium shadow-lg shadow-primary/20 transition-all disabled:opacity-50"
             >
               Save Schema
             </button>
@@ -530,19 +542,19 @@ export default function DatasetSchemaRulesPage() {
 
       {/* Rules Tab */}
       {activeTab === 'rules' && (
-        <div className="card overflow-hidden">
+        <div className="bg-surface-1 rounded-3xl shadow-lg shadow-black/5 border border-divider overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-[var(--bg-page)]">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">Column</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">Required</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">Editable</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">Validation</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">Value(s)</th>
+                <tr className="bg-surface-2/50 border-b border-divider">
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Column</th>
+                  <th className="px-6 py-4 text-center text-xs font-semibold text-text-secondary uppercase tracking-wider">Required</th>
+                  <th className="px-6 py-4 text-center text-xs font-semibold text-text-secondary uppercase tracking-wider">Editable</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Validation</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Value(s)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--divider)]">
+              <tbody className="divide-y divide-divider">
                 {columnRules.map((rule, idx) => {
                   const colType = columns.find(c => c.originalName === rule.name)?.type
                   const isNumeric = colType === 'integer' || colType === 'number'
@@ -550,9 +562,9 @@ export default function DatasetSchemaRulesPage() {
                   const validationTypes = isNumeric ? NUMERIC_VALIDATION_TYPES : isString ? STRING_VALIDATION_TYPES : [{ value: 'none', label: 'None' }]
 
                   return (
-                    <tr key={idx} className="hover:bg-[var(--bg-page)] transition-colors">
+                    <tr key={idx} className="hover:bg-surface-2/50 transition-colors">
                       <td className="px-6 py-4">
-                        <span className="font-medium text-[var(--text)]">{rule.name}</span>
+                        <span className="font-medium text-text">{rule.name}</span>
                       </td>
                       <td className="px-6 py-4 text-center">
                         <button
@@ -562,9 +574,9 @@ export default function DatasetSchemaRulesPage() {
                             setColumnRules(newRules)
                           }}
                           disabled={role === 'viewer'}
-                          className={`h-5 w-5 rounded border transition-colors ${rule.required
-                              ? 'bg-[var(--primary)] border-[var(--primary)] text-white'
-                              : 'border-[var(--text-muted)] hover:border-[var(--primary)]'
+                          className={`h-6 w-6 rounded-lg border transition-all flex items-center justify-center mx-auto ${rule.required
+                              ? 'bg-primary border-primary text-white shadow-sm'
+                              : 'border-divider bg-surface-1 hover:border-primary'
                             }`}
                         >
                           {rule.required && <Check className="h-4 w-4" />}
@@ -578,9 +590,9 @@ export default function DatasetSchemaRulesPage() {
                             setColumnRules(newRules)
                           }}
                           disabled={role === 'viewer'}
-                          className={`h-5 w-5 rounded border transition-colors ${rule.editable
-                              ? 'bg-[var(--primary)] border-[var(--primary)] text-white'
-                              : 'border-[var(--text-muted)] hover:border-[var(--primary)]'
+                          className={`h-6 w-6 rounded-lg border transition-all flex items-center justify-center mx-auto ${rule.editable
+                              ? 'bg-primary border-primary text-white shadow-sm'
+                              : 'border-divider bg-surface-1 hover:border-primary'
                             }`}
                         >
                           {rule.editable && <Check className="h-4 w-4" />}
@@ -595,7 +607,7 @@ export default function DatasetSchemaRulesPage() {
                             setColumnRules(newRules)
                           }}
                           disabled={(!isNumeric && !isString) || role === 'viewer'}
-                          className="input-compact"
+                          className="w-full px-4 py-2 rounded-xl border border-divider bg-surface-1 text-text focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                         >
                           {validationTypes.map(vt => (
                             <option key={vt.value} value={vt.value}>{vt.label}</option>
@@ -614,10 +626,10 @@ export default function DatasetSchemaRulesPage() {
                                 newRules[idx].validationValue = e.target.value
                                 setColumnRules(newRules)
                               }}
-                              className="input-compact w-24"
+                              className="w-24 px-4 py-2 rounded-xl border border-divider bg-surface-1 text-text focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                               disabled={role === 'viewer'}
                             />
-                            <span className="text-[var(--text-secondary)]">-</span>
+                            <span className="text-text-secondary">-</span>
                             <input
                               type="number"
                               placeholder="Max"
@@ -627,7 +639,7 @@ export default function DatasetSchemaRulesPage() {
                                 newRules[idx].validationValue2 = e.target.value
                                 setColumnRules(newRules)
                               }}
-                              className="input-compact w-24"
+                              className="w-24 px-4 py-2 rounded-xl border border-divider bg-surface-1 text-text focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                               disabled={role === 'viewer'}
                             />
                           </div>
@@ -643,10 +655,10 @@ export default function DatasetSchemaRulesPage() {
                                 newRules[idx].validationValue = e.target.value
                                 setColumnRules(newRules)
                               }}
-                              className="input-compact w-48"
+                              className="w-48 px-4 py-2 rounded-xl border border-divider bg-surface-1 text-text focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                               disabled={role === 'viewer'}
                             />
-                            <span className="text-[10px] text-[var(--text-muted)]">Comma-separated values</span>
+                            <span className="text-[10px] text-text-secondary">Comma-separated values</span>
                           </div>
                         ) : rule.validationType && rule.validationType !== 'none' ? (
                           <input
@@ -658,11 +670,11 @@ export default function DatasetSchemaRulesPage() {
                               newRules[idx].validationValue = e.target.value
                               setColumnRules(newRules)
                             }}
-                            className="input-compact w-32"
+                            className="w-32 px-4 py-2 rounded-xl border border-divider bg-surface-1 text-text focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                             disabled={role === 'viewer'}
                           />
                         ) : (
-                          <span className="text-[var(--text-muted)] text-sm">-</span>
+                          <span className="text-text-secondary text-sm">-</span>
                         )}
                       </td>
                     </tr>
@@ -671,16 +683,17 @@ export default function DatasetSchemaRulesPage() {
               </tbody>
             </table>
           </div>
-          <div className="px-6 py-4 bg-[var(--bg-page)] border-t border-[var(--divider)] flex justify-end">
+          <div className="px-6 py-4 bg-surface-2/30 border-t border-divider flex justify-end">
             {isStagingMode || !datasetId || datasetId === 'new' ? (
-              <span className="text-sm text-[var(--text-muted)]">
+              <span className="text-sm text-text-secondary flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
                 Rules will be saved when you click "Create Dataset"
               </span>
             ) : (
               <button
                 onClick={handleSaveRules}
                 disabled={role === 'viewer'}
-                className="btn-primary"
+                className="px-6 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white font-medium shadow-lg shadow-primary/20 transition-all disabled:opacity-50"
               >
                 Save Rules
               </button>
@@ -688,27 +701,6 @@ export default function DatasetSchemaRulesPage() {
           </div>
         </div>
       )}
-
-      <style>{`
-        .input-compact {
-          background-color: var(--bg-surface);
-          border: 1px solid var(--text-muted);
-          border-radius: 4px;
-          padding: 6px 10px;
-          font-size: 14px;
-          color: var(--text);
-          outline: none;
-          transition: all 0.2s;
-        }
-        .input-compact:focus {
-          border-color: var(--primary);
-          box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.1);
-        }
-        .input-compact:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-      `}</style>
     </div>
   )
 }

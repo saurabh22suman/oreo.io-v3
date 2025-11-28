@@ -7,16 +7,25 @@ import { CollapseProvider, useCollapse } from '../context/CollapseContext'
 function InnerLayout() {
   const { user } = useUser()
   const { collapsed } = useCollapse()
+  
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col bg-page text-text font-sans transition-colors duration-300">
       <Navbar />
-      <div className={`flex-1 ${user ? `layout-with-sidebar ${collapsed ? 'collapsed' : ''}` : ''}`}>
+      <div className="flex flex-1 relative">
         {user && (
           <Sidebar />
         )}
 
-        <main className={`main flex-1 p-6 lg:p-8 overflow-auto ${user ? '' : 'max-w-full'}`}>
-          <div className="max-w-[95%] mx-auto"><Outlet /></div>
+        <main 
+          className={`flex-1 p-6 lg:p-8 transition-all duration-300 ${
+            user 
+              ? (collapsed ? 'ml-16' : 'ml-64') 
+              : 'ml-0'
+          }`}
+        >
+          <div className="max-w-7xl mx-auto animate-fade-in">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

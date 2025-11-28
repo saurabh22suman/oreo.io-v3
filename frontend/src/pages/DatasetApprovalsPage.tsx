@@ -3,7 +3,24 @@ import { Link, useParams, useNavigate } from 'react-router-dom'
 import { approveChange, getProject, rejectChange, currentUser, myProjectRole, listDatasetApprovalsTop } from '../api'
 import Alert from '../components/Alert'
 import Card from '../components/Card'
-import { CheckCircle, XCircle, Clock, Filter, ArrowRight, GitPullRequest, Check, X, FileText } from 'lucide-react'
+import { 
+  CheckCircle, 
+  XCircle, 
+  Clock, 
+  Filter, 
+  ArrowRight, 
+  GitPullRequest, 
+  Check, 
+  X, 
+  FileText, 
+  ArrowLeft,
+  ChevronRight,
+  User,
+  Calendar,
+  Shield,
+  Loader2,
+  FileWarning
+} from 'lucide-react'
 
 export default function DatasetApprovalsPage() {
   const { id, datasetId } = useParams()
@@ -16,25 +33,29 @@ export default function DatasetApprovalsPage() {
   const [me, setMe] = useState<{ id: number; email: string } | null>(null)
   const [isApprover, setIsApprover] = useState(false)
   const [status, setStatus] = useState<'pending' | 'approved' | 'rejected' | 'withdrawn' | 'all'>('pending')
+  const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
   async function load() {
+    setLoading(true)
     try {
       setProject(await getProject(projectId))
       setChanges(await listDatasetApprovalsTop(dsId, status))
       const meInfo = await currentUser().catch(() => null as any)
       if (meInfo?.id) setMe({ id: meInfo.id, email: meInfo.email })
       try { await myProjectRole(projectId); setIsApprover(false) } catch { }
-    } catch (e: any) { setError(e.message) }
+    } catch (e: any) { setError(e.message) } finally {
+      setLoading(false)
+    }
   }
   useEffect(() => { load() }, [projectId, dsId, status])
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'approved': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-      case 'rejected': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-      case 'withdrawn': return 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400'
-      default: return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+      case 'approved': return 'bg-success/10 text-success border-success/20'
+      case 'rejected': return 'bg-error/10 text-error border-error/20'
+      case 'withdrawn': return 'bg-surface-3 text-text-secondary border-divider'
+      default: return 'bg-primary/10 text-primary border-primary/20'
     }
   }
 
@@ -48,154 +69,181 @@ export default function DatasetApprovalsPage() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-6 animate-fade-in">
+      {error && (
+        <div className="fixed top-4 right-4 z-50">
+          <Alert type="error" message={error} onClose={() => setError('')} />
+        </div>
+      )}
+      {toast && (
+        <div className="fixed top-4 right-4 z-50">
+          <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss={true} />
+        </div>
+      )}
+
       {/* Header Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 text-white shadow-2xl shadow-slate-900/20">
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-bold border border-white/10 text-blue-200">
-              Dataset Approvals
-            </span>
+      <div className="bg-surface-1/50 backdrop-blur-sm border-b border-divider sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link to={`/projects/${projectId}/datasets/${dsId}`} className="p-2 rounded-full hover:bg-surface-2 text-text-secondary hover:text-text transition-colors">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div className="h-6 w-px bg-divider" />
+            <h1 className="text-xl font-bold text-text font-display">Change Requests</h1>
           </div>
-          <h1 className="text-3xl font-bold mb-3 tracking-tight">Change Requests</h1>
-          <p className="text-slate-300 max-w-md text-sm leading-relaxed">
-            Review and manage change requests for this dataset. Approve or reject pending changes to maintain data integrity.
-          </p>
-        </div>
-
-        {/* Decorative background elements */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
-      </div>
-
-      {/* Filter Bar */}
-      <div className="flex items-center gap-4">
-        <div className="relative">
-          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <select
-            className="pl-10 pr-8 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all appearance-none cursor-pointer"
-            value={status}
-            onChange={e => setStatus(e.target.value as any)}
-          >
-            <option value="pending">Pending Requests</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-            <option value="withdrawn">Withdrawn</option>
-            <option value="all">All Requests</option>
-          </select>
         </div>
       </div>
 
-      {error && <Alert type="error" message={error} onClose={() => setError('')} />}
-      {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss={true} />}
-
-      <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none">
-        <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-white dark:bg-slate-800/50">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <GitPullRequest className="w-5 h-5 text-primary" />
-            {status === 'all' ? 'All Requests' : `${status.charAt(0).toUpperCase() + status.slice(1)} Requests`}
-            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-xs text-slate-600 dark:text-slate-300 font-medium">
-              {changes.length}
-            </span>
-          </h2>
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Filter Bar */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2 bg-surface-1 rounded-xl p-1 border border-divider shadow-sm">
+            {['pending', 'approved', 'rejected', 'withdrawn', 'all'].map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatus(s as any)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition-all ${
+                  status === s 
+                    ? 'bg-primary text-white shadow-md' 
+                    : 'text-text-secondary hover:text-text hover:bg-surface-2'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {changes.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 dark:text-slate-400">
-            No {status !== 'all' ? status : ''} change requests found.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-700">
-                  <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">ID</th>
-                  <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Title / Type</th>
-                  <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                {changes.map((ch) => (
-                  <tr
-                    key={ch.id}
-                    onClick={() => navigate(`/projects/${projectId}/datasets/${dsId}/changes/${ch.id}`)}
-                    className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
-                  >
-                    <td className="py-4 px-6 text-sm font-mono text-slate-500">#{ch.id}</td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                          <FileText className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="font-medium text-slate-900 dark:text-white group-hover:text-primary transition-colors">
-                            {ch.title || ch.type}
+        <div className="bg-surface-1 rounded-3xl border border-divider shadow-lg shadow-black/5 overflow-hidden">
+          {loading ? (
+            <div className="p-12 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            </div>
+          ) : changes.length === 0 ? (
+            <div className="p-16 text-center flex flex-col items-center justify-center">
+              <div className="w-20 h-20 rounded-full bg-surface-2 flex items-center justify-center mb-6">
+                <GitPullRequest className="w-10 h-10 text-text-muted" />
+              </div>
+              <h3 className="text-xl font-bold text-text mb-2 font-display">No Requests Found</h3>
+              <p className="text-text-secondary text-lg max-w-md">
+                There are no {status !== 'all' ? status : ''} change requests for this dataset at the moment.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-surface-2/50 border-b border-divider">
+                    <th className="py-5 px-8 text-xs font-bold text-text-secondary uppercase tracking-wider">Request</th>
+                    <th className="py-5 px-8 text-xs font-bold text-text-secondary uppercase tracking-wider">Author</th>
+                    <th className="py-5 px-8 text-xs font-bold text-text-secondary uppercase tracking-wider">Status</th>
+                    <th className="py-5 px-8 text-xs font-bold text-text-secondary uppercase tracking-wider text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-divider">
+                  {changes.map((ch) => (
+                    <tr
+                      key={ch.id}
+                      onClick={() => navigate(`/projects/${projectId}/datasets/${dsId}/changes/${ch.id}`)}
+                      className="group hover:bg-surface-2/50 transition-colors cursor-pointer"
+                    >
+                      <td className="py-5 px-8">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 rounded-xl bg-primary/10 text-primary group-hover:scale-110 transition-transform">
+                            <FileText className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-bold text-text-secondary font-mono">#{ch.id}</span>
+                              <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-surface-2 text-text-secondary border border-divider">
+                                {ch.type}
+                              </span>
+                            </div>
+                            <div className="font-bold text-text text-lg group-hover:text-primary transition-colors">
+                              {ch.title || `Change Request #${ch.id}`}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${getStatusColor(ch.status)}`}>
-                        {getStatusIcon(ch.status)}
-                        {ch.status.charAt(0).toUpperCase() + ch.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
-                        <button
-                          onClick={() => navigate(`/projects/${projectId}/datasets/${dsId}/changes/${ch.id}`)}
-                          className="p-1.5 text-slate-400 hover:text-primary transition-colors"
-                          title="View Details"
-                        >
-                          <ArrowRight className="w-4 h-4" />
-                        </button>
-
-                        {ch.status === 'pending' && me && (() => {
-                          let ids: number[] = []
-                          try { if (typeof (ch as any).reviewers === 'string' && (ch as any).reviewers.trim().startsWith('[')) ids = JSON.parse((ch as any).reviewers) } catch { }
-                          const isAssigned = (ch.reviewer_id && me.id === ch.reviewer_id) || ids.includes(me.id)
-                          return isAssigned || isApprover
-                        })() && (
-                            <div className="flex items-center gap-1 ml-2 pl-2 border-l border-slate-200 dark:border-slate-700">
-                              <button
-                                onClick={async (e) => { 
-                                  e.stopPropagation()
-                                  try { 
-                                    const result = await approveChange(projectId, ch.id)
-                                    await load()
-                                    if (result?.duplicates > 0) {
-                                      setToast(`Approved: ${result.inserted} rows inserted, ${result.duplicates} duplicate rows skipped`)
-                                    } else if (result?.inserted > 0) {
-                                      setToast(`Approved: ${result.inserted} rows inserted`)
-                                    } else {
-                                      setToast('Change approved')
-                                    }
-                                  } catch (err: any) { setError(err.message) } 
-                                }}
-                                className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
-                                title="Approve"
-                              >
-                                <Check className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={async (e) => { e.stopPropagation(); try { await rejectChange(projectId, ch.id); await load(); setToast('Change rejected') } catch (err: any) { setError(err.message) } }}
-                                className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                title="Reject"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
+                      </td>
+                      <td className="py-5 px-8">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-surface-3 flex items-center justify-center text-text-secondary border border-divider">
+                            <User className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold text-text">{ch.created_by?.replace('user_', 'User #') || 'Unknown'}</div>
+                            <div className="text-xs text-text-secondary flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {new Date(ch.created_at).toLocaleDateString()}
                             </div>
-                          )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-5 px-8">
+                        <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider border ${getStatusColor(ch.status)}`}>
+                          {getStatusIcon(ch.status)}
+                          {ch.status}
+                        </span>
+                      </td>
+                      <td className="py-5 px-8 text-right">
+                        <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={() => navigate(`/projects/${projectId}/datasets/${dsId}/changes/${ch.id}`)}
+                            className="p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
+                            title="View Details"
+                          >
+                            <ArrowRight className="w-5 h-5" />
+                          </button>
+
+                          {ch.status === 'pending' && me && (() => {
+                            let ids: number[] = []
+                            try { if (typeof (ch as any).reviewers === 'string' && (ch as any).reviewers.trim().startsWith('[')) ids = JSON.parse((ch as any).reviewers) } catch { }
+                            const isAssigned = (ch.reviewer_id && me.id === ch.reviewer_id) || ids.includes(me.id)
+                            return isAssigned || isApprover
+                          })() && (
+                              <div className="flex items-center gap-2 ml-4 pl-4 border-l border-divider">
+                                <button
+                                  onClick={async (e) => { 
+                                    e.stopPropagation()
+                                    try { 
+                                      const result = await approveChange(projectId, ch.id)
+                                      await load()
+                                      if (result?.duplicates > 0) {
+                                        setToast(`Approved: ${result.inserted} rows inserted, ${result.duplicates} duplicate rows skipped`)
+                                      } else if (result?.inserted > 0) {
+                                        setToast(`Approved: ${result.inserted} rows inserted`)
+                                      } else {
+                                        setToast('Change approved')
+                                      }
+                                    } catch (err: any) { setError(err.message) } 
+                                  }}
+                                  className="flex items-center gap-2 px-3 py-1.5 bg-success/10 text-success hover:bg-success hover:text-white border border-success/20 rounded-lg transition-all font-bold text-xs uppercase tracking-wider"
+                                  title="Approve"
+                                >
+                                  <Check className="w-4 h-4" />
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={async (e) => { e.stopPropagation(); try { await rejectChange(projectId, ch.id); await load(); setToast('Change rejected') } catch (err: any) { setError(err.message) } }}
+                                  className="flex items-center gap-2 px-3 py-1.5 bg-error/10 text-error hover:bg-error hover:text-white border border-error/20 rounded-lg transition-all font-bold text-xs uppercase tracking-wider"
+                                  title="Reject"
+                                >
+                                  <X className="w-4 h-4" />
+                                  Reject
+                                </button>
+                              </div>
+                            )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

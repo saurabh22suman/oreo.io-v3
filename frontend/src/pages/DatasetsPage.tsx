@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getProject, listDatasets, myProjectRole } from '../api'
 import ProjectLayout from '../components/ProjectLayout'
-import Card from '../components/Card'
 import Alert from '../components/Alert'
-import { Database, Search, LayoutDashboard, FileText, Plus, ArrowRight, Clock } from 'lucide-react'
+import { Database, Search, LayoutDashboard, FileText, Plus, ArrowRight, Clock, Filter, Table, BarChart3 } from 'lucide-react'
 
 type Dataset = { id: number; name: string; schema?: string; rules?: string; last_upload_at?: string; last_upload_path?: string }
 
@@ -17,8 +16,7 @@ export default function DatasetsPage() {
   const [role, setRole] = useState<'owner' | 'contributor' | 'viewer' | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [sortBy, setSortBy] = useState<'name' | 'type' | 'modified'>('name')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     let mounted = true;
@@ -43,12 +41,14 @@ export default function DatasetsPage() {
     return () => { mounted = false }
   }, [projectId])
 
+  const filteredItems = items.filter(d => d.name.toLowerCase().includes(search.toLowerCase()))
+
   const features = [
     {
       label: 'New Dataset',
       icon: Database,
       path: `/projects/${projectId}/datasets/new`,
-      color: 'blue',
+      color: 'primary',
       desc: 'Upload or connect data',
       allowed: role && role !== 'viewer'
     },
@@ -56,7 +56,7 @@ export default function DatasetsPage() {
       label: 'Dashboard',
       icon: LayoutDashboard,
       path: `/projects/${projectId}/dashboard`,
-      color: 'emerald',
+      color: 'secondary',
       desc: 'Visualize insights',
       allowed: true
     }
@@ -66,121 +66,144 @@ export default function DatasetsPage() {
     <ProjectLayout project={project} role={role} loading={loading}>
       {error && <Alert type="error" message={error} onClose={() => setError('')} />}
 
-      {/* Feature Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        {features.map((feature, i) => (
-          feature.allowed ? (
-            <div
-              key={i}
-              onClick={() => navigate(feature.path)}
-              className="group relative overflow-hidden p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-transparent transition-all duration-500 cursor-pointer shadow-lg shadow-slate-200/50 dark:shadow-none hover:shadow-2xl hover:-translate-y-1"
-            >
-              <div className={`absolute inset-0 bg-gradient-to-br from-${feature.color}-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
-              <div className={`absolute inset-0 bg-gradient-to-r from-${feature.color}-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
-
-              <div className="relative z-10 flex items-start justify-between">
-                <div>
-                  <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br from-${feature.color}-500 to-${feature.color}-600 text-white flex items-center justify-center mb-4 shadow-lg shadow-${feature.color}-500/30 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
-                    <feature.icon className="w-7 h-7" />
+      <div className="animate-fade-in space-y-8">
+        {/* Feature Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {features.map((feature, i) => (
+            feature.allowed ? (
+              <div
+                key={i}
+                onClick={() => navigate(feature.path)}
+                className="group relative overflow-hidden p-8 rounded-3xl bg-surface-1 border border-divider hover:border-primary/30 transition-all duration-300 cursor-pointer shadow-lg shadow-black/5 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1"
+              >
+                <div className="relative z-10 flex items-start justify-between">
+                  <div>
+                    <div className={`w-14 h-14 rounded-2xl bg-${feature.color}/10 text-${feature.color} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-inner`}>
+                      <feature.icon className="w-7 h-7" />
+                    </div>
+                    <h3 className="text-xl font-bold text-text mb-2 group-hover:text-primary transition-colors font-display">
+                      {feature.label}
+                    </h3>
+                    <p className="text-text-secondary leading-relaxed">{feature.desc}</p>
                   </div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2 group-hover:text-${feature.color}-600 dark:group-hover:text-${feature.color}-400 transition-colors">
-                    {feature.label}
-                  </h3>
-                  <p className="text-slate-500 dark:text-slate-400 font-medium">{feature.desc}</p>
+                  <div className={`p-3 rounded-full bg-surface-2 text-text-secondary group-hover:text-primary group-hover:bg-primary/10 transition-colors shadow-sm`}>
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </div>
                 </div>
-                <div className={`p-2 rounded-full bg-${feature.color}-50 dark:bg-${feature.color}-900/20 text-${feature.color}-600 dark:text-${feature.color}-400 opacity-0 group-hover:opacity-100 transform translate-x-4 group-hover:translate-x-0 transition-all duration-500`}>
-                  <ArrowRight className="w-5 h-5" />
-                </div>
+                {/* Decorative background */}
+                <div className={`absolute -bottom-10 -right-10 w-40 h-40 bg-${feature.color}/5 rounded-full blur-3xl group-hover:bg-${feature.color}/10 transition-colors duration-500`}></div>
               </div>
+            ) : (
+              <div key={i} className="p-8 rounded-3xl bg-surface-2/50 border border-divider opacity-60 cursor-not-allowed grayscale">
+                <div className="w-14 h-14 rounded-2xl bg-surface-3 flex items-center justify-center mb-6">
+                  <feature.icon className="w-7 h-7 text-text-muted" />
+                </div>
+                <h3 className="text-xl font-bold text-text-muted mb-2 font-display">{feature.label}</h3>
+                <p className="text-text-muted">{feature.desc}</p>
+              </div>
+            )
+          ))}
+        </div>
+
+        {/* Datasets List */}
+        <div className="bg-surface-1 border border-divider rounded-3xl overflow-hidden shadow-xl shadow-black/5">
+          <div className="p-6 border-b border-divider flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface-2/30 backdrop-blur-sm">
+            <h3 className="font-bold text-text flex items-center gap-3 text-lg">
+              <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                <Table className="w-5 h-5" />
+              </div>
+              Datasets
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-surface-2 text-text-secondary border border-divider shadow-sm">
+                {items.length}
+              </span>
+            </h3>
+            
+            <div className="relative group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary group-focus-within:text-primary transition-colors" />
+              <input 
+                type="text" 
+                placeholder="Search datasets..." 
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10 pr-4 py-2.5 rounded-xl bg-surface-2 border border-divider text-sm text-text focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none w-full sm:w-72 transition-all shadow-sm"
+              />
+            </div>
+          </div>
+
+          {items.length === 0 ? (
+            <div className="p-16 text-center">
+              <div className="w-20 h-20 bg-surface-2 rounded-full flex items-center justify-center mx-auto mb-6 text-text-muted shadow-inner">
+                <Database className="w-10 h-10 opacity-50" />
+              </div>
+              <h4 className="text-xl font-bold text-text mb-2 font-display">No datasets yet</h4>
+              <p className="text-text-secondary mb-8 max-w-xs mx-auto leading-relaxed">Upload your first dataset to start analyzing and visualizing your data.</p>
+              {role && role !== 'viewer' && (
+                <button 
+                  onClick={() => navigate(`/projects/${projectId}/datasets/new`)} 
+                  className="px-6 py-3 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 flex items-center gap-2 mx-auto"
+                >
+                  <Plus className="w-5 h-5" />
+                  Add Dataset
+                </button>
+              )}
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="p-16 text-center">
+              <div className="w-16 h-16 bg-surface-2 rounded-full flex items-center justify-center mx-auto mb-4 text-text-muted">
+                <Search className="w-8 h-8 opacity-50" />
+              </div>
+              <h4 className="text-lg font-bold text-text mb-1">No matches found</h4>
+              <p className="text-text-secondary">Try adjusting your search terms</p>
             </div>
           ) : (
-            <div key={i} className="p-6 rounded-3xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 opacity-60 cursor-not-allowed grayscale">
-              <div className="w-14 h-14 rounded-2xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center mb-4">
-                <feature.icon className="w-7 h-7 text-slate-400" />
-              </div>
-              <h3 className="text-xl font-bold text-slate-500 dark:text-slate-400 mb-2">{feature.label}</h3>
-              <p className="text-slate-400 font-medium">{feature.desc}</p>
-            </div>
-          )
-        ))}
-      </div>
-
-      {/* Datasets List */}
-      <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none">
-        <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-white dark:bg-slate-800/50">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Database className="w-5 h-5 text-primary" />
-            Datasets
-            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-xs text-slate-600 dark:text-slate-300 font-medium">
-              {items.length}
-            </span>
-          </h2>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-700">
-                <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:text-primary transition-colors" onClick={() => { setSortBy('name'); setSortDir(sortBy === 'name' && sortDir === 'asc' ? 'desc' : 'asc') }}>
-                  Name {sortBy === 'name' && (sortDir === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right cursor-pointer hover:text-primary transition-colors" onClick={() => { setSortBy('type'); setSortDir(sortBy === 'type' && sortDir === 'asc' ? 'desc' : 'asc') }}>
-                  Type {sortBy === 'type' && (sortDir === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right cursor-pointer hover:text-primary transition-colors" onClick={() => { setSortBy('modified'); setSortDir(sortBy === 'modified' && sortDir === 'asc' ? 'desc' : 'asc') }}>
-                  Last Modified {sortBy === 'modified' && (sortDir === 'asc' ? '↑' : '↓')}
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {items.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="py-12 text-center text-slate-500">
-                    No datasets found. Create one to get started.
-                  </td>
-                </tr>
-              ) : (
-                items
-                  .sort((a, b) => {
-                    if (sortBy === 'name') return sortDir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
-                    if (sortBy === 'type') return sortDir === 'asc' ? ((a.schema || '').localeCompare(b.schema || '')) : ((b.schema || '').localeCompare(a.schema || ''))
-                    if (sortBy === 'modified') return sortDir === 'asc' ? (new Date(a.last_upload_at || 0).getTime() - new Date(b.last_upload_at || 0).getTime()) : (new Date(b.last_upload_at || 0).getTime() - new Date(a.last_upload_at || 0).getTime())
-                    return 0
-                  })
-                  .map((d) => (
-                    <tr
-                      key={d.id}
-                      onClick={() => navigate(`/projects/${projectId}/datasets/${d.id}`)}
-                      className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
-                    >
-                      <td className="py-2 px-6">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                            <Database className="w-4 h-4" />
-                          </div>
-                          <span className="font-medium text-slate-700 dark:text-slate-200 group-hover:text-primary transition-colors">
-                            {d.name}
+            <div className="divide-y divide-divider">
+              {filteredItems.map((dataset) => (
+                <div 
+                  key={dataset.id}
+                  onClick={() => navigate(`/projects/${projectId}/datasets/${dataset.id}`)}
+                  className="group p-5 hover:bg-surface-2/50 transition-all cursor-pointer flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center text-primary font-bold shadow-sm group-hover:scale-110 transition-transform duration-300 border border-primary/10">
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-text text-lg group-hover:text-primary transition-colors">{dataset.name}</h4>
+                      <div className="flex items-center gap-4 text-xs text-text-secondary mt-1.5">
+                        {dataset.last_upload_at && (
+                          <span className="flex items-center gap-1.5 bg-surface-2 px-2 py-0.5 rounded-md border border-divider">
+                            <Clock className="w-3 h-3" />
+                            {new Date(dataset.last_upload_at).toLocaleDateString()}
                           </span>
-                        </div>
-                      </td>
-                      <td className="py-2 px-6 text-right">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${d.schema ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'}`}>
-                          {d.schema ? 'Dataset' : 'File'}
-                        </span>
-                      </td>
-                      <td className="py-2 px-6 text-right text-sm text-slate-500 dark:text-slate-400">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Clock className="w-3.5 h-3.5" />
-                          {d.last_upload_at ? new Date(d.last_upload_at).toLocaleDateString() : '—'}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-              )}
-            </tbody>
-          </table>
+                        )}
+                        {dataset.schema ? (
+                          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-success/10 text-success border border-success/20 font-medium">
+                            <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></div>
+                            Schema Defined
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-warning/10 text-warning border border-warning/20 font-medium">
+                            <div className="w-1.5 h-1.5 rounded-full bg-warning"></div>
+                            No Schema
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0 flex items-center gap-2">
+                      <span className="text-xs font-bold text-primary uppercase tracking-wider">View Details</span>
+                    </div>
+                    <div className="p-2 rounded-full bg-surface-2 text-text-secondary group-hover:text-primary group-hover:bg-primary/10 transition-colors">
+                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </Card>
+      </div>
     </ProjectLayout>
   )
 }

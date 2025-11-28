@@ -1,10 +1,28 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { getProject, currentUser, approveChange, rejectChange, myProjectRole, subscribeNotifications } from '../api'
 import AgGridTable from '../components/AgGridTable'
 import Alert from '../components/Alert'
 import Card from '../components/Card'
-import { CheckCircle, XCircle, MessageSquare, FileText, User, Clock, AlertCircle, GitPullRequest, ArrowUpRight, Check, X } from 'lucide-react'
+import { 
+  CheckCircle, 
+  XCircle, 
+  MessageSquare, 
+  FileText, 
+  User, 
+  Clock, 
+  AlertCircle, 
+  GitPullRequest, 
+  ArrowUpRight, 
+  ArrowRight,
+  Check, 
+  X,
+  ChevronRight,
+  ArrowLeft,
+  Calendar,
+  Send,
+  Loader2
+} from 'lucide-react'
 
 async function fetchJSON(url: string, opts?: RequestInit) {
   const r = await fetch(url, { ...(opts || {}), headers: { 'Content-Type': 'application/json', ...(opts?.headers || {}), ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}) } });
@@ -18,6 +36,8 @@ export default function ChangeDetailsPage() {
   const projectId = Number(id)
   const chId = Number(changeId)
   const dsId = Number(datasetId)
+  const navigate = useNavigate()
+  
   const [project, setProject] = useState<any>(null)
   const [change, setChange] = useState<any>(null)
   const [reviewerStates, setReviewerStates] = useState<any[] | null>(null)
@@ -29,9 +49,11 @@ export default function ChangeDetailsPage() {
   const [me, setMe] = useState<{ id: number; email: string } | null>(null)
   const [isApprover, setIsApprover] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     (async () => {
+      setLoading(true)
       try {
         setProject(await getProject(projectId))
         const meInfo = await currentUser().catch(() => null as any)
@@ -43,7 +65,9 @@ export default function ChangeDetailsPage() {
         if (ch?.reviewer_states) setReviewerStates(ch.reviewer_states as any[])
         try { const pv = await fetchJSON(`${API_BASE}/projects/${projectId}/changes/${chId}/preview`); setPreview(pv) } catch { }
         try { const cs = await fetchJSON(`${API_BASE}/projects/${projectId}/changes/${chId}/comments`); setComments(cs) } catch { }
-      } catch (e: any) { setError(e.message) }
+      } catch (e: any) { setError(e.message) } finally {
+        setLoading(false)
+      }
     })()
   }, [projectId, chId])
 
@@ -75,9 +99,10 @@ export default function ChangeDetailsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'approved': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-      case 'rejected': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-      default: return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+      case 'approved': return 'bg-success/10 text-success border-success/20'
+      case 'rejected': return 'bg-error/10 text-error border-error/20'
+      case 'withdrawn': return 'bg-surface-3 text-text-secondary border-divider'
+      default: return 'bg-primary/10 text-primary border-primary/20'
     }
   }
 
@@ -85,71 +110,103 @@ export default function ChangeDetailsPage() {
     switch (status) {
       case 'approved': return <CheckCircle className="w-4 h-4" />
       case 'rejected': return <XCircle className="w-4 h-4" />
+      case 'withdrawn': return <XCircle className="w-4 h-4" />
       default: return <Clock className="w-4 h-4" />
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-100px)]">
+        <Loader2 className="w-12 h-12 text-primary animate-spin" />
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="flex flex-col h-[calc(100vh-64px)] bg-surface-2 animate-fade-in">
+      {error && (
+        <div className="fixed top-4 right-4 z-50">
+          <Alert type="error" message={error} onClose={() => setError('')} />
+        </div>
+      )}
+      {toast && (
+        <div className="fixed top-4 right-4 z-50">
+          <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss={true} />
+        </div>
+      )}
+
       {/* Header Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 text-white shadow-2xl shadow-slate-900/20">
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-bold border border-white/10 text-blue-200 flex items-center gap-2">
-              <GitPullRequest className="w-3.5 h-3.5" />
-              Change Request
-            </span>
+      <div className="bg-surface-1/50 backdrop-blur-sm border-b border-divider z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link to={`/projects/${projectId}/datasets/${dsId}/approvals`} className="p-2 rounded-full hover:bg-surface-2 text-text-secondary hover:text-text transition-colors">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div className="h-6 w-px bg-divider" />
+            <h1 className="text-xl font-bold text-text font-display">
+              {change?.title || `Change #${chId}`}
+            </h1>
             {change && (
-              <span className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-2 ${change.status === 'approved' ? 'bg-green-500/20 border-green-500/30 text-green-200' :
-                  change.status === 'rejected' ? 'bg-red-500/20 border-red-500/30 text-red-200' :
-                    'bg-blue-500/20 border-blue-500/30 text-blue-200'
-                }`}>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border flex items-center gap-2 ${getStatusColor(change.status)}`}>
                 {getStatusIcon(change.status)}
-                {change.status.charAt(0).toUpperCase() + change.status.slice(1)}
+                {change.status}
               </span>
             )}
           </div>
 
-          <h1 className="text-3xl font-bold mb-2 tracking-tight">
-            {change?.title || `Change #${chId}`}
-          </h1>
-
-          <div className="flex items-center gap-6 text-slate-300 text-sm mt-4">
-            {(change?.requestor_email || change?.requestor_name) && (
-              <div className="flex items-center gap-2">
-                <User className="w-4 h-4 text-slate-400" />
-                <span>Requested by <span className="text-white font-medium">{change.requestor_name || change.requestor_email}</span></span>
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-slate-400" />
-              <span>Type: <span className="text-white font-medium capitalize">{change?.type}</span></span>
+          {/* Actions */}
+          {change && me && (() => {
+            const idsFromStates: number[] = Array.isArray(reviewerStates) ? reviewerStates.map((s: any) => Number(s.id)).filter(Boolean) : []
+            const isAssigned = (change.reviewer_id && me.id === change.reviewer_id) || idsFromStates.includes(me.id)
+            return change.status === 'pending' && (isAssigned || isApprover)
+          })() && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={async () => { try { await rejectChange(projectId, chId); location.reload() } catch (e: any) { setError(e.message) } }}
+                className="flex items-center gap-2 px-4 py-2 bg-error/10 hover:bg-error text-error hover:text-white font-bold rounded-xl transition-all border border-error/20 hover:border-error shadow-sm text-sm"
+              >
+                <X className="w-4 h-4" />
+                Reject
+              </button>
+              <button
+                onClick={async () => { 
+                  try { 
+                    const result = await approveChange(projectId, chId)
+                    if (result?.duplicates > 0) {
+                      setToast(`Approved: ${result.inserted} rows inserted, ${result.duplicates} duplicate rows skipped`)
+                    } else if (result?.inserted > 0) {
+                      setToast(`Approved: ${result.inserted} rows inserted`)
+                    } else {
+                      setToast('Change approved successfully')
+                    }
+                    setTimeout(() => location.reload(), 2000)
+                  } catch (e: any) { setError(e.message) } 
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-success hover:bg-success-hover text-white font-bold rounded-xl transition-all shadow-lg shadow-success/20 hover:shadow-success/30 hover:-translate-y-0.5 text-sm"
+              >
+                <Check className="w-4 h-4" />
+                Approve
+              </button>
             </div>
-          </div>
+          )}
         </div>
-
-        {/* Decorative background elements */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
       </div>
 
-      {error && <Alert type="error" message={error} onClose={() => setError('')} />}
-      {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss={true} />}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
         {/* Left Column: Details & Preview */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 flex flex-col min-h-0">
           {/* Data Preview Card */}
-          <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none flex flex-col h-[800px]">
-            <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-white dark:bg-slate-800/50">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <div className="bg-surface-1 rounded-3xl border border-divider shadow-lg shadow-black/5 overflow-hidden flex flex-col flex-1 min-h-0">
+            <div className="p-6 border-b border-divider flex items-center justify-between bg-surface-1/50 backdrop-blur-sm">
+              <h2 className="text-lg font-bold text-text flex items-center gap-2 font-display">
                 <FileText className="w-5 h-5 text-primary" />
                 {(preview as any)?.type === 'live_edit' ? 'Changes Preview' : 'Data Preview'}
                 {preview && preview.data.length > 0 && (
-                  <span className="text-xs font-normal text-slate-500 ml-2">
+                  <span className="text-xs font-bold text-text-secondary uppercase tracking-wider ml-2 px-2 py-0.5 rounded bg-surface-2 border border-divider">
                     {(preview as any)?.type === 'live_edit' 
-                      ? `(${(preview as any)?.edit_count || 0} edits, ${(preview as any)?.delete_count || 0} deletions)`
-                      : `(${preview.data.length} rows shown)`
+                      ? `${(preview as any)?.edit_count || 0} edits, ${(preview as any)?.delete_count || 0} deletions`
+                      : `${preview.data.length} rows`
                     }
                   </span>
                 )}
@@ -157,14 +214,14 @@ export default function ChangeDetailsPage() {
               {preview && preview.data.length > 0 && (
                 <button
                   onClick={() => window.open(`/projects/${projectId}/datasets/${dsId}/view`, '_blank')}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-primary hover:text-primary-hover hover:bg-primary/10 rounded-lg transition-colors"
                 >
                   <ArrowUpRight className="w-4 h-4" />
                   View Full Data
                 </button>
               )}
             </div>
-            <div className="flex-1 bg-slate-50/50 dark:bg-slate-900/50 p-0 overflow-hidden">
+            <div className="flex-1 bg-surface-1 p-0 overflow-hidden relative">
               {preview && (preview as any)?.type === 'live_edit' ? (
                 /* Live Edit Preview - show actual row data with edits highlighted */
                 <div className="h-full flex flex-col">
@@ -239,23 +296,23 @@ export default function ChangeDetailsPage() {
                     )
                   })() : (
                     /* Fallback: show changes summary if no row data available */
-                    <div className="h-full overflow-auto p-6 space-y-4">
+                    <div className="h-full overflow-auto p-6 space-y-6 custom-scrollbar">
                       {/* Edited Cells Section */}
                       {(preview as any)?.edited_cells?.length > 0 && (
                         <div>
-                          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                          <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-primary"></div>
                             Cell Edits ({(preview as any).edited_cells.length})
                           </h3>
-                          <div className="space-y-2">
+                          <div className="space-y-3">
                             {(preview as any).edited_cells.map((edit: any, idx: number) => (
-                              <div key={idx} className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                                <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">Row {edit.row_id}</div>
-                                <div className="text-sm font-medium text-slate-700 dark:text-slate-300">{edit.column}</div>
-                                <div className="flex items-center gap-2 ml-auto">
-                                  <span className="text-red-500 line-through text-sm">{String(edit.old_value ?? '')}</span>
-                                  <span className="text-slate-400">→</span>
-                                  <span className="text-green-500 font-semibold text-sm">{String(edit.new_value ?? '')}</span>
+                              <div key={idx} className="flex items-center gap-4 p-4 rounded-xl bg-primary/5 border border-primary/20 hover:bg-primary/10 transition-colors">
+                                <div className="text-xs text-text-secondary font-bold font-mono uppercase tracking-wider min-w-[80px]">Row {edit.row_id}</div>
+                                <div className="text-sm font-bold text-text min-w-[120px]">{edit.column}</div>
+                                <div className="flex items-center gap-3 ml-auto bg-surface-1 px-3 py-1.5 rounded-lg border border-divider">
+                                  <span className="text-error line-through text-sm font-mono opacity-70">{String(edit.old_value ?? '')}</span>
+                                  <ArrowRight className="w-3 h-3 text-text-muted" />
+                                  <span className="text-success font-bold text-sm font-mono">{String(edit.new_value ?? '')}</span>
                                 </div>
                               </div>
                             ))}
@@ -266,13 +323,13 @@ export default function ChangeDetailsPage() {
                       {/* Deleted Rows Section */}
                       {(preview as any)?.deleted_rows?.length > 0 && (
                         <div>
-                          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                          <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-error"></div>
                             Row Deletions ({(preview as any).deleted_rows.length})
                           </h3>
                           <div className="flex flex-wrap gap-2">
                             {(preview as any).deleted_rows.map((rowId: string, idx: number) => (
-                              <span key={idx} className="px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm font-mono">
+                              <span key={idx} className="px-3 py-1.5 rounded-lg bg-error/10 border border-error/20 text-error text-xs font-bold font-mono uppercase tracking-wider">
                                 Row {rowId}
                               </span>
                             ))}
@@ -281,8 +338,11 @@ export default function ChangeDetailsPage() {
                       )}
 
                       {(preview as any)?.edited_cells?.length === 0 && (preview as any)?.deleted_rows?.length === 0 && (
-                        <div className="flex items-center justify-center h-full text-slate-400">
-                          <span>No changes in this request</span>
+                        <div className="flex flex-col items-center justify-center h-full text-text-muted">
+                          <div className="w-16 h-16 rounded-full bg-surface-2 flex items-center justify-center mb-4">
+                            <CheckCircle className="w-8 h-8 text-success opacity-50" />
+                          </div>
+                          <span className="font-medium">No changes in this request</span>
                         </div>
                       )}
                     </div>
@@ -300,105 +360,75 @@ export default function ChangeDetailsPage() {
                   title=""
                 />
               ) : (
-                <div className="h-full flex items-center justify-center text-slate-400">
-                  <div className="flex flex-col items-center gap-2">
-                    <FileText className="w-8 h-8 opacity-50" />
-                    <span className="text-sm">No preview available</span>
+                <div className="h-full flex items-center justify-center text-text-muted">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-surface-2 flex items-center justify-center">
+                      <FileText className="w-8 h-8 opacity-50" />
+                    </div>
+                    <span className="text-lg font-medium">No preview available</span>
                   </div>
                 </div>
               )}
             </div>
-          </Card>
+          </div>
         </div>
 
-        {/* Right Column: Actions & Comments */}
-        <div className="space-y-6">
-          {/* Actions Card */}
-          {change && me && (() => {
-            const idsFromStates: number[] = Array.isArray(reviewerStates) ? reviewerStates.map((s: any) => Number(s.id)).filter(Boolean) : []
-            const isAssigned = (change.reviewer_id && me.id === change.reviewer_id) || idsFromStates.includes(me.id)
-            return change.status === 'pending' && (isAssigned || isApprover)
-          })() && (
-              <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none bg-gradient-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900">
-                <div className="p-6">
-                  <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Actions</h2>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={async () => { 
-                        try { 
-                          const result = await approveChange(projectId, chId)
-                          if (result?.duplicates > 0) {
-                            setToast(`Approved: ${result.inserted} rows inserted, ${result.duplicates} duplicate rows skipped`)
-                          } else if (result?.inserted > 0) {
-                            setToast(`Approved: ${result.inserted} rows inserted`)
-                          } else {
-                            setToast('Change approved successfully')
-                          }
-                          setTimeout(() => location.reload(), 2000)
-                        } catch (e: any) { setError(e.message) } 
-                      }}
-                      className="flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-all shadow-lg shadow-green-500/20 hover:shadow-green-500/30 hover:-translate-y-0.5"
-                    >
-                      <Check className="w-4 h-4" />
-                      Approve
-                    </button>
-                    <button
-                      onClick={async () => { try { await rejectChange(projectId, chId); location.reload() } catch (e: any) { setError(e.message) } }}
-                      className="flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-all shadow-lg shadow-red-500/20 hover:shadow-red-500/30 hover:-translate-y-0.5"
-                    >
-                      <X className="w-4 h-4" />
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              </Card>
-            )}
-
+        {/* Right Column: Reviewers & Comments */}
+        <div className="space-y-6 flex flex-col min-h-0">
           {/* Reviewer Status Card */}
           {Array.isArray(reviewerStates) && reviewerStates.length > 0 && (
-            <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none">
-              <div className="p-6 border-b border-slate-100 dark:border-slate-700/50">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <div className="bg-surface-1 rounded-3xl border border-divider shadow-lg shadow-black/5 overflow-hidden flex-shrink-0">
+              <div className="p-6 border-b border-divider bg-surface-1/50 backdrop-blur-sm">
+                <h2 className="text-lg font-bold text-text flex items-center gap-2 font-display">
                   <User className="w-5 h-5 text-primary" />
                   Reviewers
                 </h2>
               </div>
-              <div className="p-6 bg-white dark:bg-slate-800/50">
+              <div className="p-6">
                 <div className="space-y-3">
                   {reviewerStates.map((st: any, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700">
+                    <div key={idx} className="flex items-center justify-between p-4 rounded-2xl bg-surface-2/50 border border-divider hover:bg-surface-2 transition-colors">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500">
-                          <User className="w-4 h-4" />
+                        <div className="w-10 h-10 rounded-full bg-surface-3 flex items-center justify-center text-text-secondary border border-divider shadow-sm">
+                          <User className="w-5 h-5" />
                         </div>
                         <div>
-                          <div className="text-sm font-medium text-slate-900 dark:text-white">{st.email || `User #${st.id}`}</div>
-                          {st.decided_at && <div className="text-xs text-slate-500">{new Date(st.decided_at).toLocaleString()}</div>}
+                          <div className="text-sm font-bold text-text">{st.email || `User #${st.id}`}</div>
+                          {st.decided_at && (
+                            <div className="text-xs text-text-secondary flex items-center gap-1 mt-0.5">
+                              <Clock className="w-3 h-3" />
+                              {new Date(st.decided_at).toLocaleString()}
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <span className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 ${getStatusColor(st.status || 'pending')}`}>
+                      <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border ${getStatusColor(st.status || 'pending')}`}>
                         {getStatusIcon(st.status || 'pending')}
-                        {(st.status || 'pending').charAt(0).toUpperCase() + (st.status || 'pending').slice(1)}
+                        {st.status || 'pending'}
                       </span>
                     </div>
                   ))}
                 </div>
               </div>
-            </Card>
+            </div>
           )}
 
           {/* Comments Card */}
-          <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none flex flex-col h-[400px]">
-            <div className="p-6 border-b border-slate-100 dark:border-slate-700/50">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <div className="bg-surface-1 rounded-3xl border border-divider shadow-lg shadow-black/5 overflow-hidden flex flex-col flex-1 min-h-[400px]">
+            <div className="p-6 border-b border-divider bg-surface-1/50 backdrop-blur-sm">
+              <h2 className="text-lg font-bold text-text flex items-center gap-2 font-display">
                 <MessageSquare className="w-5 h-5 text-primary" />
                 Comments
               </h2>
             </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50 dark:bg-slate-900/50">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-surface-1 custom-scrollbar">
               {comments.length === 0 ? (
-                <div className="text-center py-8 text-slate-500 dark:text-slate-400 text-sm">
-                  No comments yet. Start the discussion!
+                <div className="text-center py-12 flex flex-col items-center justify-center h-full">
+                  <div className="w-16 h-16 rounded-full bg-surface-2 flex items-center justify-center mb-4">
+                    <MessageSquare className="w-8 h-8 text-text-muted" />
+                  </div>
+                  <p className="text-text font-bold mb-1">No comments yet</p>
+                  <p className="text-text-secondary text-sm">Start the discussion by adding a comment below.</p>
                 </div>
               ) : (
                 comments.map((cm) => {
@@ -407,17 +437,18 @@ export default function ChangeDetailsPage() {
                   const identity = [name, email].filter(Boolean).join(' • ') || email || name || 'Unknown user'
                   const createdAt = (cm as any).created_at || (cm as any).CreatedAt || Date.now()
                   return (
-                    <div key={cm.id} className="flex gap-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex-shrink-0 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs">
+                    <div key={cm.id} className="flex gap-4 group">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex-shrink-0 flex items-center justify-center text-white font-bold text-sm shadow-md">
                         {(name || email || 'U').charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1">
-                        <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl rounded-tl-none border border-slate-100 dark:border-slate-700 shadow-sm">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-semibold text-slate-900 dark:text-white">{identity}</span>
-                            <span className="text-[10px] text-slate-400">{new Date(createdAt).toLocaleString()}</span>
-                          </div>
-                          <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{(cm as any).body}</p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-bold text-text">{identity}</span>
+                          <span className="text-xs text-text-secondary">•</span>
+                          <span className="text-xs text-text-secondary">{new Date(createdAt).toLocaleString()}</span>
+                        </div>
+                        <div className="bg-surface-2 p-4 rounded-2xl rounded-tl-none border border-divider shadow-sm group-hover:shadow-md transition-shadow">
+                          <p className="text-sm text-text leading-relaxed whitespace-pre-wrap">{(cm as any).body}</p>
                         </div>
                       </div>
                     </div>
@@ -425,17 +456,27 @@ export default function ChangeDetailsPage() {
                 })
               )}
             </div>
-            <div className="p-4 bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700">
+            <div className="p-4 bg-surface-1 border-t border-divider">
               <div className="relative">
                 <textarea
-                  className="w-full pl-4 pr-12 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm resize-none"
-                  rows={2}
+                  className="w-full pl-4 pr-12 py-4 bg-surface-2 border border-divider rounded-2xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-sm resize-none text-text placeholder:text-text-muted shadow-inner"
+                  rows={3}
                   placeholder="Add a comment..."
                   value={comment}
                   onChange={e => setComment(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      if (comment.trim()) {
+                        const btn = document.getElementById('send-comment-btn')
+                        btn?.click()
+                      }
+                    }
+                  }}
                 />
                 <button
-                  className="absolute right-2 bottom-2 p-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  id="send-comment-btn"
+                  className="absolute right-3 bottom-3 p-2 bg-primary hover:bg-primary-hover text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20 hover:shadow-primary/30 hover:-translate-y-0.5"
                   disabled={!comment.trim()}
                   onClick={async () => {
                     if (!comment.trim()) return
@@ -445,22 +486,29 @@ export default function ChangeDetailsPage() {
                     } catch (e: any) { setError(e.message) }
                   }}
                 >
-                  <ArrowUpRight className="w-4 h-4" />
+                  <Send className="w-4 h-4" />
                 </button>
               </div>
+              <p className="text-[10px] text-text-muted mt-2 text-right px-2">Press Enter to send, Shift+Enter for new line</p>
             </div>
-          </Card>
+          </div>
         </div>
       </div>
 
       {showSuccess && (
-        <div role="alert" className="fixed bottom-6 right-6 bg-green-600 text-white px-6 py-4 rounded-xl shadow-2xl shadow-green-900/20 text-sm font-medium animate-in slide-in-from-bottom-6 flex items-center gap-3">
-          <CheckCircle className="w-5 h-5" />
-          <div>
-            Change request approved successfully!
-            <div className="text-green-100 text-xs mt-0.5">The data has been appended to the dataset.</div>
+        <div role="alert" className="fixed bottom-6 right-6 bg-surface-1 border border-success/20 px-6 py-4 rounded-2xl shadow-2xl shadow-success/10 text-sm font-medium animate-in slide-in-from-bottom-6 flex items-center gap-4 z-50 max-w-md">
+          <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center flex-shrink-0">
+            <CheckCircle className="w-6 h-6 text-success" />
           </div>
-          <button className="ml-4 text-white/80 hover:text-white" onClick={() => setShowSuccess(false)} aria-label="Close">
+          <div className="flex-1">
+            <h4 className="text-success font-bold text-base mb-0.5">Change Approved!</h4>
+            <p className="text-text-secondary text-xs">The data has been successfully appended to the dataset.</p>
+          </div>
+          <button 
+            className="p-2 hover:bg-surface-2 rounded-full transition-colors text-text-secondary hover:text-text" 
+            onClick={() => setShowSuccess(false)} 
+            aria-label="Close"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>

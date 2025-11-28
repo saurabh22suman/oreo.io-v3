@@ -11,7 +11,7 @@ ModuleRegistry.registerModules([AllCommunityModule])
 import 'ag-grid-community/styles/ag-theme-quartz.css'
 import {
   ChevronLeft, Pencil, Save, RotateCcw, Trash2, Send, X,
-  AlertCircle, Users, Loader2, ArrowRight, Eye, FileText,
+  AlertCircle, Users, Loader2, ArrowRight, ArrowLeft, Eye, FileText,
   CheckCircle, XCircle, Info, Lock, Lightbulb
 } from 'lucide-react'
 
@@ -760,94 +760,59 @@ export default function LiveEditPage() {
   return (
     <div className="min-h-screen bg-[#0f172a] text-slate-200">
       {/* Header */}
-      <div className="bg-[#0f172a] border-b border-slate-800">
-        <div className="max-w-full px-6 py-4">
-          <Link
-            to={`/projects/${projectId}/labs?dataset=${dsId}`}
-            className="inline-flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-white mb-4 transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back to Experimental Features
-          </Link>
-
-          <div className="flex items-start justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
-                <Pencil className="w-5 h-5 text-purple-400" />
+      <div className="px-6 py-4 border-b border-divider bg-surface-1/50 backdrop-blur-sm sticky top-0 z-40">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link to={`/projects/${projectId}/datasets/${dsId}`} className="p-2 rounded-full hover:bg-surface-2 text-text-secondary hover:text-text transition-colors">
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+            <div className="h-6 w-px bg-divider" />
+            <div>
+              <h1 className="text-xl font-bold text-text font-display flex items-center gap-2">
+                Live Edit: {dataset?.name}
+                <span className="px-2 py-0.5 rounded text-xs font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase tracking-wider">
+                  Beta
+                </span>
+              </h1>
+              <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5">
+                <span className="flex items-center gap-1">
+                  <div className={`w-1.5 h-1.5 rounded-full ${sessionId ? 'bg-green-500 animate-pulse' : 'bg-slate-500'}`}></div>
+                  {sessionId ? 'Connected' : 'Connecting...'}
+                </span>
+                <span>•</span>
+                <span>{totalRows.toLocaleString()} rows</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div>
-                  <h1 className="text-xl font-bold text-white leading-tight">Live Editor</h1>
-                  <p className="text-slate-400 text-sm">Edit {dataset?.name} data directly</p>
-                </div>
-                {/* Info icon with hover tooltip */}
-                <div 
-                  className="relative"
-                  onMouseEnter={() => setShowInfoTooltip(true)}
-                  onMouseLeave={() => setShowInfoTooltip(false)}
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-3">
+            {hasChanges && (
+              <>
+                <button
+                  onClick={handleUndo}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
                 >
+                  <RotateCcw className="w-4 h-4" />
+                  Undo All
+                </button>
+                {hasValidationErrors ? (
+                  <div className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-400 bg-red-950/50 border border-red-800 rounded-lg cursor-not-allowed">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>{validationErrors.size} validation error{validationErrors.size > 1 ? 's' : ''}</span>
+                  </div>
+                ) : (
                   <button
-                    className="p-1.5 text-amber-400 hover:text-amber-300 hover:bg-amber-900/30 rounded-lg transition-colors"
-                    title="How to use Live Editor"
+                    onClick={() => setSubmitDialog(true)}
+                    disabled={role === 'viewer'}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Lightbulb className="w-5 h-5" />
+                    <Send className="w-4 h-4" />
+                    Proceed ({editedCells.length + deletedRows.length} changes)
                   </button>
-                  {showInfoTooltip && (
-                    <div className="absolute left-0 top-full mt-2 z-50 w-80 p-4 bg-slate-800 border border-slate-700 rounded-lg shadow-xl">
-                      <div className="text-sm text-slate-200">
-                        <p className="font-medium mb-2 text-purple-300">Live Edit Mode</p>
-                        <p className="text-slate-300 mb-2">
-                          Edit cells by double-clicking. Select rows and click "Delete Selected" to mark for deletion.
-                          Changes are staged until you submit a change request for approval.
-                        </p>
-                        {editableColumns.size < columns.length && (
-                          <p className="text-purple-400 text-xs mb-1">
-                            Note: Some columns are read-only based on business rules.
-                          </p>
-                        )}
-                        {businessRules.length > 0 && (
-                          <p className="text-purple-400 text-xs">
-                            Business rules are enforced. Invalid values will be highlighted in red.
-                          </p>
-                        )}
-                      </div>
-                      {/* Arrow pointer */}
-                      <div className="absolute -top-2 left-4 w-3 h-3 bg-slate-800 border-l border-t border-slate-700 transform rotate-45" />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex items-center gap-3">
-              {hasChanges && (
-                <>
-                  <button
-                    onClick={handleUndo}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    Undo All
-                  </button>
-                  {hasValidationErrors ? (
-                    <div className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-400 bg-red-950/50 border border-red-800 rounded-lg cursor-not-allowed">
-                      <AlertCircle className="w-4 h-4" />
-                      <span>{validationErrors.size} validation error{validationErrors.size > 1 ? 's' : ''}</span>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setSubmitDialog(true)}
-                      disabled={role === 'viewer'}
-                      className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Send className="w-4 h-4" />
-                      Proceed ({editedCells.length + deletedRows.length} changes)
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -861,7 +826,7 @@ export default function LiveEditPage() {
       {/* Dismissible Info Dialog */}
       {showInfoDialog && (
         <div className="px-6 pt-4">
-          <div className="flex items-start gap-3 p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg relative">
+          <div className="flex items-start gap-3 p-4 bg-purple-900/20 border border-purple-500/30 rounded-3xl relative">
             <button
               onClick={() => setShowInfoDialog(false)}
               className="absolute top-2 right-2 p-1 text-purple-400 hover:text-purple-200 hover:bg-purple-800/30 rounded transition-colors"
@@ -942,7 +907,7 @@ export default function LiveEditPage() {
       {/* Grid */}
       <div className="px-6 pb-6">
         <div
-          className="ag-theme-quartz-dark rounded-lg overflow-hidden border border-slate-800"
+          className="ag-theme-quartz-dark rounded-3xl overflow-hidden border border-divider shadow-lg shadow-black/5"
           style={{ height: 'calc(100vh - 320px)', width: '100%' }}
         >
           <AgGridReact
@@ -969,8 +934,8 @@ export default function LiveEditPage() {
       {/* Submit Dialog */}
       {submitDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 w-full max-w-lg mx-4">
-            <div className="p-6 border-b border-slate-700">
+          <div className="bg-surface-1 rounded-3xl shadow-2xl border border-divider w-full max-w-lg mx-4">
+            <div className="p-6 border-b border-divider">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white">Submit Change Request</h2>
                 <button

@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getProject, listMembers, removeMember, upsertMember, myProjectRole, currentUser } from '../api'
 import ProjectLayout from '../components/ProjectLayout'
-import Card from '../components/Card'
-import { Users, UserPlus, Shield, Trash2, Mail } from 'lucide-react'
+import { Users, UserPlus, Shield, Trash2, Mail, Loader2, Check, Crown, Eye, Edit3 } from 'lucide-react'
 
 type Member = { id: number; email: string; role: 'owner' | 'contributor' | 'viewer' }
 
@@ -51,36 +50,38 @@ export default function MembersPage() {
 
   return (
     <ProjectLayout project={project} role={myRole} loading={loading}>
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
+      <div className="grid gap-8 grid-cols-1 lg:grid-cols-3 animate-fade-in">
+        <div className="lg:col-span-2 space-y-8">
 
           {/* Add Member Card */}
           {isOwner && (
-            <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none">
-              <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-800/50">
-                <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <UserPlus className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            <div className="bg-surface-1 rounded-2xl border border-divider overflow-hidden shadow-lg shadow-black/5">
+              <div className="p-6 border-b border-divider bg-surface-2/30 backdrop-blur-sm">
+                <h3 className="font-bold text-text flex items-center gap-2 text-lg">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    <UserPlus className="w-5 h-5" />
+                  </div>
                   Add New Member
                 </h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                <p className="text-sm text-text-secondary mt-1 ml-11">
                   Invite colleagues to collaborate on this project.
                 </p>
               </div>
-              <div className="p-6">
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex-1 relative">
-                    <Mail className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
+              <div className="p-6 bg-surface-1/50">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1 relative group">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted group-focus-within:text-primary transition-colors" />
                     <input
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-divider bg-surface-2 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm shadow-sm"
                       placeholder="colleague@example.com"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                     />
                   </div>
-                  <div className="relative min-w-[140px]">
-                    <Shield className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
+                  <div className="relative min-w-[160px] group">
+                    <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted group-focus-within:text-primary transition-colors" />
                     <select
-                      className="w-full pl-10 pr-8 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all appearance-none"
+                      className="w-full pl-10 pr-8 py-2.5 rounded-xl border border-divider bg-surface-2 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all appearance-none text-sm shadow-sm cursor-pointer"
                       value={role}
                       onChange={e => setRole(e.target.value as Member['role'])}
                     >
@@ -88,10 +89,13 @@ export default function MembersPage() {
                       <option value="contributor">Contributor</option>
                       <option value="viewer">Viewer</option>
                     </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </div>
                   </div>
                   <button
                     disabled={!email || saving}
-                    className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-lg shadow-blue-500/30 hover:shadow-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:-translate-y-0.5"
+                    className="btn btn-primary flex items-center justify-center gap-2 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all px-6"
                     onClick={async () => {
                       setError(''); setSaving(true)
                       try {
@@ -99,94 +103,147 @@ export default function MembersPage() {
                         const exists = items.find(x => x.id === m.id);
                         if (exists) { setItems(items.map(x => x.id === m.id ? m : x)) } else { setItems([m, ...items]) }
                         setEmail('')
-                      }
-                      catch (e: any) { setError(e.message) }
+                      } catch (e: any) { setError(e.message) }
                       finally { setSaving(false) }
                     }}
                   >
-                    {saving ? 'Adding...' : 'Invite'}
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                    Invite
                   </button>
                 </div>
-                {error && <div className="text-sm text-red-500 mt-3 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-800">{error}</div>}
+                {error && (
+                  <div className="mt-4 p-3 rounded-xl bg-danger/10 border border-danger/20 text-danger text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-danger animate-pulse"></div>
+                    {error}
+                  </div>
+                )}
               </div>
-            </Card>
+            </div>
           )}
 
           {/* Members List */}
-          <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none">
-            <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-white dark:bg-slate-800/50">
-              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Users className="w-5 h-5 text-primary" />
-                Project Members
-                <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-xs text-slate-600 dark:text-slate-300 font-medium">
-                  {items.length}
-                </span>
+          <div className="bg-surface-1 rounded-2xl border border-divider overflow-hidden shadow-lg shadow-black/5">
+            <div className="p-6 border-b border-divider flex items-center justify-between bg-surface-2/30 backdrop-blur-sm">
+              <h3 className="font-bold text-text flex items-center gap-2 text-lg">
+                <div className="p-2 rounded-lg bg-secondary/10 text-secondary">
+                  <Users className="w-5 h-5" />
+                </div>
+                Team Members
               </h3>
+              <span className="text-xs font-bold px-3 py-1 rounded-full bg-surface-2 text-text-secondary border border-divider shadow-sm">
+                {items.length} members
+              </span>
             </div>
-            <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {[...items].sort((a, b) => {
-                // Show logged-in user at top
-                if (a.id === meId) return -1;
-                if (b.id === meId) return 1;
-                return 0;
-              }).map(m => (
-                <div key={m.id} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+            
+            <div className="divide-y divide-divider">
+              {items.map(member => (
+                <div key={member.id} className="p-4 flex items-center justify-between hover:bg-surface-2/50 transition-colors group">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-sm">
-                      {m.email.substring(0, 2).toUpperCase()}
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shadow-sm text-white
+                      ${member.role === 'owner' ? 'bg-gradient-to-br from-primary to-primary/80' : 
+                        member.role === 'contributor' ? 'bg-gradient-to-br from-secondary to-secondary/80' : 
+                        'bg-gradient-to-br from-slate-500 to-slate-600'}`}
+                    >
+                      {member.email.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <div className="font-medium text-slate-900 dark:text-white">{m.email}</div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${m.role === 'owner' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' :
-                          m.role === 'contributor' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
-                            'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                          }`}>
-                          {m.role.charAt(0).toUpperCase() + m.role.slice(1)}
-                        </span>
-                        {m.id === meId && <span className="text-xs text-slate-400">(You)</span>}
+                      <div className="font-medium text-text flex items-center gap-2">
+                        {member.email}
+                        {member.email === meEmail && (
+                          <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20">
+                            You
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-text-secondary flex items-center gap-1.5 mt-1">
+                        {member.role === 'owner' && <Crown className="w-3 h-3 text-primary" />}
+                        {member.role === 'contributor' && <Edit3 className="w-3 h-3 text-secondary" />}
+                        {member.role === 'viewer' && <Eye className="w-3 h-3 text-text-muted" />}
+                        <span className="capitalize font-medium">{member.role}</span>
                       </div>
                     </div>
                   </div>
 
-                  {isOwner && typeof meId === 'number' && meId !== m.id && m.email !== meEmail && !(m.role === 'owner' && (m.email === (project?.owner_email || project?.owner))) && (
-                    <button
-                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
-                      title="Remove member"
-                      onClick={async () => {
-                        if (!confirm('Are you sure you want to remove this member?')) return;
-                        try { await removeMember(projectId, m.id); setItems(items.filter(x => x.id !== m.id)) } catch (e: any) { setError(e.message) }
-                      }}
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+                  {isOwner && (member.email !== meEmail) && (
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
+                      <div className="relative">
+                        <select
+                          className="text-xs bg-surface-1 border border-divider rounded-lg pl-2 pr-6 py-1.5 focus:outline-none focus:border-primary transition-colors appearance-none cursor-pointer hover:border-primary/50"
+                          value={member.role}
+                          onChange={async (e) => {
+                            try {
+                              const newRole = e.target.value as any
+                              await upsertMember(projectId, member.email, newRole)
+                              setItems(items.map(x => x.id === member.id ? { ...x, role: newRole } : x))
+                            } catch (e: any) { alert(e.message) }
+                          }}
+                        >
+                          <option value="owner">Owner</option>
+                          <option value="contributor">Contributor</option>
+                          <option value="viewer">Viewer</option>
+                        </select>
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                      </div>
+                      <button
+                        className="p-1.5 text-text-secondary hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"
+                        title="Remove member"
+                        onClick={async () => {
+                          if (!confirm('Remove this member?')) return
+                          try {
+                            await removeMember(projectId, member.id)
+                            setItems(items.filter(x => x.id !== member.id))
+                          } catch (e: any) { alert(e.message) }
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
             </div>
-          </Card>
+          </div>
         </div>
 
-        <div className="lg:col-span-1">
-          <Card className="bg-gradient-to-br from-slate-800 to-slate-900 text-white border-0">
-            <div className="p-6">
-              <h3 className="font-bold text-lg mb-2">Role Permissions</h3>
-              <div className="space-y-4 text-sm text-slate-300">
-                <div>
-                  <strong className="text-white block mb-1">Owner</strong>
-                  Full access to manage project, datasets, members, and settings.
+        {/* Sidebar Info */}
+        <div className="space-y-6">
+          <div className="bg-surface-1 rounded-2xl border border-divider p-6 shadow-lg shadow-black/5 sticky top-6">
+            <h3 className="font-bold text-text mb-6 flex items-center gap-2">
+              <Shield className="w-5 h-5 text-primary" />
+              Role Permissions
+            </h3>
+            <div className="space-y-6">
+              <div className="flex gap-4 group">
+                <div className="mt-1 w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                  <Crown className="w-4 h-4" />
                 </div>
                 <div>
-                  <strong className="text-white block mb-1">Contributor</strong>
-                  Can create and edit datasets, run queries, and view members.
+                  <h4 className="text-sm font-bold text-text">Owner</h4>
+                  <p className="text-xs text-text-secondary mt-1 leading-relaxed">Full access to manage project settings, members, and datasets. Can delete the project.</p>
+                </div>
+              </div>
+              <div className="flex gap-4 group">
+                <div className="mt-1 w-8 h-8 rounded-lg bg-secondary/10 text-secondary flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                  <Edit3 className="w-4 h-4" />
                 </div>
                 <div>
-                  <strong className="text-white block mb-1">Viewer</strong>
-                  Read-only access to datasets and queries. Cannot make changes.
+                  <h4 className="text-sm font-bold text-text">Contributor</h4>
+                  <p className="text-xs text-text-secondary mt-1 leading-relaxed">Can upload datasets, create changes, and approve requests. Cannot manage members.</p>
+                </div>
+              </div>
+              <div className="flex gap-4 group">
+                <div className="mt-1 w-8 h-8 rounded-lg bg-surface-3 text-text-secondary flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                  <Eye className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-text">Viewer</h4>
+                  <p className="text-xs text-text-secondary mt-1 leading-relaxed">Read-only access to datasets and dashboards. Cannot make any changes.</p>
                 </div>
               </div>
             </div>
-          </Card>
+          </div>
         </div>
       </div>
     </ProjectLayout>

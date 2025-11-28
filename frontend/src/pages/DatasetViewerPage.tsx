@@ -12,7 +12,7 @@ import {
   ChevronLeft, Database, BarChart3, Table2, RefreshCw, Download,
   ChevronRight, ChevronLeft as PrevIcon, Edit3, Type, Hash, Calendar,
   ToggleLeft, FileSpreadsheet, FileText, ChevronDown, MoreVertical,
-  Filter, Copy, Pin, Clock, ArrowUp, ArrowDown, ArrowUpDown, X, Plus, Edit2
+  Filter, Copy, Pin, Clock, ArrowUp, ArrowDown, ArrowUpDown, X, Plus, Edit2, ArrowLeft
 } from 'lucide-react'
 
 // Custom Header Component with Sort Icons and Context Menu
@@ -115,14 +115,14 @@ const CustomHeader = (props: any) => {
 
   return (
     <div className="flex items-center justify-between w-full h-full group">
-      <div className="flex items-center gap-2 text-xs font-bold text-slate-400 group-hover:text-slate-200 transition-colors">
+      <div className="flex items-center gap-2 text-xs font-bold text-text-secondary group-hover:text-text transition-colors">
         <Icon className="w-3.5 h-3.5 opacity-50" />
         <span>{displayName}</span>
         <button
           onClick={handleSort}
           className="opacity-0 group-hover:opacity-100 transition-opacity"
         >
-          <SortIcon className={`w-3.5 h-3.5 ${currentSort ? 'text-blue-400' : 'text-slate-500'}`} />
+          <SortIcon className={`w-3.5 h-3.5 ${currentSort ? 'text-primary' : 'text-text-secondary'}`} />
         </button>
       </div>
 
@@ -130,7 +130,7 @@ const CustomHeader = (props: any) => {
         <button
           ref={buttonRef}
           onClick={handleMenuClick}
-          className={`p-1 rounded hover:bg-slate-700 text-slate-500 hover:text-slate-200 opacity-0 group-hover:opacity-100 transition-all ${showMenu ? 'opacity-100 bg-slate-700 text-slate-200' : ''}`}
+          className={`p-1 rounded hover:bg-surface-3 text-text-secondary hover:text-text opacity-0 group-hover:opacity-100 transition-all ${showMenu ? 'opacity-100 bg-surface-3 text-text' : ''}`}
         >
           <MoreVertical className="w-3.5 h-3.5" />
         </button>
@@ -139,18 +139,18 @@ const CustomHeader = (props: any) => {
           <div
             ref={menuRef}
             style={{ position: 'fixed', left: `${menuPos.x}px`, top: `${menuPos.y}px` }}
-            className="w-48 bg-[#1e293b] border border-slate-700 rounded-lg shadow-xl z-[9999] py-1"
+            className="w-48 bg-surface-1 border border-divider rounded-lg shadow-xl z-[9999] py-1"
           >
-            <button onClick={handleCopy} className="w-full px-3 py-2 text-left text-xs text-slate-300 hover:bg-slate-700 flex items-center gap-2">
+            <button onClick={handleCopy} className="w-full px-3 py-2 text-left text-xs text-text-secondary hover:bg-surface-2 flex items-center gap-2">
               <Copy className="w-3.5 h-3.5" />
               Copy column name
             </button>
-            <button onClick={handleFilter} className="w-full px-3 py-2 text-left text-xs text-slate-300 hover:bg-slate-700 flex items-center gap-2">
+            <button onClick={handleFilter} className="w-full px-3 py-2 text-left text-xs text-text-secondary hover:bg-surface-2 flex items-center gap-2">
               <Filter className="w-3.5 h-3.5" />
               Filter
             </button>
             <div className="relative group/sub">
-              <button className="w-full px-3 py-2 text-left text-xs text-slate-300 hover:bg-slate-700 flex items-center justify-between">
+              <button className="w-full px-3 py-2 text-left text-xs text-text-secondary hover:bg-surface-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Edit3 className="w-3.5 h-3.5" />
                   Format
@@ -158,8 +158,8 @@ const CustomHeader = (props: any) => {
                 <ChevronRight className="w-3 h-3" />
               </button>
             </div>
-            <div className="h-px bg-slate-700 my-1" />
-            <button onClick={handlePin} className="w-full px-3 py-2 text-left text-xs text-slate-300 hover:bg-slate-700 flex items-center gap-2">
+            <div className="h-px bg-divider my-1" />
+            <button onClick={handlePin} className="w-full px-3 py-2 text-left text-xs text-text-secondary hover:bg-surface-2 flex items-center gap-2">
               <Pin className="w-3.5 h-3.5" />
               {column.isPinned() ? 'Unpin column' : 'Pin column'}
             </button>
@@ -285,8 +285,8 @@ export default function DatasetViewerPage() {
         sortable: false,
         filter: false,
         resizable: false,
-        cellClass: 'bg-[#0f172a] text-slate-500 text-xs font-mono flex items-center justify-center border-r border-slate-800',
-        headerClass: 'bg-[#0f172a] border-r border-slate-800',
+        cellClass: 'bg-surface-2 text-text-secondary text-xs font-mono flex items-center justify-center border-r border-divider',
+        headerClass: 'bg-surface-2 border-r border-divider',
       }
     ];
 
@@ -309,7 +309,7 @@ export default function DatasetViewerPage() {
           sortKey,
           onSortChanged: () => setSortKey(k => k + 1)
         },
-        cellClass: 'text-sm text-slate-300 font-mono border-r border-slate-800',
+        cellClass: 'text-sm text-text font-mono border-r border-divider',
       }
     })]
   }, [columns, columnTypes, columnMappings, sortKey])
@@ -319,7 +319,7 @@ export default function DatasetViewerPage() {
     filter: true,
     resizable: true,
     minWidth: 100,
-    headerClass: 'bg-[#0f172a] border-r border-slate-800',
+    headerClass: 'bg-surface-2 border-r border-divider',
   }), [])
 
   const onGridReady = useCallback((params: { api: GridApi }) => {
@@ -427,41 +427,41 @@ export default function DatasetViewerPage() {
   const totalPages = Math.ceil((stats?.row_count || 0) / pageSize)
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-slate-200">
-      <div className="bg-[#0f172a] border-b border-slate-800">
+    <div className="min-h-screen bg-surface-1 text-text animate-fade-in">
+      <div className="bg-surface-1/50 backdrop-blur-sm border-b border-divider sticky top-0 z-40">
         <div className="max-w-full px-6 py-4">
-          <Link
-            to={`/projects/${projectId}/datasets/${dsId}`}
-            className="inline-flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-white mb-4 transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back to Dataset
-          </Link>
-
           <div className="flex items-start justify-between gap-6">
             <div className="flex items-center gap-4">
-              <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                <Table2 className="w-5 h-5 text-blue-400" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-white leading-tight">Data Viewer</h1>
-                <p className="text-slate-400 text-sm">Explore {dataset?.name}</p>
+              <Link
+                to={`/projects/${projectId}/datasets/${dsId}`}
+                className="p-2 rounded-full hover:bg-surface-2 text-text-secondary hover:text-text transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20 shadow-lg shadow-primary/5">
+                  <Table2 className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-text leading-tight font-display tracking-tight">Data Viewer</h1>
+                  <p className="text-text-secondary text-sm font-medium mt-1">Explore {dataset?.name}</p>
+                </div>
               </div>
             </div>
 
             <div className="flex gap-3">
               <Link
                 to={`/projects/${projectId}/datasets/${dsId}/live-edit`}
-                className="flex items-center gap-2 px-3 py-1.5 bg-amber-900/50 hover:bg-amber-800/50 border border-amber-700/50 text-amber-200 text-sm font-medium rounded-lg transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-warning/10 hover:bg-warning/20 border border-warning/20 text-warning text-sm font-bold rounded-xl transition-all hover:-translate-y-0.5"
                 title="Live Edit (Experimental)"
               >
                 <Edit2 className="w-4 h-4" />
                 Live Edit
-                <span className="text-[10px] bg-amber-800 text-amber-200 px-1.5 py-0.5 rounded">Beta</span>
+                <span className="text-[10px] bg-warning text-white px-1.5 py-0.5 rounded-md ml-1">Beta</span>
               </Link>
               <button
                 onClick={handleRefresh}
-                className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm font-medium rounded-lg transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-surface-2 hover:bg-surface-3 border border-divider text-text-secondary hover:text-text text-sm font-medium rounded-xl transition-all"
               >
                 <RefreshCw className="w-4 h-4" />
                 Refresh
@@ -474,26 +474,26 @@ export default function DatasetViewerPage() {
       <div className="max-w-full px-6 py-6">
         {error && <Alert type="error" message={error} onClose={() => setError('')} />}
 
-        <div className="bg-[#0f172a] rounded-lg border border-slate-800 overflow-hidden flex flex-col h-[calc(100vh-220px)]">
+        <div className="bg-surface-1 rounded-3xl border border-divider overflow-hidden flex flex-col h-[calc(100vh-220px)] shadow-lg shadow-black/5">
           {/* Active Filters Display */}
           {activeFilters.length > 0 && (
-            <div className="px-4 py-2 border-b border-slate-800 bg-[#1e293b]/30 flex items-center gap-2 flex-wrap">
+            <div className="px-4 py-3 border-b border-divider bg-surface-2/30 flex items-center gap-2 flex-wrap">
               {activeFilters.map((f, idx) => (
-                <div key={f.field} className="flex items-center gap-1 bg-[#0f172a] border border-slate-700 rounded px-2 py-1 text-xs">
-                  <span className="text-slate-400">{f.name}</span>
-                  <span className="text-slate-500">{f.condition === 'is one of' ? 'is one of' : f.condition}</span>
-                  <span className="text-blue-400 font-medium">{f.value}</span>
+                <div key={f.field} className="flex items-center gap-2 bg-surface-1 border border-divider rounded-lg px-3 py-1.5 text-xs shadow-sm">
+                  <span className="text-text-secondary font-medium">{f.name}</span>
+                  <span className="text-text-muted italic">{f.condition === 'is one of' ? 'is one of' : f.condition}</span>
+                  <span className="text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded">{f.value}</span>
                   <button 
                     onClick={() => removeFilter(f.field)}
-                    className="ml-1 p-0.5 hover:bg-slate-700 rounded"
+                    className="ml-1 p-0.5 hover:bg-surface-2 hover:text-error rounded-md transition-colors"
                   >
-                    <X className="w-3 h-3 text-slate-400" />
+                    <X className="w-3 h-3" />
                   </button>
                 </div>
               ))}
               <button
                 onClick={() => setFilterColumn({ name: 'column', field: '', type: 'text' })}
-                className="flex items-center gap-1 text-xs text-slate-400 hover:text-white px-2 py-1 hover:bg-slate-800 rounded transition-colors"
+                className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary-hover px-3 py-1.5 hover:bg-primary/5 rounded-lg transition-colors border border-transparent hover:border-primary/20"
               >
                 <Plus className="w-3 h-3" />
                 Add filter
@@ -502,53 +502,55 @@ export default function DatasetViewerPage() {
           )}
           
           {filterColumn && (
-            <div className="p-4 border-b border-slate-800 bg-[#1e293b]/50">
-              <div className="flex items-center gap-3 mb-3">
-                <Filter className="w-4 h-4 text-blue-400" />
-                <span className="text-sm font-medium text-slate-300">Add filter</span>
-                <button onClick={() => setFilterColumn(null)} className="ml-auto p-1 hover:bg-slate-700 rounded">
+            <div className="p-4 border-b border-divider bg-surface-2/50 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-1.5 bg-primary/10 rounded-lg">
+                  <Filter className="w-4 h-4 text-primary" />
+                </div>
+                <span className="text-sm font-bold text-text">Add filter</span>
+                <button onClick={() => setFilterColumn(null)} className="ml-auto p-1.5 hover:bg-surface-3 rounded-lg text-text-secondary hover:text-text transition-colors">
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded">
-                    {filterColumn.name}
+                  <span className="text-xs font-medium text-text-secondary bg-surface-3 px-2.5 py-1 rounded-md border border-divider">
+                    Column: <span className="text-text font-bold">{filterColumn.name}</span>
                   </span>
-                  <button onClick={() => setFilterColumn(null)} className="p-1 hover:bg-slate-700 rounded">
-                    <X className="w-3 h-3" />
-                  </button>
                 </div>
 
-                <select
-                  value={filterCondition}
-                  onChange={(e) => setFilterCondition(e.target.value)}
-                  className="px-3 py-2 bg-[#0f172a] border border-slate-700 rounded text-sm text-slate-300"
-                >
-                  <option value="is one of">is one of</option>
-                  <option value="contains">contains</option>
-                  <option value="equals">equals</option>
-                </select>
+                <div className="grid grid-cols-[1fr,2fr] gap-3">
+                  <select
+                    value={filterCondition}
+                    onChange={(e) => setFilterCondition(e.target.value)}
+                    className="px-3 py-2.5 bg-surface-1 border border-divider rounded-xl text-sm text-text focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                  >
+                    <option value="is one of">is one of</option>
+                    <option value="contains">contains</option>
+                    <option value="equals">equals</option>
+                  </select>
 
-                <input
-                  type="text"
-                  value={filterValue}
-                  onChange={(e) => setFilterValue(e.target.value)}
-                  placeholder="Type or select"
-                  className="px-3 py-2 bg-[#0f172a] border border-slate-700 rounded text-sm text-slate-300 placeholder-slate-500"
-                />
+                  <input
+                    type="text"
+                    value={filterValue}
+                    onChange={(e) => setFilterValue(e.target.value)}
+                    placeholder="Type or select value..."
+                    className="px-3 py-2.5 bg-surface-1 border border-divider rounded-xl text-sm text-text placeholder-text-muted focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    autoFocus
+                  />
+                </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-3 pt-2">
                   <button
                     onClick={applyFilter}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded"
+                    className="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-lg shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5"
                   >
-                    Apply
+                    Apply Filter
                   </button>
                   <button
                     onClick={() => setFilterColumn(null)}
-                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded"
+                    className="px-4 py-2 bg-surface-3 hover:bg-surface-2 text-text-secondary hover:text-text text-xs font-medium rounded-lg transition-colors"
                   >
                     Cancel
                   </button>
@@ -560,7 +562,7 @@ export default function DatasetViewerPage() {
           <div className="flex-1 ag-theme-databricks-dark w-full">
             {loading && rows.length === 0 ? (
               <div className="flex items-center justify-center h-full">
-                <div className="text-slate-400 flex items-center gap-2">
+                <div className="text-text-secondary flex items-center gap-2">
                   <RefreshCw className="w-4 h-4 animate-spin" />
                   Loading data...
                 </div>
@@ -582,15 +584,16 @@ export default function DatasetViewerPage() {
             )}
           </div>
 
-          <div className="px-4 py-2 border-t border-slate-800 bg-[#0f172a] flex items-center justify-between text-xs text-slate-400 font-mono">
+          <div className="px-4 py-3 border-t border-divider bg-surface-2 flex items-center justify-between text-xs text-text-secondary font-mono">
             <div className="flex items-center gap-4">
               <div className="relative">
                 <button
                   onClick={() => setShowDownloadMenu(!showDownloadMenu)}
-                  className="p-1.5 border border-slate-700 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors"
+                  className="flex items-center gap-2 px-3 py-1.5 border border-divider hover:bg-surface-3 hover:border-primary/30 rounded-lg text-text-secondary hover:text-primary transition-all shadow-sm"
                   title="Download"
                 >
                   <Download className="w-3.5 h-3.5" />
+                  <span className="font-medium">Export</span>
                 </button>
 
                 {showDownloadMenu && (
@@ -599,19 +602,19 @@ export default function DatasetViewerPage() {
                       className="fixed inset-0 z-10"
                       onClick={() => setShowDownloadMenu(false)}
                     />
-                    <div className="absolute bottom-full left-0 mb-2 w-40 bg-[#1e293b] rounded-lg shadow-xl border border-slate-700 py-1 z-20">
+                    <div className="absolute bottom-full left-0 mb-2 w-48 bg-surface-1 rounded-xl shadow-xl border border-divider py-1.5 z-20 animate-in fade-in zoom-in-95 duration-200">
                       <button
                         onClick={exportCsv}
-                        className="w-full px-4 py-2 text-left text-xs text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                        className="w-full px-4 py-2.5 text-left text-xs text-text-secondary hover:bg-surface-2 hover:text-text flex items-center gap-3 transition-colors"
                       >
-                        <FileText className="w-3.5 h-3.5 text-slate-400" />
+                        <FileText className="w-4 h-4 text-text-muted" />
                         Download CSV
                       </button>
                       <button
                         onClick={exportExcel}
-                        className="w-full px-4 py-2 text-left text-xs text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                        className="w-full px-4 py-2.5 text-left text-xs text-text-secondary hover:bg-surface-2 hover:text-text flex items-center gap-3 transition-colors"
                       >
-                        <FileSpreadsheet className="w-3.5 h-3.5 text-green-500" />
+                        <FileSpreadsheet className="w-4 h-4 text-success" />
                         Download Excel
                       </button>
                     </div>
@@ -621,35 +624,35 @@ export default function DatasetViewerPage() {
             </div>
 
             <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 bg-surface-1 rounded-lg border border-divider p-1 shadow-sm">
                 <button
                   onClick={handlePrevPage}
                   disabled={page === 0}
-                  className="hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="p-1 hover:bg-surface-2 rounded text-text-secondary hover:text-text disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
                   <PrevIcon className="w-3.5 h-3.5" />
                 </button>
-                <span>
+                <span className="px-2 font-medium text-text">
                   {page * pageSize + 1}-{Math.min((page + 1) * pageSize, stats?.row_count || 0)}
                 </span>
                 <button
                   onClick={handleNextPage}
                   disabled={page >= totalPages - 1 || rows.length < pageSize}
-                  className="hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="p-1 hover:bg-surface-2 rounded text-text-secondary hover:text-text disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              <div className="h-3 w-px bg-slate-700" />
+              <div className="h-4 w-px bg-divider" />
 
-              <span>{rows.length} rows</span>
+              <span className="font-medium text-text">{rows.length} rows loaded</span>
 
-              <div className="h-3 w-px bg-slate-700" />
+              <div className="h-4 w-px bg-divider" />
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 text-text-muted">
                 <Clock className="w-3 h-3" />
-                <span>{runtime.toFixed(2)}s runtime</span>
+                <span>{runtime.toFixed(2)}s</span>
               </div>
             </div>
           </div>

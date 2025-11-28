@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { 
   getDataset, 
   getProject, 
@@ -25,6 +25,7 @@ import {
   Clock,
   ChevronRight,
   ArrowLeft,
+  ArrowRight,
   Filter,
   Loader2,
   FileWarning,
@@ -53,18 +54,18 @@ const eventTypeIcons: Record<string, React.ReactNode> = {
 
 // Event type color mapping for light/dark mode
 const eventTypeColors: Record<string, string> = {
-  edit: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
-  append: 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400',
-  upload: 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400',
-  cr_created: 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400',
-  cr_approved: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
-  cr_rejected: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400',
-  cr_merged: 'bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400',
-  cr_withdrawn: 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400',
-  restore: 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400',
-  schema_change: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400',
-  rule_change: 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400',
-  validation: 'bg-lime-100 text-lime-600 dark:bg-lime-900/30 dark:text-lime-400',
+  edit: 'bg-primary/10 text-primary border-primary/20',
+  append: 'bg-success/10 text-success border-success/20',
+  upload: 'bg-success/10 text-success border-success/20',
+  cr_created: 'bg-accent/10 text-accent border-accent/20',
+  cr_approved: 'bg-success/10 text-success border-success/20',
+  cr_rejected: 'bg-error/10 text-error border-error/20',
+  cr_merged: 'bg-primary/10 text-primary border-primary/20',
+  cr_withdrawn: 'bg-warning/10 text-warning border-warning/20',
+  restore: 'bg-warning/10 text-warning border-warning/20',
+  schema_change: 'bg-accent/10 text-accent border-accent/20',
+  rule_change: 'bg-primary/10 text-primary border-primary/20',
+  validation: 'bg-success/10 text-success border-success/20',
 }
 
 // Human-readable event type labels
@@ -89,6 +90,7 @@ export default function DatasetAuditPage() {
   const { id, datasetId } = useParams()
   const projectId = Number(id)
   const dsId = Number(datasetId)
+  const nav = useNavigate()
 
   const [project, setProject] = useState<any>(null)
   const [dataset, setDataset] = useState<Dataset | null>(null)
@@ -180,7 +182,7 @@ export default function DatasetAuditPage() {
   const hasMorePages = offset + limit < total
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="flex flex-col h-[calc(100vh-64px)] bg-surface-2 animate-fade-in">
       {error && (
         <div className="fixed top-4 right-4 z-50">
           <Alert type="error" message={error} onClose={() => setError('')} />
@@ -188,358 +190,379 @@ export default function DatasetAuditPage() {
       )}
 
       {/* Header Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 text-white shadow-2xl shadow-slate-900/20">
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-4">
-            <Link
-              to={`/projects/${projectId}/datasets/${dsId}`}
-              className="flex items-center gap-1 text-slate-400 hover:text-white transition-colors no-underline"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span className="text-sm">Back to Dataset</span>
-            </Link>
-          </div>
-
+      <div className="bg-surface-1/50 backdrop-blur-sm border-b border-divider z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-white/10">
-              <History className="w-8 h-8 text-blue-300" />
-            </div>
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <span className="px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-bold border border-white/10 text-blue-200">
-                  Timeline
-                </span>
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight">Audit History</h1>
-              <p className="text-slate-300 text-sm">
-                {dataset?.name || `Dataset #${dsId}`} • {project?.name || 'Project'}
-              </p>
-            </div>
+            <Link to={`/projects/${projectId}/datasets/${dsId}`} className="p-2 rounded-full hover:bg-surface-2 text-text-secondary hover:text-text transition-colors">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div className="h-6 w-px bg-divider" />
+            <h1 className="text-xl font-bold text-text font-display">Audit History</h1>
           </div>
         </div>
-
-        {/* Decorative background elements */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
       </div>
 
       {/* Main Content */}
-      <div className="flex gap-6">
+      <div className="flex-1 flex gap-6 min-h-0 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
         {/* Timeline Panel (Left) */}
-        <div className="w-[400px] flex-shrink-0">
-          <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none">
-            {/* Filter */}
-            <div className="p-4 border-b border-slate-100 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-slate-400" />
-                <select
-                  value={filterType}
-                  onChange={(e) => {
-                    setFilterType(e.target.value)
-                    setOffset(0)
-                  }}
-                  className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Events</option>
-                  <option value="cr_created,cr_approved,cr_rejected,cr_merged,cr_withdrawn">Change Requests</option>
-                  <option value="append,upload">Uploads</option>
-                  <option value="edit">Edits</option>
-                  <option value="restore">Restores</option>
-                  <option value="schema_change,rule_change">Config Changes</option>
-                  <option value="validation">Validations</option>
-                </select>
-              </div>
+        <div className="w-[400px] flex-shrink-0 flex flex-col bg-surface-1 rounded-3xl border border-divider shadow-lg shadow-black/5 overflow-hidden">
+          {/* Filter */}
+          <div className="p-4 border-b border-divider bg-surface-1/50 backdrop-blur-sm z-10">
+            <div className="flex items-center gap-2 bg-surface-2 rounded-xl px-3 py-2 border border-divider focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+              <Filter className="w-4 h-4 text-text-secondary" />
+              <select
+                value={filterType}
+                onChange={(e) => {
+                  setFilterType(e.target.value)
+                  setOffset(0)
+                }}
+                className="flex-1 bg-transparent border-none text-sm text-text focus:outline-none cursor-pointer"
+              >
+                <option value="">All Events</option>
+                <option value="cr_created,cr_approved,cr_rejected,cr_merged,cr_withdrawn">Change Requests</option>
+                <option value="append,upload">Uploads</option>
+                <option value="edit">Edits</option>
+                <option value="restore">Restores</option>
+                <option value="schema_change,rule_change">Config Changes</option>
+                <option value="validation">Validations</option>
+              </select>
             </div>
+          </div>
 
-            {/* Events List */}
-            <div className="max-h-[calc(100vh-400px)] overflow-y-auto">
-              {loading ? (
-                <div className="p-8 flex items-center justify-center">
-                  <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+          {/* Events List */}
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            {loading ? (
+              <div className="p-8 flex items-center justify-center h-full">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+              </div>
+            ) : events.length === 0 ? (
+              <div className="p-8 text-center h-full flex flex-col items-center justify-center">
+                <div className="w-16 h-16 rounded-full bg-surface-2 flex items-center justify-center mb-4">
+                  <FileWarning className="w-8 h-8 text-text-muted" />
                 </div>
-              ) : events.length === 0 ? (
-                <div className="p-8 text-center">
-                  <FileWarning className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-                  <p className="text-slate-600 dark:text-slate-400">No audit events found</p>
-                  <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Events will appear here as changes are made</p>
-                </div>
-              ) : (
-                <ul className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                  {events.map((event) => (
-                    <li key={event.audit_id}>
-                      <button
-                        onClick={() => handleEventClick(event.audit_id)}
-                        className={`w-full p-4 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${
-                          selectedEvent?.audit_id === event.audit_id ? 'bg-slate-100 dark:bg-slate-800/70' : ''
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className={`p-2 rounded-lg ${eventTypeColors[event.type] || 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
-                            {eventTypeIcons[event.type] || <FileText className="w-4 h-4" />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${eventTypeColors[event.type] || 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
-                                {eventTypeLabels[event.type] || event.type}
-                              </span>
-                            </div>
-                            <p className="text-slate-900 dark:text-white font-medium mt-1 truncate">{event.title}</p>
-                            <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
-                              <span>{getActorName(event)}</span>
-                              <span>•</span>
-                              <Clock className="w-3 h-3" />
-                              <span>{formatTimestamp(event.timestamp)}</span>
-                            </div>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                <p className="text-text font-medium">No audit events found</p>
+                <p className="text-sm text-text-secondary mt-1">Events will appear here as changes are made</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-divider">
+                {events.map((event) => (
+                  <li key={event.audit_id}>
+                    <button
+                      onClick={() => handleEventClick(event.audit_id)}
+                      className={`w-full p-4 text-left hover:bg-surface-2/50 transition-all duration-200 group ${
+                        selectedEvent?.audit_id === event.audit_id 
+                          ? 'bg-primary/5 border-l-4 border-primary pl-3' 
+                          : 'pl-4 border-l-4 border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`p-2 rounded-xl border shadow-sm transition-transform group-hover:scale-105 ${eventTypeColors[event.type] || 'bg-surface-2 text-text-secondary border-divider'}`}>
+                          {eventTypeIcons[event.type] || <FileText className="w-4 h-4" />}
                         </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {/* Pagination */}
-            {events.length > 0 && (
-              <div className="p-4 border-t border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-white dark:bg-slate-800/50">
-                <span className="text-sm text-slate-500">
-                  Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setOffset(Math.max(0, offset - limit))}
-                    disabled={offset === 0}
-                    className="px-3 py-1 text-sm bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    Prev
-                  </button>
-                  <button
-                    onClick={() => setOffset(offset + limit)}
-                    disabled={!hasMorePages}
-                    className="px-3 py-1 text-sm bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${eventTypeColors[event.type] || 'bg-surface-2 text-text-secondary border-divider'}`}>
+                              {eventTypeLabels[event.type] || event.type}
+                            </span>
+                          </div>
+                          <p className={`text-sm font-bold truncate mb-1 ${selectedEvent?.audit_id === event.audit_id ? 'text-primary' : 'text-text'}`}>
+                            {event.title}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-text-secondary">
+                            <span className="font-medium text-text">{getActorName(event)}</span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {formatTimestamp(event.timestamp)}
+                            </span>
+                          </div>
+                        </div>
+                        <ChevronRight className={`w-4 h-4 flex-shrink-0 transition-transform ${selectedEvent?.audit_id === event.audit_id ? 'text-primary translate-x-1' : 'text-text-muted group-hover:text-text'}`} />
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
-          </Card>
+          </div>
+
+          {/* Pagination */}
+          {events.length > 0 && (
+            <div className="p-4 border-t border-divider flex items-center justify-between bg-surface-1/50 backdrop-blur-sm z-10">
+              <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+                {offset + 1}-{Math.min(offset + limit, total)} of {total}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setOffset(Math.max(0, offset - limit))}
+                  disabled={offset === 0}
+                  className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-surface-2 hover:bg-surface-3 text-text rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-divider"
+                >
+                  Prev
+                </button>
+                <button
+                  onClick={() => setOffset(offset + limit)}
+                  disabled={!hasMorePages}
+                  className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-surface-2 hover:bg-surface-3 text-text rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-divider"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Event Details Panel (Center) */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           {loadingDetails ? (
-            <Card className="border-0 shadow-xl shadow-slate-200/50 dark:shadow-none p-8 flex items-center justify-center">
-              <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-            </Card>
+            <div className="bg-surface-1 rounded-3xl border border-divider shadow-lg shadow-black/5 p-8 flex items-center justify-center h-full">
+              <Loader2 className="w-10 h-10 text-primary animate-spin" />
+            </div>
           ) : selectedEvent ? (
-            <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none">
+            <div className="bg-surface-1 rounded-3xl border border-divider shadow-lg shadow-black/5 overflow-hidden h-full flex flex-col animate-in fade-in slide-in-from-right-4 duration-300">
               {/* Event Header */}
-              <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
-                <div className="flex items-start gap-4">
-                  <div className={`p-3 rounded-xl ${eventTypeColors[selectedEvent.type] || 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
-                    {eventTypeIcons[selectedEvent.type] || <FileText className="w-6 h-6" />}
+              <div className="p-8 border-b border-divider bg-surface-1/50 backdrop-blur-sm">
+                <div className="flex items-start gap-5">
+                  <div className={`p-4 rounded-2xl border shadow-sm ${eventTypeColors[selectedEvent.type] || 'bg-surface-2 text-text-secondary border-divider'}`}>
+                    {eventTypeIcons[selectedEvent.type] ? (
+                      <div className="w-8 h-8 flex items-center justify-center [&>svg]:w-8 [&>svg]:h-8">
+                        {eventTypeIcons[selectedEvent.type]}
+                      </div>
+                    ) : <FileText className="w-8 h-8" />}
                   </div>
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${eventTypeColors[selectedEvent.type] || 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className={`text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${eventTypeColors[selectedEvent.type] || 'bg-surface-2 text-text-secondary border-divider'}`}>
                         {eventTypeLabels[selectedEvent.type] || selectedEvent.type}
                       </span>
                       {selectedEvent.snapshot_id && (
-                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                        <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-surface-2 text-text-secondary border border-divider">
                           {selectedEvent.snapshot_id.replace('snap_', 'Snapshot #')}
                         </span>
                       )}
                     </div>
-                    <h2 className="text-xl font-bold text-slate-900 dark:text-white">{selectedEvent.title}</h2>
+                    <h2 className="text-2xl font-bold text-text font-display mb-2">{selectedEvent.title}</h2>
                     {selectedEvent.description && (
-                      <p className="text-slate-600 dark:text-slate-400 mt-1">{selectedEvent.description}</p>
+                      <p className="text-text-secondary text-lg leading-relaxed">{selectedEvent.description}</p>
                     )}
-                    <div className="flex items-center gap-4 mt-3 text-sm text-slate-500">
-                      <span>By {getActorName(selectedEvent)}</span>
-                      <span>•</span>
-                      <span>{formatTimestamp(selectedEvent.timestamp)}</span>
+                    <div className="flex items-center gap-4 mt-4 text-sm text-text-secondary font-medium">
+                      <span className="flex items-center gap-2 bg-surface-2 px-3 py-1.5 rounded-lg border border-divider">
+                        <div className="w-2 h-2 rounded-full bg-primary"></div>
+                        {getActorName(selectedEvent)}
+                      </span>
+                      <span className="flex items-center gap-2 bg-surface-2 px-3 py-1.5 rounded-lg border border-divider">
+                        <Clock className="w-4 h-4" />
+                        {new Date(selectedEvent.timestamp).toLocaleString()}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Summary Cards */}
-              <div className="p-6 border-b border-slate-100 dark:border-slate-700/50">
-                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">Summary</h3>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider mb-1">Rows Added</div>
-                        <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                          {selectedEvent.summary?.rows_added || 0}
-                        </div>
-                      </div>
-                      <BarChart3 className="w-6 h-6 text-green-500 dark:text-green-400 opacity-50" />
-                    </div>
-                  </div>
-
-                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider mb-1">Rows Updated</div>
-                        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                          {selectedEvent.summary?.rows_updated || 0}
-                        </div>
-                      </div>
-                      <Table2 className="w-6 h-6 text-blue-500 dark:text-blue-400 opacity-50" />
-                    </div>
-                  </div>
-
-                  <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 border border-red-200 dark:border-red-800">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider mb-1">Rows Deleted</div>
-                        <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                          {selectedEvent.summary?.rows_deleted || 0}
-                        </div>
-                      </div>
-                      <Trash2 className="w-6 h-6 text-red-500 dark:text-red-400 opacity-50" />
-                    </div>
-                  </div>
-
-                  <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 border border-purple-200 dark:border-purple-800">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider mb-1">Cells Changed</div>
-                        <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                          {selectedEvent.summary?.cells_changed || 0}
-                        </div>
-                      </div>
-                      <Columns3 className="w-6 h-6 text-purple-500 dark:text-purple-400 opacity-50" />
-                    </div>
-                  </div>
-
-                  {(selectedEvent.summary?.warnings || 0) > 0 && (
-                    <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 border border-amber-200 dark:border-amber-800">
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
+                {/* Summary Cards */}
+                <div className="p-8 border-b border-divider bg-surface-1/30">
+                  <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4" />
+                    Impact Summary
+                  </h3>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-success/5 rounded-2xl p-5 border border-success/20 hover:bg-success/10 transition-colors">
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="text-amber-600 dark:text-amber-400 text-xs uppercase tracking-wider mb-1">Warnings</div>
-                          <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-                            {selectedEvent.summary.warnings}
+                          <div className="text-text-secondary text-xs font-bold uppercase tracking-wider mb-1">Rows Added</div>
+                          <div className="text-3xl font-bold text-success font-display">
+                            {selectedEvent.summary?.rows_added || 0}
                           </div>
                         </div>
-                        <AlertTriangle className="w-6 h-6 text-amber-500 dark:text-amber-400 opacity-50" />
+                        <div className="p-2 rounded-xl bg-success/10 text-success">
+                          <BarChart3 className="w-6 h-6" />
+                        </div>
                       </div>
                     </div>
-                  )}
 
-                  {(selectedEvent.summary?.errors || 0) > 0 && (
-                    <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 border border-red-200 dark:border-red-800">
+                    <div className="bg-primary/5 rounded-2xl p-5 border border-primary/20 hover:bg-primary/10 transition-colors">
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="text-red-600 dark:text-red-400 text-xs uppercase tracking-wider mb-1">Errors</div>
-                          <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                            {selectedEvent.summary.errors}
+                          <div className="text-text-secondary text-xs font-bold uppercase tracking-wider mb-1">Rows Updated</div>
+                          <div className="text-3xl font-bold text-primary font-display">
+                            {selectedEvent.summary?.rows_updated || 0}
                           </div>
                         </div>
-                        <AlertCircle className="w-6 h-6 text-red-500 dark:text-red-400 opacity-50" />
+                        <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                          <Table2 className="w-6 h-6" />
+                        </div>
                       </div>
                     </div>
-                  )}
+
+                    <div className="bg-error/5 rounded-2xl p-5 border border-error/20 hover:bg-error/10 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-text-secondary text-xs font-bold uppercase tracking-wider mb-1">Rows Deleted</div>
+                          <div className="text-3xl font-bold text-error font-display">
+                            {selectedEvent.summary?.rows_deleted || 0}
+                          </div>
+                        </div>
+                        <div className="p-2 rounded-xl bg-error/10 text-error">
+                          <Trash2 className="w-6 h-6" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-accent/5 rounded-2xl p-5 border border-accent/20 hover:bg-accent/10 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-text-secondary text-xs font-bold uppercase tracking-wider mb-1">Cells Changed</div>
+                          <div className="text-3xl font-bold text-accent font-display">
+                            {selectedEvent.summary?.cells_changed || 0}
+                          </div>
+                        </div>
+                        <div className="p-2 rounded-xl bg-accent/10 text-accent">
+                          <Columns3 className="w-6 h-6" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {(selectedEvent.summary?.warnings || 0) > 0 && (
+                      <div className="bg-warning/5 rounded-2xl p-5 border border-warning/20 hover:bg-warning/10 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-warning text-xs font-bold uppercase tracking-wider mb-1">Warnings</div>
+                            <div className="text-3xl font-bold text-warning font-display">
+                              {selectedEvent.summary.warnings}
+                            </div>
+                          </div>
+                          <div className="p-2 rounded-xl bg-warning/10 text-warning">
+                            <AlertTriangle className="w-6 h-6" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {(selectedEvent.summary?.errors || 0) > 0 && (
+                      <div className="bg-error/5 rounded-2xl p-5 border border-error/20 hover:bg-error/10 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-error text-xs font-bold uppercase tracking-wider mb-1">Errors</div>
+                            <div className="text-3xl font-bold text-error font-display">
+                              {selectedEvent.summary.errors}
+                            </div>
+                          </div>
+                          <div className="p-2 rounded-xl bg-error/10 text-error">
+                            <AlertCircle className="w-6 h-6" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Tabs */}
-              <div className="p-6">
-                <div className="flex gap-2 mb-4">
-                  <button
-                    onClick={() => setShowDiff(false)}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                      !showDiff
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    Details
-                  </button>
-                  {selectedEvent.diff && (
+                {/* Tabs */}
+                <div className="p-8">
+                  <div className="flex gap-2 mb-6 bg-surface-2 p-1 rounded-xl inline-flex border border-divider">
                     <button
-                      onClick={() => setShowDiff(true)}
-                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                        showDiff
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      onClick={() => setShowDiff(false)}
+                      className={`px-6 py-2 text-sm font-bold rounded-lg transition-all ${
+                        !showDiff
+                          ? 'bg-surface-1 text-primary shadow-sm'
+                          : 'text-text-secondary hover:text-text hover:bg-surface-3'
                       }`}
                     >
-                      Diff
+                      Details
                     </button>
+                    {selectedEvent.diff && (
+                      <button
+                        onClick={() => setShowDiff(true)}
+                        className={`px-6 py-2 text-sm font-bold rounded-lg transition-all ${
+                          showDiff
+                            ? 'bg-surface-1 text-primary shadow-sm'
+                            : 'text-text-secondary hover:text-text hover:bg-surface-3'
+                        }`}
+                      >
+                        Diff
+                      </button>
+                    )}
+                  </div>
+
+                  {!showDiff ? (
+                    <div className="space-y-6">
+                      {/* Related CR */}
+                      {selectedEvent.related_cr && (
+                        <div className="bg-surface-2/30 rounded-2xl p-6 border border-divider">
+                          <h4 className="text-sm font-bold text-text-secondary uppercase tracking-wider mb-4">Related Change Request</h4>
+                          <Link
+                            to={`/projects/${projectId}/datasets/${dsId}/changes/${selectedEvent.related_cr.id}`}
+                            className="flex items-center gap-4 p-4 bg-surface-1 rounded-xl hover:bg-surface-2 transition-all no-underline border border-divider hover:border-primary/30 group shadow-sm"
+                          >
+                            <div className="p-3 rounded-xl bg-accent/10 text-accent group-hover:scale-110 transition-transform">
+                              <FileText className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-text font-bold text-lg group-hover:text-primary transition-colors">
+                                #{selectedEvent.related_cr.id} - {selectedEvent.related_cr.title}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-surface-2 text-text-secondary border border-divider">
+                                  {selectedEvent.related_cr.type}
+                                </span>
+                                <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-surface-2 text-text-secondary border border-divider">
+                                  {selectedEvent.related_cr.status}
+                                </span>
+                              </div>
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-primary group-hover:translate-x-1 transition-all" />
+                          </Link>
+                        </div>
+                      )}
+
+                      {/* Metadata */}
+                      {selectedEvent.metadata && Object.keys(selectedEvent.metadata).length > 0 && (
+                        <div className="bg-surface-2/30 rounded-2xl p-6 border border-divider">
+                          <h4 className="text-sm font-bold text-text-secondary uppercase tracking-wider mb-4">Metadata</h4>
+                          <pre className="text-sm text-text font-mono bg-surface-1 p-6 rounded-xl overflow-x-auto border border-divider shadow-inner">
+                            {JSON.stringify(selectedEvent.metadata, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+
+                      {/* Validation */}
+                      {selectedEvent.validation && Object.keys(selectedEvent.validation).length > 0 && (
+                        <div className="bg-surface-2/30 rounded-2xl p-6 border border-divider">
+                          <h4 className="text-sm font-bold text-text-secondary uppercase tracking-wider mb-4">Validation Report</h4>
+                          <pre className="text-sm text-text font-mono bg-surface-1 p-6 rounded-xl overflow-x-auto border border-divider shadow-inner">
+                            {JSON.stringify(selectedEvent.validation, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-surface-2/30 rounded-2xl p-6 border border-divider">
+                      <h4 className="text-sm font-bold text-text-secondary uppercase tracking-wider mb-4">Changes</h4>
+                      {selectedEvent.diff ? (
+                        <DiffViewer diff={selectedEvent.diff} />
+                      ) : (
+                        <div className="text-center py-12">
+                          <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center mx-auto mb-3">
+                            <FileText className="w-6 h-6 text-text-muted" />
+                          </div>
+                          <p className="text-text-secondary font-medium">No diff available</p>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-
-                {!showDiff ? (
-                  <div className="space-y-4">
-                    {/* Related CR */}
-                    {selectedEvent.related_cr && (
-                      <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-                        <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3">Related Change Request</h4>
-                        <Link
-                          to={`/projects/${projectId}/datasets/${dsId}/changes/${selectedEvent.related_cr.id}`}
-                          className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors no-underline border border-slate-200 dark:border-slate-700"
-                        >
-                          <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
-                            <FileText className="w-4 h-4" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-slate-900 dark:text-white font-medium">
-                              #{selectedEvent.related_cr.id} - {selectedEvent.related_cr.title}
-                            </p>
-                            <p className="text-sm text-slate-500">
-                              {selectedEvent.related_cr.type} • {selectedEvent.related_cr.status}
-                            </p>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-slate-400" />
-                        </Link>
-                      </div>
-                    )}
-
-                    {/* Metadata */}
-                    {selectedEvent.metadata && Object.keys(selectedEvent.metadata).length > 0 && (
-                      <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-                        <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3">Metadata</h4>
-                        <pre className="text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 p-4 rounded-lg overflow-x-auto border border-slate-200 dark:border-slate-700">
-                          {JSON.stringify(selectedEvent.metadata, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-
-                    {/* Validation */}
-                    {selectedEvent.validation && Object.keys(selectedEvent.validation).length > 0 && (
-                      <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-                        <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3">Validation Report</h4>
-                        <pre className="text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 p-4 rounded-lg overflow-x-auto border border-slate-200 dark:border-slate-700">
-                          {JSON.stringify(selectedEvent.validation, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-                    <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3">Changes</h4>
-                    {selectedEvent.diff ? (
-                      <DiffViewer diff={selectedEvent.diff} />
-                    ) : (
-                      <p className="text-slate-500 text-center py-4">No diff available</p>
-                    )}
-                  </div>
-                )}
               </div>
-            </Card>
+            </div>
           ) : (
-            <Card className="border-0 shadow-xl shadow-slate-200/50 dark:shadow-none p-12 text-center">
-              <History className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Select an Event</h3>
-              <p className="text-slate-500 dark:text-slate-400">
-                Click on an event in the timeline to view its details
+            <div className="bg-surface-1 rounded-3xl border border-divider shadow-lg shadow-black/5 p-12 text-center h-full flex flex-col items-center justify-center">
+              <div className="w-24 h-24 rounded-full bg-surface-2 flex items-center justify-center mb-6 shadow-inner">
+                <History className="w-12 h-12 text-text-muted" />
+              </div>
+              <h3 className="text-2xl font-bold text-text mb-2 font-display">Select an Event</h3>
+              <p className="text-text-secondary text-lg max-w-md">
+                Click on an event in the timeline to view its full details, impact analysis, and data changes.
               </p>
-            </Card>
+            </div>
           )}
         </div>
       </div>
@@ -552,24 +575,25 @@ function DiffViewer({ diff }: { diff: Record<string, any> }) {
   // Handle different diff formats
   if (diff.rows_added || diff.rows_updated || diff.rows_deleted) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
         {/* Added Rows */}
         {diff.rows_added?.length > 0 && (
           <div>
-            <h5 className="text-sm font-semibold text-green-600 dark:text-green-400 mb-2">
+            <h5 className="text-sm font-bold text-success mb-3 flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-success"></div>
               Rows Added ({diff.rows_added.length})
             </h5>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {diff.rows_added.slice(0, 10).map((row: any, idx: number) => (
-                <div key={idx} className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                  <p className="text-xs text-green-600 dark:text-green-400 font-mono mb-1">New row inserted</p>
-                  <pre className="text-sm text-slate-700 dark:text-slate-300 overflow-x-auto">
+                <div key={idx} className="bg-success/5 border border-success/20 rounded-xl p-4 hover:bg-success/10 transition-colors">
+                  <p className="text-xs text-success font-bold font-mono mb-2 uppercase tracking-wider">New row inserted</p>
+                  <pre className="text-sm text-text font-mono overflow-x-auto custom-scrollbar">
                     {JSON.stringify(row, null, 2)}
                   </pre>
                 </div>
               ))}
               {diff.rows_added.length > 10 && (
-                <p className="text-sm text-slate-500 text-center">
+                <p className="text-sm text-text-secondary text-center font-medium py-2">
                   ... and {diff.rows_added.length - 10} more rows
                 </p>
               )}
@@ -580,35 +604,36 @@ function DiffViewer({ diff }: { diff: Record<string, any> }) {
         {/* Updated Rows */}
         {diff.rows_updated?.length > 0 && (
           <div>
-            <h5 className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2">
+            <h5 className="text-sm font-bold text-primary mb-3 flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-primary"></div>
               Rows Updated ({diff.rows_updated.length})
             </h5>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {diff.rows_updated.slice(0, 10).map((update: any, idx: number) => (
-                <div key={idx} className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-                  <p className="text-xs text-blue-600 dark:text-blue-400 font-mono mb-2">
+                <div key={idx} className="bg-primary/5 border border-primary/20 rounded-xl p-4 hover:bg-primary/10 transition-colors">
+                  <p className="text-xs text-primary font-bold font-mono mb-3 uppercase tracking-wider">
                     Row ID: {update.id || update.row_id || idx}
                   </p>
                   {update.changes ? (
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       {Object.entries(update.changes).map(([field, values]: [string, any]) => (
-                        <div key={field} className="text-sm">
-                          <span className="text-slate-500 dark:text-slate-400">{field}:</span>{' '}
-                          <span className="text-red-600 dark:text-red-400 line-through">{String(values.old)}</span>{' '}
-                          <span className="text-slate-400">→</span>{' '}
-                          <span className="text-green-600 dark:text-green-400">{String(values.new)}</span>
+                        <div key={field} className="text-sm font-mono bg-surface-1/50 p-2 rounded border border-primary/10 flex items-center gap-3">
+                          <span className="text-text-secondary font-bold min-w-[100px]">{field}:</span>
+                          <span className="text-error line-through opacity-70">{String(values.old)}</span>
+                          <ArrowRight className="w-3 h-3 text-text-muted" />
+                          <span className="text-success font-bold">{String(values.new)}</span>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <pre className="text-sm text-slate-700 dark:text-slate-300 overflow-x-auto">
+                    <pre className="text-sm text-text font-mono overflow-x-auto custom-scrollbar">
                       {JSON.stringify(update, null, 2)}
                     </pre>
                   )}
                 </div>
               ))}
               {diff.rows_updated.length > 10 && (
-                <p className="text-sm text-slate-500 text-center">
+                <p className="text-sm text-text-secondary text-center font-medium py-2">
                   ... and {diff.rows_updated.length - 10} more rows
                 </p>
               )}
@@ -619,20 +644,21 @@ function DiffViewer({ diff }: { diff: Record<string, any> }) {
         {/* Deleted Rows */}
         {diff.rows_deleted?.length > 0 && (
           <div>
-            <h5 className="text-sm font-semibold text-red-600 dark:text-red-400 mb-2">
+            <h5 className="text-sm font-bold text-error mb-3 flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-error"></div>
               Rows Deleted ({diff.rows_deleted.length})
             </h5>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {diff.rows_deleted.slice(0, 10).map((row: any, idx: number) => (
-                <div key={idx} className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                  <p className="text-xs text-red-600 dark:text-red-400 font-mono mb-1">Row deleted</p>
-                  <pre className="text-sm text-slate-700 dark:text-slate-300 overflow-x-auto">
+                <div key={idx} className="bg-error/5 border border-error/20 rounded-xl p-4 hover:bg-error/10 transition-colors">
+                  <p className="text-xs text-error font-bold font-mono mb-2 uppercase tracking-wider">Row deleted</p>
+                  <pre className="text-sm text-text font-mono overflow-x-auto custom-scrollbar">
                     {JSON.stringify(row, null, 2)}
                   </pre>
                 </div>
               ))}
               {diff.rows_deleted.length > 10 && (
-                <p className="text-sm text-slate-500 text-center">
+                <p className="text-sm text-text-secondary text-center font-medium py-2">
                   ... and {diff.rows_deleted.length - 10} more rows
                 </p>
               )}
@@ -645,7 +671,7 @@ function DiffViewer({ diff }: { diff: Record<string, any> }) {
 
   // Fallback: raw JSON display
   return (
-    <pre className="text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 p-4 rounded-lg overflow-x-auto border border-slate-200 dark:border-slate-700">
+    <pre className="text-sm text-text font-mono bg-surface-1 p-6 rounded-xl overflow-x-auto border border-divider shadow-inner">
       {JSON.stringify(diff, null, 2)}
     </pre>
   )

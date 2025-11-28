@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import Container from '../components/Container'
-import PageHeader from '../components/PageHeader'
+import { User, Settings, Monitor, Globe, Save, Loader2, Moon, Sun, Type, Clock, Hash, Code, Mail, Phone, Camera } from 'lucide-react'
 
 type Prefs = {
   theme?: 'light'|'dark'
@@ -76,118 +75,272 @@ export default function SettingsPage(){
     finally{ setSaving(false) }
   }
 
-  if(loading){ return <div className="p-6">Loading settings...</div> }
+  if(loading){ 
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    ) 
+  }
 
   return (
-        <Container>
-          <PageHeader title="Settings" subtitle="Manage your account and preferences." />
+    <div className="space-y-8 animate-fade-in">
+      {/* Header Section */}
+      <div className="relative overflow-hidden rounded-3xl bg-surface-1/80 backdrop-blur-xl border border-divider p-8 shadow-2xl shadow-black/5">
+        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="px-3 py-1 rounded-full bg-primary/10 text-xs font-bold border border-primary/20 text-primary shadow-sm">
+                Configuration
+              </span>
+            </div>
+            <h1 className="text-4xl font-bold mb-4 tracking-tight text-text font-display drop-shadow-sm">Settings</h1>
+            <p className="text-text-secondary max-w-lg text-base leading-relaxed">
+              Manage your account details, appearance preferences, and editor settings.
+            </p>
+          </div>
+        </div>
+        {/* Decorative background elements */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+      </div>
 
-          {err && <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded mb-4 text-sm">{err}</div>}
-          {ok && <div className="bg-green-50 border border-green-200 text-green-700 p-3 rounded mb-4 text-sm">{ok}</div>}
+      {err && (
+        <div className="bg-danger/10 border border-danger/20 text-danger p-4 rounded-xl text-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+          <div className="w-2 h-2 rounded-full bg-danger animate-pulse"></div>
+          {err}
+        </div>
+      )}
+      {ok && (
+        <div className="bg-success/10 border border-success/20 text-success p-4 rounded-xl text-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+          <div className="w-2 h-2 rounded-full bg-success animate-pulse"></div>
+          {ok}
+        </div>
+      )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Account Settings */}
-            <section className="bg-white rounded-xl p-4 border">
-              <h2 className="text-lg font-semibold mb-3">Account Settings</h2>
-              <div className="flex items-center gap-4 mb-4">
-                <img src={profile.avatar_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(profile.email||profile.name||'User')} alt="avatar" className="w-16 h-16 rounded-full border" />
-                <div className="flex-1">
-                  <label className="block text-sm text-gray-600">Profile picture URL</label>
-                  <input value={profile.avatar_url} onChange={e=>setProfile({...profile, avatar_url:e.target.value})} className="mt-1 w-full border rounded px-3 py-2" placeholder="https://..." />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Account Settings */}
+        <div className="bg-surface-1 rounded-2xl border border-divider p-8 shadow-xl shadow-black/5 h-full flex flex-col">
+          <div className="flex items-center gap-4 mb-8 pb-6 border-b border-divider">
+            <div className="p-3 rounded-xl bg-primary/10 text-primary shadow-inner">
+              <User className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-text">Account Settings</h2>
+              <p className="text-xs text-text-secondary font-medium">Personal information and contact details</p>
+            </div>
+          </div>
+          
+          <div className="space-y-6 flex-1">
+            <div className="flex items-center gap-6">
+              <div className="relative group">
+                <img 
+                  src={profile.avatar_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(profile.email||profile.name||'User')} 
+                  alt="avatar" 
+                  className="w-24 h-24 rounded-full border-4 border-surface-2 shadow-lg object-cover transition-transform group-hover:scale-105" 
+                />
+                <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center text-white cursor-pointer backdrop-blur-sm">
+                  <Camera className="w-6 h-6" />
                 </div>
               </div>
-              <label className="block text-sm text-gray-600">Name</label>
-              <input value={profile.name} onChange={e=>setProfile({...profile, name:e.target.value})} className="mt-1 w-full border rounded px-3 py-2 mb-3" />
-              <label className="block text-sm text-gray-600">Email (primary, editable with verification)</label>
-              <input value={profile.email} onChange={e=>setProfile({...profile, email:e.target.value})} className="mt-1 w-full border rounded px-3 py-2 mb-3" />
-              <div className="text-xs text-gray-500 mb-2">If you change your email, we’ll send a verification link to confirm.</div>
-              <label className="block text-sm text-gray-600">Phone (optional)</label>
-              <input value={profile.phone} onChange={e=>setProfile({...profile, phone:e.target.value})} className="mt-1 w-full border rounded px-3 py-2 mb-4" />
-              <button disabled={saving} onClick={saveProfile} className="btn-primary px-4 py-2">Save Profile</button>
-            </section>
-
-            {/* Preferences */}
-            <section className="bg-white rounded-xl p-4 border">
-              <h2 className="text-lg font-semibold mb-3">Preferences</h2>
-              {/* Theme & Appearance */}
-              <div className="mb-4">
-                <h3 className="font-medium mb-2">Theme & Appearance</h3>
-                <div className="flex items-center gap-3 mb-2">
-                  <label className="text-sm">Theme</label>
-                  <select value={prefs.theme} onChange={e=>{ const v = e.target.value as 'light'|'dark'; setPrefs({...prefs, theme:v}); applyTheme(v)}} className="border rounded px-2 py-1">
-                    <option value="light">Light</option>
-                    <option value="dark">Dark</option>
-                  </select>
-                </div>
-                <div className="flex items-center gap-3 mb-2">
-                  <label className="text-sm">Layout density</label>
-                  <select value={prefs.density} onChange={e=>setPrefs({...prefs, density: e.target.value as any})} className="border rounded px-2 py-1">
-                    <option value="comfortable">Comfortable</option>
-                    <option value="compact">Compact</option>
-                  </select>
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-sm">Font size</label>
-                  <input type="number" min={80} max={140} value={prefs.fontScale||100} onChange={e=>setPrefs({...prefs, fontScale: Number(e.target.value)})} className="border rounded px-2 py-1 w-24" />
-                  <span className="text-sm text-gray-500">%</span>
-                </div>
+              <div className="flex-1">
+                <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">Profile Picture URL</label>
+                <input 
+                  value={profile.avatar_url} 
+                  onChange={e=>setProfile({...profile, avatar_url:e.target.value})} 
+                  className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm" 
+                  placeholder="https://..." 
+                />
               </div>
+            </div>
 
-              {/* Language & Locale */}
-              <div className="mb-4">
-                <h3 className="font-medium mb-2">Language & Locale</h3>
-                <div className="flex items-center gap-3 mb-2">
-                  <label className="text-sm">Language</label>
-                  <select value={prefs.language} onChange={e=>setPrefs({...prefs, language: e.target.value})} className="border rounded px-2 py-1">
-                    <option value="en">English</option>
-                    <option value="hi">Hindi</option>
-                  </select>
-                </div>
-                <div className="flex items-center gap-3 mb-2">
-                  <label className="text-sm">Timezone</label>
-                  <input value={prefs.timezone||''} onChange={e=>setPrefs({...prefs, timezone:e.target.value})} className="border rounded px-2 py-1" />
-                </div>
-                <div className="flex items-center gap-3 mb-2">
-                  <label className="text-sm">Date format</label>
-                  <input value={prefs.dateFormat||''} onChange={e=>setPrefs({...prefs, dateFormat:e.target.value})} className="border rounded px-2 py-1" />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-sm">Number format</label>
-                  <input value={prefs.numberFormat||''} onChange={e=>setPrefs({...prefs, numberFormat:e.target.value})} className="border rounded px-2 py-1" />
-                </div>
-              </div>
+            <div>
+              <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-2">
+                <User className="w-3.5 h-3.5" /> Full Name
+              </label>
+              <input 
+                value={profile.name} 
+                onChange={e=>setProfile({...profile, name:e.target.value})} 
+                className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm" 
+                placeholder="John Doe"
+              />
+            </div>
 
-              {/* Query Editor */}
+            <div>
+              <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-2">
+                <Mail className="w-3.5 h-3.5" /> Email Address
+              </label>
+              <input 
+                value={profile.email} 
+                onChange={e=>setProfile({...profile, email:e.target.value})} 
+                className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm" 
+                placeholder="john@example.com"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-2">
+                <Phone className="w-3.5 h-3.5" /> Phone Number
+              </label>
+              <input 
+                value={profile.phone} 
+                onChange={e=>setProfile({...profile, phone:e.target.value})} 
+                className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm" 
+                placeholder="+1 (555) 000-0000"
+              />
+            </div>
+          </div>
+
+          <div className="mt-10 pt-6 border-t border-divider flex justify-end">
+            <button 
+              onClick={saveProfile} 
+              disabled={saving}
+              className="btn btn-primary flex items-center gap-2 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all px-6 py-2.5 rounded-xl"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save Changes
+            </button>
+          </div>
+        </div>
+
+        {/* Preferences */}
+        <div className="bg-surface-1 rounded-2xl border border-divider p-8 shadow-xl shadow-black/5 h-full flex flex-col">
+          <div className="flex items-center gap-4 mb-8 pb-6 border-b border-divider">
+            <div className="p-3 rounded-xl bg-secondary/10 text-secondary shadow-inner">
+              <Settings className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-text">Preferences</h2>
+              <p className="text-xs text-text-secondary font-medium">Customize your experience</p>
+            </div>
+          </div>
+
+          <div className="space-y-8 flex-1">
+            <div className="grid grid-cols-2 gap-6">
               <div>
-                <h3 className="font-medium mb-2">Query Editor</h3>
-                <div className="flex items-center gap-3 mb-2">
-                  <label className="text-sm">Default language</label>
-                  <select value={prefs.editor?.language||'sql'} onChange={e=>setPrefs({...prefs, editor:{ ...(prefs.editor||{}), language: e.target.value as any }})} className="border rounded px-2 py-1">
+                <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-1.5">
+                  <Monitor className="w-3.5 h-3.5" /> Theme
+                </label>
+                <div className="flex bg-surface-2 p-1.5 rounded-xl border border-divider shadow-inner">
+                  <button 
+                    onClick={()=>setPrefs({...prefs, theme:'light'})}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all ${prefs.theme==='light' ? 'bg-white text-primary shadow-sm' : 'text-text-secondary hover:text-text'}`}
+                  >
+                    <Sun className="w-3.5 h-3.5" /> Light
+                  </button>
+                  <button 
+                    onClick={()=>setPrefs({...prefs, theme:'dark'})}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all ${prefs.theme==='dark' ? 'bg-slate-700 text-white shadow-sm' : 'text-text-secondary hover:text-text'}`}
+                  >
+                    <Moon className="w-3.5 h-3.5" /> Dark
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-1.5">
+                  <Type className="w-3.5 h-3.5" /> Density
+                </label>
+                <select 
+                  value={prefs.density} 
+                  onChange={e=>setPrefs({...prefs, density:e.target.value as any})} 
+                  className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                >
+                  <option value="comfortable">Comfortable</option>
+                  <option value="compact">Compact</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5" /> Language
+                </label>
+                <select 
+                  value={prefs.language} 
+                  onChange={e=>setPrefs({...prefs, language:e.target.value})} 
+                  className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                >
+                  <option value="en">English</option>
+                  <option value="es">Spanish</option>
+                  <option value="fr">French</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" /> Timezone
+                </label>
+                <select 
+                  value={prefs.timezone} 
+                  onChange={e=>setPrefs({...prefs, timezone:e.target.value})} 
+                  className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                >
+                  <option value={Intl.DateTimeFormat().resolvedOptions().timeZone}>System Default</option>
+                  <option value="UTC">UTC</option>
+                  <option value="America/New_York">New York</option>
+                  <option value="Europe/London">London</option>
+                  <option value="Asia/Tokyo">Tokyo</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-divider">
+              <h3 className="text-sm font-bold text-text mb-4 flex items-center gap-2 uppercase tracking-wider">
+                <Code className="w-4 h-4 text-primary" /> Editor Settings
+              </h3>
+              <div className="space-y-4 bg-surface-2/30 p-4 rounded-xl border border-divider">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-text-secondary">Default Language</label>
+                  <select 
+                    value={prefs.editor?.language} 
+                    onChange={e=>setPrefs({...prefs, editor:{...prefs.editor, language:e.target.value as any}})} 
+                    className="px-3 py-1.5 bg-surface-1 border border-divider rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                  >
                     <option value="sql">SQL</option>
                     <option value="python">Python</option>
                   </select>
                 </div>
-                <div className="flex items-center gap-3 mb-2">
-                  <label className="text-sm">Autocomplete</label>
-                  <input type="checkbox" checked={!!prefs.editor?.autocomplete} onChange={e=>setPrefs({...prefs, editor:{ ...(prefs.editor||{}), autocomplete: e.target.checked }})} />
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-text-secondary">Autocomplete</label>
+                  <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                    <input 
+                      type="checkbox" 
+                      checked={prefs.editor?.autocomplete} 
+                      onChange={e=>setPrefs({...prefs, editor:{...prefs.editor, autocomplete:e.target.checked}})} 
+                      className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer checked:right-0 right-5 checked:border-primary"
+                    />
+                    <label className={`toggle-label block overflow-hidden h-5 rounded-full cursor-pointer ${prefs.editor?.autocomplete ? 'bg-primary' : 'bg-surface-3'}`}></label>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 mb-2">
-                  <label className="text-sm">History size</label>
-                  <input type="number" min={0} max={1000} value={prefs.editor?.historySize||100} onChange={e=>setPrefs({...prefs, editor:{ ...(prefs.editor||{}), historySize: Number(e.target.value) }})} className="border rounded px-2 py-1 w-24" />
-                </div>
-                <div className="flex items-center gap-4">
-                  <label className="text-sm">Line numbers</label>
-                  <input type="checkbox" checked={!!prefs.editor?.lineNumbers} onChange={e=>setPrefs({...prefs, editor:{ ...(prefs.editor||{}), lineNumbers: e.target.checked }})} />
-                  <label className="text-sm">Syntax highlighting</label>
-                  <input type="checkbox" checked={!!prefs.editor?.syntaxHighlight} onChange={e=>setPrefs({...prefs, editor:{ ...(prefs.editor||{}), syntaxHighlight: e.target.checked }})} />
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-text-secondary">Line Numbers</label>
+                  <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                    <input 
+                      type="checkbox" 
+                      checked={prefs.editor?.lineNumbers} 
+                      onChange={e=>setPrefs({...prefs, editor:{...prefs.editor, lineNumbers:e.target.checked}})} 
+                      className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer checked:right-0 right-5 checked:border-primary"
+                    />
+                    <label className={`toggle-label block overflow-hidden h-5 rounded-full cursor-pointer ${prefs.editor?.lineNumbers ? 'bg-primary' : 'bg-surface-3'}`}></label>
+                  </div>
                 </div>
               </div>
-
-              <div className="mt-4">
-                <button disabled={saving} onClick={savePrefs} className="btn-primary px-4 py-2">Save Preferences</button>
-              </div>
-            </section>
+            </div>
           </div>
-  </Container>
+
+          <div className="mt-10 pt-6 border-t border-divider flex justify-end">
+            <button 
+              onClick={savePrefs} 
+              disabled={saving}
+              className="btn btn-primary flex items-center gap-2 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all px-6 py-2.5 rounded-xl"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save Preferences
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

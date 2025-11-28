@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { listProjects, getInboxUnreadCount } from '../api'
 import Card from '../components/Card'
 import ProjectModal from '../components/ProjectModal'
-import { Plus, Activity, ArrowRight, Clock, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Plus, Activity, ArrowRight, Clock, CheckCircle2, AlertCircle, Folder, Bell } from 'lucide-react'
 
 export default function DashboardPage() {
   const [projects, setProjects] = useState<any[]>([])
@@ -44,33 +44,38 @@ export default function DashboardPage() {
   }, [])
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-8 animate-fade-in">
       {/* Header Section with Mascot */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 text-white shadow-2xl shadow-slate-900/20">
+      <div className="relative overflow-hidden rounded-3xl bg-surface-1/80 backdrop-blur-xl border border-divider p-8 shadow-2xl shadow-black/5">
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <span className="px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-bold border border-white/10 text-blue-200">
-                v0.3.1
+            <div className="flex items-center gap-3 mb-3">
+              <span className="px-3 py-1 rounded-full bg-primary/10 text-xs font-bold border border-primary/20 text-primary shadow-sm">
+                v0.3.1 Beta
               </span>
-              <span className="text-slate-300 text-sm font-medium">Welcome back!</span>
+              <span className="text-text-secondary text-sm font-medium flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
+                System Operational
+              </span>
             </div>
-            <h1 className="text-4xl font-bold mb-3 tracking-tight">Dashboard</h1>
-            <p className="text-slate-400 max-w-md text-sm leading-relaxed">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight text-text font-display drop-shadow-sm">
+              Welcome back!
+            </h1>
+            <p className="text-text-secondary max-w-lg text-base leading-relaxed">
               Here's what's happening in your data universe today. Manage your projects, check alerts, and collaborate with your team.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
               <button
                 onClick={() => setOpen(true)}
-                className="group flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:scale-105 transition-all duration-300"
+                className="btn btn-primary flex items-center gap-2 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all"
               >
                 <Plus className="w-5 h-5" />
                 Create Project
               </button>
               <button
                 onClick={() => navigate('/projects')}
-                className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl backdrop-blur-md border border-white/10 transition-all duration-300"
+                className="px-5 py-2.5 rounded-xl bg-surface-2 hover:bg-surface-3 text-text font-bold border border-divider transition-colors hover:border-text-muted"
               >
                 View All Projects
               </button>
@@ -78,121 +83,155 @@ export default function DashboardPage() {
           </div>
 
           {/* Mascot Image */}
-          <div className="hidden md:block relative w-64 h-64 -mr-8 -mb-12">
+          <div className="hidden md:block relative w-72 h-72 -mr-12 -mb-16 perspective-1000">
             <img
               src="/images/oreo_rabbit.png"
               alt="Oreo Mascot"
-              className="w-full h-full object-contain drop-shadow-2xl transform hover:scale-105 transition-transform duration-500 opacity-90"
+              className="w-full h-full object-contain drop-shadow-2xl transform hover:scale-105 hover:rotate-3 transition-all duration-500 opacity-90"
             />
           </div>
         </div>
 
         {/* Decorative background elements */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-secondary/10 rounded-full blur-[80px] translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: Stats & Quick Actions */}
         <div className="lg:col-span-2 space-y-8">
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div
-              onClick={() => navigate('/projects')}
-              className="group cursor-pointer p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none hover:shadow-2xl hover:shadow-purple-500/10 transition-all duration-300"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
-                  <Activity className="w-6 h-6" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-6 rounded-2xl bg-surface-1 border border-divider hover:border-primary/30 transition-all hover:shadow-lg hover:shadow-primary/5 group">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 rounded-xl bg-primary/10 text-primary group-hover:scale-110 transition-transform shadow-inner">
+                  <Folder className="w-6 h-6" />
                 </div>
-                <span className="flex items-center gap-1 text-xs font-medium text-slate-400 group-hover:text-purple-500 transition-colors">
-                  View Projects <ArrowRight className="w-3 h-3" />
-                </span>
+                <span className="text-xs font-bold text-success bg-success/10 px-2 py-1 rounded-full border border-success/20">+12%</span>
               </div>
-              <h3 className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{projects.length}</h3>
-              <p className="text-slate-500 dark:text-slate-400 font-medium">Active Projects</p>
+              <h3 className="text-3xl font-bold text-text mb-1 tracking-tight">{projects.length}</h3>
+              <p className="text-sm text-text-secondary font-medium">Active Projects</p>
             </div>
 
-            <div
-              onClick={() => navigate('/inbox')}
-              className="group cursor-pointer p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-300"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
-                  <AlertCircle className="w-6 h-6" />
+            <div className="p-6 rounded-2xl bg-surface-1 border border-divider hover:border-primary/30 transition-all hover:shadow-lg hover:shadow-primary/5 group">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 rounded-xl bg-secondary/10 text-secondary group-hover:scale-110 transition-transform shadow-inner">
+                  <Activity className="w-6 h-6" />
                 </div>
-                <span className="flex items-center gap-1 text-xs font-medium text-slate-400 group-hover:text-blue-500 transition-colors">
-                  View Inbox <ArrowRight className="w-3 h-3" />
-                </span>
+                <span className="text-xs font-bold text-text-muted bg-surface-2 px-2 py-1 rounded-full border border-divider">Last 24h</span>
               </div>
-              <h3 className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{unreadCount}</h3>
-              <p className="text-slate-500 dark:text-slate-400 font-medium">Pending Approvals</p>
+              <h3 className="text-3xl font-bold text-text mb-1 tracking-tight">{recentActivities.length}</h3>
+              <p className="text-sm text-text-secondary font-medium">Recent Activities</p>
+            </div>
+
+             <div className="p-6 rounded-2xl bg-surface-1 border border-divider hover:border-primary/30 transition-all hover:shadow-lg hover:shadow-primary/5 group">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 rounded-xl bg-warning/10 text-warning group-hover:scale-110 transition-transform shadow-inner">
+                  <Bell className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-bold text-text-muted bg-surface-2 px-2 py-1 rounded-full border border-divider">Inbox</span>
+              </div>
+              <h3 className="text-3xl font-bold text-text mb-1 tracking-tight">{unreadCount}</h3>
+              <p className="text-sm text-text-secondary font-medium">Unread Notifications</p>
             </div>
           </div>
 
-          {/* Recent Activities */}
-          <Card className="border-0 shadow-xl shadow-slate-200/50 dark:shadow-none overflow-hidden">
-            <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-white dark:bg-slate-800/50">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Clock className="w-5 h-5 text-slate-500" />
-                Recent Activity
-              </h2>
+          {/* Recent Projects */}
+          <div className="rounded-2xl bg-surface-1 border border-divider overflow-hidden shadow-sm">
+            <div className="p-6 border-b border-divider flex items-center justify-between bg-surface-1/50 backdrop-blur-sm">
+              <h3 className="font-bold text-lg text-text flex items-center gap-2">
+                <Folder className="w-5 h-5 text-primary" /> Recent Projects
+              </h3>
+              <button onClick={() => navigate('/projects')} className="text-sm text-primary hover:text-primary-hover font-bold flex items-center gap-1 hover:underline decoration-2 underline-offset-4">
+                View All <ArrowRight className="w-4 h-4" />
+              </button>
             </div>
-            <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {recentActivities.map((activity) => (
-                <div key={activity.id} className="p-4 flex items-start gap-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
-                  <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${activity.type === 'alert' ? 'bg-red-500 shadow-lg shadow-red-500/50' :
-                    activity.type === 'create' ? 'bg-blue-500 shadow-lg shadow-blue-500/50' :
-                      'bg-emerald-500 shadow-lg shadow-emerald-500/50'
-                    }`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate group-hover:text-primary transition-colors">
-                      {activity.message}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      {activity.project}
-                    </p>
-                  </div>
-                  <span className="text-xs text-slate-400 whitespace-nowrap">{activity.time}</span>
+            <div className="divide-y divide-divider">
+              {loading ? (
+                <div className="p-12 flex justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
-              ))}
+              ) : projects.length === 0 ? (
+                <div className="p-12 text-center">
+                  <div className="w-16 h-16 bg-surface-2 rounded-full flex items-center justify-center mx-auto mb-4 text-text-muted shadow-inner">
+                    <Plus className="w-8 h-8" />
+                  </div>
+                  <h4 className="text-text font-bold mb-1">No projects yet</h4>
+                  <p className="text-sm text-text-secondary mb-6 max-w-xs mx-auto">Create your first project to start managing your datasets and workflows.</p>
+                  <button onClick={() => setOpen(true)} className="btn btn-primary text-sm shadow-lg shadow-primary/20">Create Project</button>
+                </div>
+              ) : (
+                projects.slice(0, 3).map((project) => (
+                  <div key={project.name} className="p-5 hover:bg-surface-2/50 transition-colors flex items-center justify-between group cursor-pointer" onClick={() => navigate(`/projects/${project.name}`)}>
+                    <div className="flex items-center gap-5">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-bold text-xl shadow-sm border border-primary/10 group-hover:scale-105 transition-transform">
+                        {project.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-text group-hover:text-primary transition-colors text-lg">{project.name}</h4>
+                        <p className="text-sm text-text-secondary line-clamp-1">{project.description || 'No description provided'}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <span className="text-xs font-medium text-text-muted bg-surface-2 px-2 py-1 rounded border border-divider">Updated 2h ago</span>
+                      <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center text-text-muted group-hover:bg-primary group-hover:text-white transition-colors">
+                        <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-          </Card>
+          </div>
         </div>
 
-        {/* Right Column: Quick Tips / Mascot Info */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="rounded-2xl bg-gradient-to-b from-slate-900 to-slate-800 p-6 text-white shadow-xl relative overflow-hidden">
-            <div className="relative z-10">
-              <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                Pro Tips
-              </h3>
-              <ul className="space-y-3 text-sm text-slate-300">
-                <li className="flex gap-2">
-                  <span className="text-emerald-400">•</span>
-                  Use the "Danger Zone" in project settings with caution.
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-emerald-400">•</span>
-                  Invite team members to collaborate on datasets.
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-emerald-400">•</span>
-                  Check your inbox daily for approval requests.
-                </li>
-              </ul>
+        {/* Right Column: Activity Feed */}
+        <div className="space-y-8">
+          <div className="rounded-2xl bg-surface-1 border border-divider p-6 h-full shadow-sm">
+            <h3 className="font-bold text-lg text-text mb-6 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-primary" /> Activity Feed
+            </h3>
+            
+            <div className="space-y-8 relative pl-2">
+              {/* Timeline line */}
+              <div className="absolute left-[19px] top-3 bottom-3 w-0.5 bg-divider/50"></div>
+
+              {recentActivities.map((activity, i) => (
+                <div key={i} className="relative pl-10 group">
+                  <div className={`absolute left-0 top-0 w-10 h-10 rounded-xl border-4 border-surface-1 flex items-center justify-center shadow-sm z-10 transition-transform group-hover:scale-110
+                    ${activity.type === 'alert' ? 'bg-danger/10 text-danger' : 
+                      activity.type === 'create' ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary'
+                    }`}
+                  >
+                    {activity.type === 'alert' ? <AlertCircle className="w-5 h-5" /> : 
+                     activity.type === 'create' ? <Plus className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                  </div>
+                  
+                  <div className="bg-surface-2/30 p-4 rounded-xl border border-divider/50 hover:border-primary/20 hover:bg-surface-2/50 transition-colors">
+                    <p className="text-sm font-bold text-text mb-1">{activity.message}</p>
+                    <div className="flex items-center gap-2 text-xs text-text-secondary">
+                      <span className="font-medium text-primary bg-primary/5 px-1.5 py-0.5 rounded">{activity.project}</span>
+                      <span>•</span>
+                      <span className="text-text-muted">{activity.time}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {recentActivities.length === 0 && (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 bg-surface-2 rounded-full flex items-center justify-center mx-auto mb-3 text-text-muted">
+                    <Bell className="w-6 h-6" />
+                  </div>
+                  <p className="text-sm text-text-secondary">No recent activity</p>
+                </div>
+              )}
             </div>
-            {/* Subtle background pattern */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
           </div>
         </div>
       </div>
 
-      <ProjectModal open={open} onClose={() => setOpen(false)} onCreate={() => {
-        // Reload projects
-        listProjects().then(setProjects)
-      }} />
+      <ProjectModal open={open} onClose={() => setOpen(false)} onCreate={() => window.location.reload()} />
     </div>
   )
 }

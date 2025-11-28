@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import ProjectLayout from '../components/ProjectLayout'
 import Card from '../components/Card'
 import Alert from '../components/Alert'
-import { Settings, Trash2, AlertTriangle, Save, Type, FileText } from 'lucide-react'
+import { Settings, Trash2, AlertTriangle, Save, Type, FileText, Loader2 } from 'lucide-react'
 
 export default function ProjectSettingsPage() {
   const { id } = useParams()
@@ -49,29 +49,29 @@ export default function ProjectSettingsPage() {
     <ProjectLayout project={project} role={role} loading={loading}>
       {toast && <Alert type={toast.type} message={toast.message} onClose={() => setToast(null)} autoDismiss={true} />}
 
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3 animate-fade-in">
         <div className="lg:col-span-2 space-y-6">
 
           {/* General Settings */}
-          <Card className="overflow-hidden border-0 shadow-xl shadow-slate-200/50 dark:shadow-none">
-            <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
-              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Settings className="w-5 h-5 text-slate-500" />
+          <div className="bg-surface-1 rounded-xl border border-divider shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-divider bg-surface-2/30">
+              <h3 className="font-bold text-text flex items-center gap-2">
+                <Settings className="w-5 h-5 text-text-secondary" />
                 General Settings
               </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              <p className="text-sm text-text-secondary mt-1">
                 Update your project's core information.
               </p>
             </div>
 
             <div className="p-6 space-y-5">
               <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
-                  <Type className="w-4 h-4 text-blue-500" />
+                <label className="flex items-center gap-2 text-sm font-medium text-text-secondary">
+                  <Type className="w-4 h-4 text-primary" />
                   Project Name
                 </label>
                 <input
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                  className="w-full px-4 py-2.5 rounded-xl border border-divider bg-surface-2 text-text focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="e.g., Q4 Marketing Analysis"
@@ -79,12 +79,12 @@ export default function ProjectSettingsPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
-                  <FileText className="w-4 h-4 text-purple-500" />
+                <label className="flex items-center gap-2 text-sm font-medium text-text-secondary">
+                  <FileText className="w-4 h-4 text-accent" />
                   Description
                 </label>
                 <textarea
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition-all min-h-[100px] resize-none"
+                  className="w-full px-4 py-2.5 rounded-xl border border-divider bg-surface-2 text-text focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none transition-all min-h-[100px] resize-none"
                   value={description}
                   onChange={e => setDescription(e.target.value)}
                   placeholder="Briefly describe this project..."
@@ -94,7 +94,7 @@ export default function ProjectSettingsPage() {
               <div className="pt-2 flex items-center justify-end gap-3">
                 <button
                   disabled={saving || !name.trim()}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-slate-500/20"
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white font-semibold shadow-lg shadow-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={async () => {
                     setSaving(true)
                     try {
@@ -105,33 +105,42 @@ export default function ProjectSettingsPage() {
                     finally { setSaving(false) }
                   }}
                 >
-                  <Save className="w-4 h-4" />
-                  {saving ? 'Saving...' : 'Save Changes'}
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Save Changes
+                    </>
+                  )}
                 </button>
               </div>
             </div>
-          </Card>
+          </div>
 
           {/* Danger Zone */}
-          <div className="rounded-2xl border border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-900/10 overflow-hidden">
-            <div className="p-6 border-b border-red-100 dark:border-red-900/30">
-              <h3 className="font-bold text-red-700 dark:text-red-400 flex items-center gap-2">
+          <div className="rounded-2xl border border-error/20 bg-error/5 overflow-hidden">
+            <div className="p-6 border-b border-error/10">
+              <h3 className="font-bold text-error flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5" />
                 Danger Zone
               </h3>
-              <p className="text-sm text-red-600/80 dark:text-red-400/80 mt-1">
+              <p className="text-sm text-error/80 mt-1">
                 Irreversible actions that affect your project.
               </p>
             </div>
             <div className="p-6 flex items-center justify-between gap-4">
               <div>
-                <h4 className="font-medium text-slate-900 dark:text-white">Delete Project</h4>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                <h4 className="font-medium text-text">Delete Project</h4>
+                <p className="text-sm text-text-secondary mt-1">
                   Permanently delete this project and all its datasets.
                 </p>
               </div>
               <button
-                className="px-4 py-2 rounded-lg border border-red-200 dark:border-red-800 bg-white dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 font-medium transition-colors flex items-center gap-2"
+                className="px-4 py-2 rounded-lg border border-error/20 bg-surface-1 text-error hover:bg-error/10 font-medium transition-colors flex items-center gap-2"
                 onClick={() => setDeleteOpen(true)}
               >
                 <Trash2 className="w-4 h-4" />
@@ -149,25 +158,25 @@ export default function ProjectSettingsPage() {
 
       {/* Delete confirmation modal */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-w-md w-full p-0 overflow-hidden rounded-2xl border-0">
-          <div className="bg-red-50 dark:bg-red-900/20 p-6 flex flex-col items-center text-center border-b border-red-100 dark:border-red-900/30">
-            <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center mb-4 text-red-600 dark:text-red-400">
+        <DialogContent className="max-w-md w-full p-0 overflow-hidden rounded-2xl border-0 bg-surface-1">
+          <div className="bg-error/5 p-6 flex flex-col items-center text-center border-b border-error/10">
+            <div className="w-12 h-12 rounded-full bg-error/10 flex items-center justify-center mb-4 text-error">
               <AlertTriangle className="w-6 h-6" />
             </div>
-            <DialogTitle className="text-xl font-bold text-slate-900 dark:text-white">Delete Project?</DialogTitle>
-            <DialogDescription className="text-slate-500 dark:text-slate-400 mt-2">
-              This will permanently delete <span className="font-bold text-slate-900 dark:text-white">{project?.name}</span>. This action cannot be undone.
+            <DialogTitle className="text-xl font-bold text-text">Delete Project?</DialogTitle>
+            <DialogDescription className="text-text-secondary mt-2">
+              This will permanently delete <span className="font-bold text-text">{project?.name}</span>. This action cannot be undone.
             </DialogDescription>
           </div>
 
-          <div className="p-6 bg-white dark:bg-slate-900">
+          <div className="p-6 bg-surface-1">
             <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Type <span className="font-mono font-bold select-all">{project?.name}</span> to confirm
+              <label className="block text-sm font-medium text-text-secondary mb-2">
+                Type <span className="font-mono font-bold select-all text-text">{project?.name}</span> to confirm
               </label>
               <input
                 type="text"
-                className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all"
+                className="w-full px-4 py-2 rounded-lg border border-divider bg-surface-2 text-text focus:ring-2 focus:ring-error/20 focus:border-error outline-none transition-all"
                 placeholder="Type project name"
                 onChange={(e) => setConfirmName(e.target.value)}
               />
@@ -175,14 +184,14 @@ export default function ProjectSettingsPage() {
             <div className="flex items-center justify-end gap-3">
               <DialogClose asChild>
                 <button
-                  className="px-4 py-2 rounded-xl font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  className="px-4 py-2 rounded-xl font-medium text-text-secondary hover:bg-surface-2 transition-colors"
                   disabled={deleting}
                 >
                   Cancel
                 </button>
               </DialogClose>
               <button
-                className="px-6 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold shadow-lg shadow-red-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-2 rounded-xl bg-error hover:bg-error-hover text-white font-semibold shadow-lg shadow-error/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 disabled={deleting || confirmName !== project?.name}
                 onClick={async () => {
                   setDeleting(true)
@@ -195,7 +204,17 @@ export default function ProjectSettingsPage() {
                   finally { setDeleting(false) }
                 }}
               >
-                {deleting ? 'Deleting...' : 'Yes, Delete Project'}
+                {deleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Yes, Delete Project
+                  </>
+                )}
               </button>
             </div>
           </div>
