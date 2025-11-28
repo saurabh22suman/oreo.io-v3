@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import ProjectModal from '../components/ProjectModal'
-import { listProjects, currentUser } from '../api'
+import { listProjects } from '../api'
 import { useNavigate } from 'react-router-dom'
-import { FolderOpen, Plus, Search, Clock, Database, ArrowRight, User, Filter, ArrowUpDown, LayoutGrid, List } from 'lucide-react'
+import { FolderKanban, Plus, Search, Clock, Database, ArrowRight, LayoutGrid, List, ArrowUpDown } from 'lucide-react'
 
 type Project = {
   id: string
@@ -41,7 +41,7 @@ export default function ProjectsPage() {
   useEffect(() => { load() }, [])
 
   useEffect(() => {
-    const handler = (e: any) => { try { const pid = e?.detail?.projectId; if (!pid) load(); else load() } catch { } }
+    const handler = () => load()
     window.addEventListener('dataset:created', handler)
     return () => window.removeEventListener('dataset:created', handler)
   }, [])
@@ -83,163 +83,147 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      {/* Header Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-surface-1/80 backdrop-blur-xl border border-divider p-8 shadow-2xl shadow-black/5">
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-3">
-              <span className="px-3 py-1 rounded-full bg-primary/10 text-xs font-bold border border-primary/20 text-primary shadow-sm">
-                Workspaces
-              </span>
-            </div>
-            <h1 className="text-4xl font-bold mb-4 tracking-tight text-text font-display drop-shadow-sm">Projects</h1>
-            <p className="text-text-secondary max-w-lg text-base leading-relaxed">
-              Manage your data workspaces and collaborations. Create new projects to organize your datasets and invite team members.
-            </p>
-          </div>
-           <div className="flex items-center gap-3">
-              <button
-                onClick={() => setOpen(true)}
-                className="btn btn-primary flex items-center gap-2 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all"
-              >
-                <Plus className="w-5 h-5" />
-                Create Project
-              </button>
-            </div>
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-text-primary mb-1">Projects</h1>
+          <p className="text-sm text-text-secondary">Manage your data workspaces</p>
         </div>
-        {/* Decorative background elements */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+        <button onClick={() => setOpen(true)} className="btn btn-primary">
+          <Plus size={18} />
+          New Project
+        </button>
       </div>
 
       {/* Controls */}
-      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-surface-1/50 p-2 rounded-2xl border border-divider backdrop-blur-sm">
-        <div className="relative w-full sm:w-96 group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted group-focus-within:text-primary transition-colors" />
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        {/* Search */}
+        <div className="relative flex-1 max-w-sm">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
             type="text"
             placeholder="Search projects..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-surface-1 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+            className="input pl-9 py-2"
           />
         </div>
         
-        <div className="flex items-center gap-4 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0 px-2">
-          <div className="flex items-center gap-2 border-r border-divider pr-4">
+        {/* View & Sort Controls */}
+        <div className="flex items-center gap-2">
+          {/* View Toggle */}
+          <div className="flex items-center bg-surface-2 rounded-lg p-0.5 border border-divider">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-surface-2 text-primary' : 'text-text-secondary hover:bg-surface-2 hover:text-text'}`}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-surface-3 text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
             >
-              <LayoutGrid className="w-4 h-4" />
+              <LayoutGrid size={16} />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-surface-2 text-primary' : 'text-text-secondary hover:bg-surface-2 hover:text-text'}`}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-surface-3 text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
             >
-              <List className="w-4 h-4" />
+              <List size={16} />
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-text-secondary whitespace-nowrap hidden sm:inline">Sort by:</span>
-            <button 
-              onClick={() => toggleSort('name')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1 whitespace-nowrap
-                ${sortBy === 'name' ? 'bg-primary/10 border-primary/20 text-primary' : 'bg-surface-1 border-divider text-text-secondary hover:border-primary/30'}`}
-            >
-              Name {sortBy === 'name' && <ArrowUpDown className="w-3 h-3" />}
-            </button>
-            <button 
-              onClick={() => toggleSort('datasets')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1 whitespace-nowrap
-                ${sortBy === 'datasets' ? 'bg-primary/10 border-primary/20 text-primary' : 'bg-surface-1 border-divider text-text-secondary hover:border-primary/30'}`}
-            >
-              Datasets {sortBy === 'datasets' && <ArrowUpDown className="w-3 h-3" />}
-            </button>
-            <button 
-              onClick={() => toggleSort('modified')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1 whitespace-nowrap
-                ${sortBy === 'modified' ? 'bg-primary/10 border-primary/20 text-primary' : 'bg-surface-1 border-divider text-text-secondary hover:border-primary/30'}`}
-            >
-              Last Modified {sortBy === 'modified' && <ArrowUpDown className="w-3 h-3" />}
-            </button>
+          {/* Sort */}
+          <div className="flex items-center gap-1">
+            {(['name', 'datasets', 'modified'] as const).map((field) => (
+              <button 
+                key={field}
+                onClick={() => toggleSort(field)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1
+                  ${sortBy === field 
+                    ? 'bg-primary/10 text-primary border border-primary/20' 
+                    : 'text-text-secondary hover:text-text-primary hover:bg-surface-3'
+                  }`}
+              >
+                {field.charAt(0).toUpperCase() + field.slice(1)}
+                {sortBy === field && <ArrowUpDown size={12} />}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Projects Grid */}
+      {/* Projects */}
       {loading ? (
-        <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map(i => (
-            <div key={i} className={`rounded-2xl bg-surface-1 border border-divider animate-pulse ${viewMode === 'grid' ? 'h-48' : 'h-24'}`}></div>
+            <div key={i} className="h-32 rounded-card bg-surface-2 border border-divider animate-pulse" />
           ))}
         </div>
       ) : filteredAndSorted.length === 0 ? (
-        <div className="text-center py-20 rounded-3xl bg-surface-1 border border-divider border-dashed">
-          <div className="w-16 h-16 bg-surface-2 rounded-full flex items-center justify-center mx-auto mb-4 text-text-muted shadow-inner">
-            <FolderOpen className="w-8 h-8" />
+        <div className="text-center py-16 bg-surface-2 rounded-card border border-divider">
+          <div className="w-12 h-12 rounded-xl bg-surface-3 flex items-center justify-center mx-auto mb-4">
+            <FolderKanban size={24} className="text-text-muted" />
           </div>
-          <h3 className="text-lg font-bold text-text mb-1">No projects found</h3>
-          <p className="text-text-secondary mb-6 max-w-xs mx-auto">
-            {searchQuery ? `No projects match "${searchQuery}"` : "Get started by creating your first project workspace."}
+          <h3 className="font-medium text-text-primary mb-1">
+            {searchQuery ? 'No projects found' : 'No projects yet'}
+          </h3>
+          <p className="text-sm text-text-secondary mb-4">
+            {searchQuery ? `No projects match "${searchQuery}"` : 'Create your first project to get started'}
           </p>
           {!searchQuery && (
-            <button onClick={() => setOpen(true)} className="btn btn-primary shadow-lg shadow-primary/20">
+            <button onClick={() => setOpen(true)} className="btn btn-primary text-sm">
+              <Plus size={16} />
               Create Project
             </button>
           )}
         </div>
       ) : (
-        <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
+        <div className={`grid gap-4 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
           {filteredAndSorted.map((project) => (
             <div 
               key={project.id}
               onClick={() => navigate(`/projects/${project.id}`)}
-              className={`group relative bg-surface-1 hover:bg-surface-2/50 border border-divider hover:border-primary/30 rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/5 cursor-pointer flex ${viewMode === 'grid' ? 'flex-col p-6 h-full' : 'flex-row items-center p-4 gap-6'}`}
+              className={`
+                bg-surface-2 border border-divider rounded-card p-5 cursor-pointer 
+                hover:border-primary/30 hover:bg-surface-3/50 transition-all group
+                ${viewMode === 'list' ? 'flex items-center gap-5' : ''}
+              `}
             >
-              <div className={`flex items-start justify-between ${viewMode === 'grid' ? 'mb-4 w-full' : 'mb-0'}`}>
-                <div className={`rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary group-hover:scale-110 transition-transform duration-300 shadow-sm border border-primary/10 ${viewMode === 'grid' ? 'w-12 h-12' : 'w-10 h-10'}`}>
-                  <FolderOpen className={`${viewMode === 'grid' ? 'w-6 h-6' : 'w-5 h-5'}`} />
-                </div>
-                {viewMode === 'grid' && (
-                  <div className="px-2.5 py-1 rounded-lg bg-surface-2 border border-divider text-xs font-medium text-text-secondary group-hover:border-primary/20 transition-colors">
-                    {project.role || 'Owner'}
-                  </div>
-                )}
+              {/* Icon */}
+              <div className={`
+                rounded-lg bg-primary/10 flex items-center justify-center text-primary font-semibold
+                ${viewMode === 'grid' ? 'w-10 h-10 mb-4' : 'w-10 h-10 flex-shrink-0'}
+              `}>
+                {project.name.charAt(0).toUpperCase()}
               </div>
 
-              <div className={`${viewMode === 'grid' ? 'flex-1' : 'flex-1 min-w-0'}`}>
-                <div className="flex items-center gap-3 mb-1">
-                  <h3 className="text-xl font-bold text-text group-hover:text-primary transition-colors line-clamp-1">
+              {/* Content */}
+              <div className={`${viewMode === 'list' ? 'flex-1 min-w-0' : ''}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-medium text-text-primary group-hover:text-primary transition-colors truncate">
                     {project.name}
                   </h3>
-                  {viewMode === 'list' && (
-                    <div className="px-2 py-0.5 rounded-md bg-surface-2 border border-divider text-[10px] font-medium text-text-secondary">
-                      {project.role || 'Owner'}
-                    </div>
-                  )}
+                  <span className="text-[10px] font-medium text-text-muted bg-surface-3 px-1.5 py-0.5 rounded">
+                    {project.role || 'Owner'}
+                  </span>
                 </div>
-                <p className="text-sm text-text-secondary line-clamp-2">
-                  {project.description || 'No description provided for this project.'}
+                <p className="text-sm text-text-secondary line-clamp-1">
+                  {project.description || 'No description'}
                 </p>
+
+                {/* Meta */}
+                <div className={`flex items-center gap-4 text-xs text-text-muted ${viewMode === 'grid' ? 'mt-4 pt-4 border-t border-divider' : 'mt-2'}`}>
+                  <span className="flex items-center gap-1">
+                    <Database size={12} />
+                    {project.datasetCount || 0} datasets
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Clock size={12} />
+                    {getLastModified(project)}
+                  </span>
+                </div>
               </div>
 
-              <div className={`${viewMode === 'grid' ? 'pt-4 border-t border-divider w-full' : 'flex items-center gap-8 border-l border-divider pl-6'}`}>
-                <div className={`flex items-center ${viewMode === 'grid' ? 'justify-between w-full' : 'gap-8'}`}>
-                  <div className="flex items-center gap-4 text-xs text-text-muted">
-                    <div className="flex items-center gap-1.5" title="Datasets">
-                      <Database className="w-3.5 h-3.5" />
-                      <span>{project.datasetCount || 0} <span className="hidden sm:inline">Datasets</span></span>
-                    </div>
-                    <div className="flex items-center gap-1.5" title="Last Modified">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>{getLastModified(project)}</span>
-                    </div>
-                  </div>
-                  <ArrowRight className={`w-4 h-4 text-primary transition-all ${viewMode === 'grid' ? 'opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0' : 'group-hover:translate-x-1'}`} />
-                </div>
-              </div>
+              {/* Arrow */}
+              {viewMode === 'list' && (
+                <ArrowRight size={16} className="text-text-muted group-hover:text-primary group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+              )}
             </div>
           ))}
         </div>

@@ -1,11 +1,11 @@
-import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
-import { AgGridReact } from 'ag-grid-react'
-import type { ColDef, GridApi, CellValueChangedEvent } from 'ag-grid-community'
-import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community'
-ModuleRegistry.registerModules([AllCommunityModule])
-import 'ag-grid-community/styles/ag-theme-quartz.css'
-import { ChevronLeft, ChevronRight, Download, ArrowRight } from 'lucide-react'
+/**
+ * AgGridTable - Legacy wrapper around the new DataTable component
+ * 
+ * This component maintains backward compatibility while delegating to DataTable.
+ * For new implementations, use DataTable directly from '@/components/DataTable'
+ */
+
+import { DataTable, EditedCell as DataTableEditedCell } from './DataTable'
 
 type EditedCell = {
     rowIndex: number
@@ -31,77 +31,6 @@ type Props = {
     style?: React.CSSProperties
 }
 
-const EditedCellRenderer = (params: any) => {
-    const { value, editedCellMap, deletedRowIds, node, colDef } = params
-    const rowIndex = node?.rowIndex ?? -1
-    const rowId = node?.data?._row_id ?? rowIndex
-    const c = colDef?.field
-    const editInfo = editedCellMap?.get(`${rowId}|${c}`) || editedCellMap?.get(`${rowIndex}|${c}`)
-    const isDeleted = deletedRowIds?.has(rowId) || deletedRowIds?.has(rowIndex)
-    const cellRef = useRef<HTMLDivElement>(null)
-    const [showTooltip, setShowTooltip] = useState(false)
-    const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
-
-    const handleMouseEnter = () => {
-        if (cellRef.current && editInfo) {
-            const rect = cellRef.current.getBoundingClientRect()
-            // Position tooltip above the cell
-            setTooltipPos({
-                x: rect.left,
-                y: rect.top - 8
-            })
-            setShowTooltip(true)
-        }
-    }
-
-    const handleMouseLeave = () => {
-        setShowTooltip(false)
-    }
-
-    // Deleted row styling
-    if (isDeleted) {
-        return (
-            <div className="w-full h-full flex items-center">
-                <span className="line-through text-red-400 opacity-60">{value}</span>
-            </div>
-        )
-    }
-
-    if (!editInfo) {
-        return <span>{value}</span>
-    }
-
-    return (
-        <div
-            ref={cellRef}
-            className="w-full h-full flex items-center cursor-help"
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-        >
-            <span>{value}</span>
-            {showTooltip && createPortal(
-                <div
-                    style={{
-                        position: 'fixed',
-                        left: `${tooltipPos.x}px`,
-                        top: `${tooltipPos.y}px`,
-                        transform: 'translateY(-100%)',
-                    }}
-                    className="z-[9999] px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg shadow-xl text-xs whitespace-nowrap pointer-events-none"
-                >
-                    <div className="flex items-center gap-2">
-                        <span className="text-red-400 line-through">{String(editInfo.oldValue ?? '')}</span>
-                        <ArrowRight className="w-3 h-3 text-slate-500" />
-                        <span className="text-green-400 font-semibold">{String(editInfo.newValue ?? '')}</span>
-                    </div>
-                    <div className="absolute bottom-0 left-4 transform translate-y-1/2 rotate-45 w-2 h-2 bg-slate-900 border-r border-b border-slate-700"></div>
-                </div>,
-                document.body
-            )}
-        </div>
-    )
-}
-
 export default function AgGridTable({
     title = 'Preview',
     rows,
@@ -118,232 +47,26 @@ export default function AgGridTable({
     className = '',
     style
 }: Props) {
-    const gridRef = useRef<AgGridReact>(null)
-    const [api, setApi] = useState<GridApi | null>(null)
-    const [colApi, setColApi] = useState<any>(null)
-    const [localRows, setLocalRows] = useState<any[]>(rows || [])
-    const originalRowsRef = useRef<any[]>(Array.isArray(rows) ? JSON.parse(JSON.stringify(rows)) : [])
-    const [editedCells, setEditedCells] = useState<EditedCell[]>(externalEditedCells || [])
-    const deletedRowIds = externalDeletedRowIds || new Set<number>()
-
-    // Pagination State
-    const [currentPage, setCurrentPage] = useState(1)
-    const [totalPages, setTotalPages] = useState(1)
-    const [gridPageSize, setGridPageSize] = useState(pageSize)
-
-    const invalidCellSet = useMemo(() => {
-        const s = new Set<string>()
-        for (const cell of invalidCells || []) {
-            if (cell && typeof cell.row === 'number' && typeof cell.column === 'string') {
-                s.add(`${cell.row}|${cell.column}`)
-            }
-        }
-        return s
-    }, [invalidCells])
-
-    const invalidRowSet = useMemo(() => new Set<number>((invalidRows || []).filter((n) => typeof n === 'number')), [invalidRows])
-
-    // Map for quick lookup of edited cells
-    const editedCellMap = useMemo(() => {
-        const map = new Map<string, EditedCell>()
-        for (const edit of editedCells) {
-            map.set(`${edit.rowIndex}|${edit.column}`, edit)
-        }
-        return map
-    }, [editedCells])
-
-    useEffect(() => {
-        setLocalRows(rows || [])
-        originalRowsRef.current = Array.isArray(rows) ? JSON.parse(JSON.stringify(rows)) : []
-        // If external edited cells are provided, use them
-        if (externalEditedCells && externalEditedCells.length > 0) {
-            setEditedCells(externalEditedCells)
-        }
-    }, [rows, externalEditedCells])
-
-    const colDefs = useMemo<ColDef[]>(() => {
-        return columns.map((c) => ({
-            headerName: c === '_change_type' ? 'Type' : (c === '_row_id' ? 'Row ID' : c),
-            field: c,
-            colId: c,
-            valueGetter: (p: any) => p?.data?.[c],
-            valueSetter: (p: any) => { if (!p?.data) return false; p.data[c] = p.newValue; return true },
-            editable: !!allowEdit && c !== '_change_type' && c !== '_row_id',
-            resizable: true,
-            suppressSizeToFit: false,
-            // Pin Type and Row ID columns to left
-            pinned: c === '_change_type' ? 'left' : (c === '_row_id' ? 'left' : undefined),
-            width: c === '_change_type' ? 100 : (c === '_row_id' ? 80 : undefined),
-            cellRenderer: c === '_change_type' ? (params: any) => {
-                const value = params.value
-                if (value === 'Deleted') {
-                    return (
-                        <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-900/50 text-red-300 border border-red-700">
-                            Deleted
-                        </span>
-                    )
-                }
-                return (
-                    <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-900/50 text-blue-300 border border-blue-700">
-                        Edited
-                    </span>
-                )
-            } : EditedCellRenderer,
-            cellRendererParams: { editedCellMap, deletedRowIds },
-            cellStyle: (p: any) => {
-                const ri = p?.rowIndex
-                const rowId = p?.data?._row_id ?? ri
-                const key = `${typeof ri === 'number' ? ri : -1}|${c}`
-                const keyById = `${rowId}|${c}`
-
-                // Deleted rows (red background with reduced opacity)
-                if (deletedRowIds.has(ri) || deletedRowIds.has(rowId)) {
-                    return { backgroundColor: '#7F1D1D40', color: '#FCA5A5' }
-                }
-
-                // Invalid cells (red)
-                if ((typeof ri === 'number' && invalidRowSet.has(ri)) || invalidCellSet.has(key)) {
-                    return { backgroundColor: '#7F1D1D', color: '#FCA5A5' }
-                }
-
-                // Edited cells (blue/highlight) - skip for _change_type and _row_id columns
-                if (c !== '_change_type' && c !== '_row_id' && (editedCellMap.has(key) || editedCellMap.has(keyById))) {
-                    return { backgroundColor: '#1e3a5f', color: '#93c5fd', fontWeight: '600' }
-                }
-
-                return undefined
-            },
-            cellClass: 'text-sm text-slate-300 font-mono border-r border-slate-800',
-        }))
-    }, [columns, allowEdit, invalidCellSet, invalidRowSet, editedCellMap, deletedRowIds])
-
-    const defaultColDef = useMemo<ColDef>(() => ({
-        sortable: true,
-        filter: true,
-        floatingFilter: false,
-        resizable: true,
-        headerClass: 'bg-[#0f172a] border-r border-slate-800 text-slate-400 font-semibold text-xs uppercase tracking-wider',
-    }), [])
-
-    const onGridReady = useCallback((params: { api: GridApi; columnApi: any }) => {
-        setApi(params.api); setColApi(params.columnApi)
-        params.api.setGridOption('rowData', localRows)
-        if (!compact) {
-            params.api.setGridOption('paginationPageSize', gridPageSize)
-        }
-        setTimeout(() => params.api.sizeColumnsToFit({ defaultMinWidth: 100 }), 0)
-
-        // Initial pagination state
-        setCurrentPage(params.api.paginationGetCurrentPage() + 1)
-        setTotalPages(params.api.paginationGetTotalPages())
-    }, [localRows, gridPageSize, compact])
-
-    const onPaginationChanged = useCallback(() => {
-        if (api) {
-            setCurrentPage(api.paginationGetCurrentPage() + 1)
-            setTotalPages(api.paginationGetTotalPages())
-        }
-    }, [api])
-
-    const onCellValueChanged = useCallback((e: CellValueChangedEvent) => {
-        if (e.newValue === null || e.newValue === undefined || (typeof e.newValue === 'string' && e.newValue.trim() === '')) {
-            e.node.setDataValue(e.colDef.field!, e.oldValue)
-            if (api) { api.showLoadingOverlay(); setTimeout(() => api.hideOverlay(), 300) }
-            alert('Value required')
-            return
-        }
-
-        // Track the edit
-        const rowIndex = e.node.rowIndex
-        const column = e.colDef.field!
-        const key = `${rowIndex}|${column}`
-
-        // Get the original value from the snapshot
-        const originalValue = originalRowsRef.current[rowIndex!]?.[column]
-
-        // If the new value equals the original, remove from edits
-        if (e.newValue === originalValue) {
-            setEditedCells(prev => prev.filter(edit => `${edit.rowIndex}|${edit.column}` !== key))
-        } else {
-            // Add or update the edit
-            setEditedCells(prev => {
-                const filtered = prev.filter(edit => `${edit.rowIndex}|${edit.column}` !== key)
-                return [
-                    ...filtered,
-                    {
-                        rowIndex: rowIndex!,
-                        column,
-                        oldValue: originalValue,
-                        newValue: e.newValue
-                    }
-                ]
-            })
-        }
-    }, [api])
-
-    const exportCsv = useCallback(() => { api?.exportDataAsCsv({ fileName: (title || 'data') + '.csv' }) }, [api, title])
-
     return (
-        <div className={`flex flex-col bg-[#0f172a] border border-slate-700 rounded-lg overflow-hidden ${className}`} style={style}>
-            <div className="ag-theme-databricks-dark flex-1">
-                <AgGridReact
-                    ref={gridRef as any}
-                    columnDefs={colDefs}
-                    defaultColDef={defaultColDef}
-                    rowData={localRows}
-                    // Removed rowSelection to remove checkboxes
-                    animateRows
-                    pagination={!compact}
-                    suppressPaginationPanel={true} // Hide default pagination panel
-                    onGridReady={onGridReady as any}
-                    onPaginationChanged={onPaginationChanged}
-                    onCellValueChanged={onCellValueChanged}
-                    enableCellTextSelection
-                    rowHeight={32}
-                    headerHeight={36}
-                />
-            </div>
-
-            {/* Custom Footer */}
-            {!compact && (
-                <div className="px-4 py-2 border-t border-slate-800 bg-slate-900/50 flex items-center justify-between text-xs text-slate-400">
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={exportCsv}
-                            className="p-1.5 hover:bg-slate-800 rounded-md transition-colors text-slate-500 hover:text-slate-300"
-                            title="Export CSV"
-                        >
-                            <Download className="w-4 h-4" />
-                        </button>
-                    </div>
-
-                    <div className="flex items-center gap-6">
-                        {/* Removed Page Size Selector */}
-
-                        <div className="flex items-center gap-3">
-                            <span>
-                                {(currentPage - 1) * gridPageSize + 1} - {Math.min(currentPage * gridPageSize, localRows.length)} of {localRows.length}
-                            </span>
-                            <div className="flex items-center gap-1">
-                                <button
-                                    className="p-1 hover:bg-slate-800 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                    onClick={() => api?.paginationGoToPreviousPage()}
-                                    disabled={currentPage === 1}
-                                >
-                                    <ChevronLeft className="w-4 h-4" />
-                                </button>
-                                <button
-                                    className="p-1 hover:bg-slate-800 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                    onClick={() => api?.paginationGoToNextPage()}
-                                    disabled={currentPage === totalPages}
-                                >
-                                    <ChevronRight className="w-4 h-4" />
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
+        <DataTable
+            rows={rows}
+            columns={columns}
+            title={title}
+            pageSize={pageSize}
+            allowEdit={allowEdit}
+            compact={compact}
+            invalidCells={invalidCells}
+            invalidRows={invalidRows}
+            editedCells={externalEditedCells}
+            deletedRowIds={externalDeletedRowIds}
+            className={className}
+            style={style}
+            onSave={onSave}
+            showRowNumbers={false}
+            allowSearch={!compact}
+            allowFilter={!compact}
+            allowColumnToggle={!compact}
+            allowExport={!compact}
+        />
     )
 }

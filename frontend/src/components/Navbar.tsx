@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { Moon, Sun, Menu, X, ChevronDown, LogOut, Settings } from 'lucide-react'
+import { Moon, Sun, Menu, X, ChevronDown, LogOut, Settings, Bell, Search, Command, Sparkles } from 'lucide-react'
 import { useUser } from '../context/UserContext'
 import { logout as apiLogout } from '../api'
 
@@ -23,7 +23,7 @@ export default function Navbar() {
   
   // Handle scroll effect
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20)
+    const handleScroll = () => setScrolled(window.scrollY > 10)
     window.addEventListener('scroll', handleScroll)
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
@@ -57,83 +57,129 @@ export default function Navbar() {
 
   return (
     <header 
-      className={`sticky top-0 z-50 transition-all duration-300 ${
-        scrolled 
-          ? 'bg-surface-1/80 backdrop-blur-md border-b border-divider shadow-sm' 
-          : 'bg-transparent border-b border-transparent'
-      }`}
+      className={`
+        sticky top-0 z-50 h-14
+        transition-all duration-300
+        ${scrolled 
+          ? 'bg-surface-1/80 backdrop-blur-xl border-b border-divider/50 shadow-sm' 
+          : 'bg-surface-1 border-b border-transparent'
+        }
+      `}
     >
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
+      <nav className="h-full max-w-[1600px] mx-auto px-4 sm:px-6">
+        <div className="flex h-full items-center justify-between gap-4">
           {/* Brand */}
-          <Link to={user ? "/dashboard" : "/landing"} className="flex items-center gap-2 group">
-            <div className="relative w-8 h-8 flex items-center justify-center bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors">
-              <img src="/images/oreo_rabbit.png" alt="oreo.io" className="h-6 w-6 object-contain" />
+          <Link to={user ? "/dashboard" : "/landing"} className="flex items-center gap-2.5 group shrink-0">
+            <div className="relative w-8 h-8 flex items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 group-hover:from-primary/30 group-hover:to-primary/10 transition-all duration-300 shadow-sm">
+              <img src="/images/oreo_rabbit.png" alt="oreo.io" className="h-5 w-5 object-contain" />
+              <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-primary/10" />
             </div>
-            <span className="text-xl font-bold font-display tracking-tight text-text group-hover:text-primary transition-colors">
+            <span className="text-lg font-bold bg-gradient-to-r from-text-primary to-text-secondary bg-clip-text text-transparent group-hover:from-primary group-hover:to-primary-glow transition-all duration-300">
               oreo.io
             </span>
           </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-8">
-            {!user && (
-              <>
-                <a href="#features" className="text-sm font-medium text-text-secondary hover:text-primary transition-colors">Features</a>
-                <a href="#how" className="text-sm font-medium text-text-secondary hover:text-primary transition-colors">How it works</a>
-                <Link to="/docs" className="text-sm font-medium text-text-secondary hover:text-primary transition-colors">Docs</Link>
-              </>
-            )}
-          </div>
+          {/* Desktop Navigation - Landing page links */}
+          {!user && isLanding && (
+            <div className="hidden md:flex items-center gap-1 bg-surface-2/50 rounded-xl px-1.5 py-1">
+              <a href="#features" className="px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-3 rounded-lg transition-all">Features</a>
+              <a href="#how" className="px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-3 rounded-lg transition-all">How it works</a>
+              <Link to="/docs" className="px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-3 rounded-lg transition-all">Docs</Link>
+            </div>
+          )}
 
           {/* Actions */}
-          <div className="hidden md:flex items-center gap-4">
-            {/* Theme Toggle */}
+          <div className="hidden md:flex items-center gap-2">
+            {/* Theme Toggle - Enhanced */}
             <button
               onClick={() => setDarkMode(!darkMode)}
-              className="p-2 rounded-full text-text-secondary hover:text-primary hover:bg-surface-2 transition-all"
+              className="relative p-2.5 rounded-xl text-text-secondary hover:text-text-primary bg-surface-2/50 hover:bg-surface-3 transition-all duration-200 group"
               aria-label="Toggle theme"
             >
-              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              <div className="relative w-[18px] h-[18px]">
+                <Sun 
+                  size={18} 
+                  className={`absolute inset-0 transition-all duration-300 ${darkMode ? 'rotate-0 scale-100 opacity-100' : 'rotate-90 scale-0 opacity-0'}`}
+                />
+                <Moon 
+                  size={18} 
+                  className={`absolute inset-0 transition-all duration-300 ${darkMode ? '-rotate-90 scale-0 opacity-0' : 'rotate-0 scale-100 opacity-100'}`}
+                />
+              </div>
             </button>
 
             {!user ? (
-              <div className="flex items-center gap-3">
-                <Link to="/login" className="text-sm font-medium text-text hover:text-primary transition-colors">
+              <div className="flex items-center gap-2">
+                <Link to="/login" className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors rounded-xl hover:bg-surface-3">
                   Log in
                 </Link>
-                <Link to="/register" className="btn btn-primary text-sm shadow-lg shadow-primary/25">
-                  Get Started
+                <Link to="/register" className="relative group px-5 py-2 text-sm font-semibold text-white rounded-xl overflow-hidden transition-all duration-300 shadow-lg shadow-primary/25 hover:shadow-primary/40">
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary to-primary-glow" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary-glow to-primary opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <span className="relative flex items-center gap-1.5">
+                    <Sparkles size={14} />
+                    Get Started
+                  </span>
                 </Link>
               </div>
             ) : (
               <div className="relative" ref={menuRef}>
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-full border border-border-subtle bg-surface-1 hover:bg-surface-2 transition-all"
+                  className={`
+                    flex items-center gap-2 p-1.5 pr-3 rounded-xl 
+                    transition-all duration-200
+                    ${userMenuOpen 
+                      ? 'bg-surface-3 ring-1 ring-primary/20' 
+                      : 'hover:bg-surface-3'
+                    }
+                  `}
                 >
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium text-sm">
-                    {user.email[0].toUpperCase()}
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center ring-1 ring-inset ring-primary/20">
+                    <span className="text-primary text-sm font-semibold">
+                      {user.email[0].toUpperCase()}
+                    </span>
                   </div>
-                  <ChevronDown className={`w-4 h-4 text-text-muted transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown 
+                    size={14} 
+                    className={`text-text-muted transition-transform duration-200 ${userMenuOpen ? 'rotate-180' : ''}`} 
+                  />
                 </button>
 
-                {/* User Dropdown */}
+                {/* User Dropdown - Premium feel */}
                 {userMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 origin-top-right rounded-card bg-surface-1 border border-divider shadow-xl ring-1 ring-black/5 focus:outline-none animate-fade-in">
-                    <div className="p-3 border-b border-divider">
-                      <p className="text-sm font-medium text-text truncate">{user.email}</p>
-                      <p className="text-xs text-text-muted">Free Plan</p>
+                  <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-surface-2 border border-divider/50 shadow-elevated animate-fade-in overflow-hidden">
+                    {/* User info header */}
+                    <div className="p-4 bg-gradient-to-br from-primary/10 to-transparent">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center ring-1 ring-inset ring-primary/20">
+                          <span className="text-primary font-semibold">{user.email[0].toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-text-primary truncate">{user.email}</p>
+                          <p className="text-xs text-text-muted flex items-center gap-1 mt-0.5">
+                            <Sparkles size={10} className="text-primary" />
+                            Free Plan
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="p-1">
-                      <Link to="/settings" className="flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:text-text hover:bg-surface-2 rounded-md transition-colors">
-                        <Settings className="w-4 h-4" /> Settings
+                    
+                    <div className="p-2">
+                      <Link 
+                        to="/settings" 
+                        className="flex items-center gap-3 px-3 py-2.5 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-3 rounded-xl transition-all"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        <Settings size={16} /> 
+                        <span>Settings</span>
                       </Link>
                       <button
                         onClick={handleLogout}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-danger hover:bg-danger/10 rounded-md transition-colors text-left"
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-danger hover:bg-danger/10 rounded-xl transition-all text-left"
                       >
-                        <LogOut className="w-4 h-4" /> Sign out
+                        <LogOut size={16} /> 
+                        <span>Sign out</span>
                       </button>
                     </div>
                   </div>
@@ -143,18 +189,18 @@ export default function Navbar() {
           </div>
 
           {/* Mobile menu button */}
-          <div className="md:hidden flex items-center gap-4">
-             <button
+          <div className="md:hidden flex items-center gap-2">
+            <button
               onClick={() => setDarkMode(!darkMode)}
-              className="p-2 rounded-full text-text-secondary hover:text-primary hover:bg-surface-2 transition-all"
+              className="p-2.5 rounded-xl text-text-secondary hover:text-text-primary bg-surface-2/50 hover:bg-surface-3 transition-all"
             >
-              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-md text-text hover:bg-surface-2 transition-colors"
+              className="p-2.5 rounded-xl text-text-primary bg-surface-2/50 hover:bg-surface-3 transition-all"
             >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
           </div>
         </div>
@@ -162,21 +208,24 @@ export default function Navbar() {
       
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-surface-1 border-b border-divider animate-slide-up">
-          <div className="px-4 pt-2 pb-4 space-y-1">
+        <div className="md:hidden bg-surface-1/95 backdrop-blur-xl border-b border-divider animate-slide-down">
+          <div className="px-4 py-3 space-y-1">
             {!user ? (
               <>
-                <a href="#features" className="block px-3 py-2 rounded-md text-base font-medium text-text hover:bg-surface-2 hover:text-primary">Features</a>
-                <a href="#how" className="block px-3 py-2 rounded-md text-base font-medium text-text hover:bg-surface-2 hover:text-primary">How it works</a>
-                <Link to="/login" className="block px-3 py-2 rounded-md text-base font-medium text-text hover:bg-surface-2 hover:text-primary">Log in</Link>
-                <Link to="/register" className="block w-full text-center mt-4 btn btn-primary">Get Started</Link>
+                <a href="#features" className="block px-4 py-3 rounded-xl text-sm text-text-primary hover:bg-surface-3">Features</a>
+                <a href="#how" className="block px-4 py-3 rounded-xl text-sm text-text-primary hover:bg-surface-3">How it works</a>
+                <Link to="/login" className="block px-4 py-3 rounded-xl text-sm text-text-primary hover:bg-surface-3">Log in</Link>
+                <Link to="/register" className="block w-full text-center mt-3 btn btn-primary text-sm py-3">Get Started</Link>
               </>
             ) : (
               <>
-                <Link to="/dashboard" className="block px-3 py-2 rounded-md text-base font-medium text-text hover:bg-surface-2 hover:text-primary">Dashboard</Link>
-                <Link to="/projects" className="block px-3 py-2 rounded-md text-base font-medium text-text hover:bg-surface-2 hover:text-primary">Projects</Link>
-                <Link to="/settings" className="block px-3 py-2 rounded-md text-base font-medium text-text hover:bg-surface-2 hover:text-primary">Settings</Link>
-                <button onClick={handleLogout} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-danger hover:bg-danger/10">Sign out</button>
+                <Link to="/dashboard" className="block px-4 py-3 rounded-xl text-sm text-text-primary hover:bg-surface-3">Home</Link>
+                <Link to="/projects" className="block px-4 py-3 rounded-xl text-sm text-text-primary hover:bg-surface-3">Projects</Link>
+                <Link to="/inbox" className="block px-4 py-3 rounded-xl text-sm text-text-primary hover:bg-surface-3">Inbox</Link>
+                <Link to="/settings" className="block px-4 py-3 rounded-xl text-sm text-text-primary hover:bg-surface-3">Settings</Link>
+                <div className="border-t border-divider mt-2 pt-2">
+                  <button onClick={handleLogout} className="block w-full text-left px-4 py-3 rounded-xl text-sm text-danger hover:bg-danger/10">Sign out</button>
+                </div>
               </>
             )}
           </div>

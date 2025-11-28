@@ -2,27 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Oreo.io UI Revamp - Purple Accent Theme */
+/* Oreo.io UI Revamp - Purple Accent Theme (Databricks-inspired) */
 
 :root {
-  /* Light Mode Variables */
-  --bg-page: #F9F9FF;
+  /* Light Mode Variables - Purple Accent Databricks-inspired */
+  --bg-page: #F8F9FC;
   --bg-surface: #FFFFFF;
-  --bg-surface-2: #F2F0FF;
+  --bg-surface-2: #F3F4F8;
+  --bg-surface-3: #E8EAF0;
+  --bg-surface-4: #DCDFE6;
   
-  --primary: #8A63FF;
+  --primary: #7B4BFF;
   --primary-glow: #A87CFF;
-  --primary-gradient: linear-gradient(90deg, #7B4BFF, #A87CFF);
+  --primary-gradient: linear-gradient(135deg, #7B4BFF 0%, #A87CFF 100%);
   
-  --text: #1A1A24;
-  --text-secondary: #6B7280;
-  --text-muted: #9CA3AF;
+  --text: #1A1D26;
+  --text-secondary: #5A5F72;
+  --text-muted: #8B90A0;
   
-  --border-subtle: rgba(0,0,0,0.06);
-  --divider: #E5E7EB;
+  --border-subtle: rgba(0,0,0,0.08);
+  --divider: #E2E5EB;
   
-  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  --shadow-hover: 0 10px 15px -3px rgba(138, 99, 255, 0.1), 0 4px 6px -2px rgba(138, 99, 255, 0.05);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-hover: 0 8px 24px rgba(123, 75, 255, 0.12);
+  --shadow-elevated: 0 12px 40px rgba(0, 0, 0, 0.08);
+  
+  /* AG Grid Light Theme */
+  --ag-background-color: #FFFFFF;
+  --ag-header-background-color: #F8F9FC;
+  --ag-row-hover-color: rgba(123, 75, 255, 0.06);
+  --ag-border-color: #E2E5EB;
+  --ag-foreground-color: #1A1D26;
 }
 
 /* Dark Mode Variables */
@@ -30,10 +40,12 @@
   --bg-page: #0D0F14;
   --bg-surface: #141720;
   --bg-surface-2: #1A1E28;
+  --bg-surface-3: #212635;
+  --bg-surface-4: #2C3245;
   
   --primary: #7B4BFF;
   --primary-glow: #A87CFF;
-  --primary-gradient: linear-gradient(90deg, #7B4BFF, #A87CFF);
+  --primary-gradient: linear-gradient(135deg, #7B4BFF 0%, #A87CFF 100%);
   
   --text: #F2F4FA;
   --text-secondary: #9CA3AF;
@@ -42,8 +54,16 @@
   --border-subtle: rgba(255,255,255,0.06);
   --divider: #2C3245;
   
-  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
-  --shadow-hover: 0 10px 15px -3px rgba(123, 75, 255, 0.2), 0 4px 6px -2px rgba(123, 75, 255, 0.1);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-hover: 0 8px 24px rgba(123, 75, 255, 0.2);
+  --shadow-elevated: 0 12px 40px rgba(0, 0, 0, 0.4);
+  
+  /* AG Grid Dark Theme */
+  --ag-background-color: #141720;
+  --ag-header-background-color: #1A1E28;
+  --ag-row-hover-color: rgba(123, 75, 255, 0.08);
+  --ag-border-color: #2C3245;
+  --ag-foreground-color: #F2F4FA;
 }
 
 html,
@@ -52,7 +72,8 @@ body,
   height: 100%;
   font-family: 'Inter', 'IBM Plex Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  transition: background-color 0.25s ease, color 0.25s ease;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 250ms ease, color 250ms ease;
 }
 
 body {
@@ -62,9 +83,9 @@ body {
   line-height: 1.5;
 }
 
-/* Typography */
+/* Typography per spec */
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: 'IBM Plex Sans', 'Inter', sans-serif;
   line-height: 1.2;
   color: var(--text);
 }
@@ -72,61 +93,104 @@ h1, h2, h3, h4, h5, h6 {
 h1 { font-size: 36px; font-weight: 700; }
 h2 { font-size: 28px; font-weight: 600; }
 h3 { font-size: 22px; font-weight: 600; }
+h4 { font-size: 18px; font-weight: 600; }
 
-/* Components */
+/* Components - Databricks-inspired clean design */
 
-/* Buttons */
+/* Buttons per spec: radius 10px, hover lift, 96ms press */
 .btn {
-  @apply px-4 py-2 rounded-btn font-medium transition-all duration-200 flex items-center justify-center gap-2;
+  @apply px-4 py-2.5 rounded-btn font-medium transition-all flex items-center justify-center gap-2;
+  transition-duration: 140ms;
+}
+
+.btn:active {
+  transform: translateY(0);
+  transition-duration: 96ms;
 }
 
 .btn-primary {
   background: var(--primary-gradient);
   color: white;
-  box-shadow: 0 4px 12px rgba(123, 75, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(123, 75, 255, 0.25);
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(123, 75, 255, 0.4);
-}
-
-.btn-primary:active {
-  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(123, 75, 255, 0.35);
 }
 
 .btn-secondary {
-  @apply bg-surface-3 text-text-primary hover:bg-surface-4 border border-border-subtle;
+  background-color: var(--bg-surface-2);
+  color: var(--text);
+  border: 1px solid var(--divider);
 }
 
-/* Cards */
+.btn-secondary:hover {
+  background-color: var(--bg-surface-3);
+}
+
+.btn-ghost {
+  @apply bg-transparent;
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+  color: var(--text);
+  background-color: var(--bg-surface-2);
+}
+
+/* Cards per spec: radius 16px, Surface 2 bg, subtle border, hover elevation */
 .card {
   background-color: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 16px;
   box-shadow: var(--shadow-card);
-  transition: all 0.2s ease;
+  transition: all 200ms ease;
 }
 
 .card:hover {
-  transform: translateY(-2px);
   box-shadow: var(--shadow-hover);
-  border-color: rgba(123, 75, 255, 0.2);
+  border-color: rgba(123, 75, 255, 0.15);
 }
 
-/* Inputs */
+/* Inputs per spec: radius 10px, 1px subtle border, purple focus ring */
 .input {
-  @apply w-full px-4 py-3 rounded-input bg-surface-1 border border-border-subtle text-text transition-all duration-200;
+  @apply w-full px-4 py-3 rounded-input bg-surface-2 border text-text-primary;
+  border-color: var(--divider);
+  transition: all 200ms ease;
 }
 
 .input:focus {
-  @apply outline-none ring-2 ring-primary/50 border-primary;
+  @apply outline-none;
+  box-shadow: 0 0 0 3px rgba(123, 75, 255, 0.2);
+  border-color: var(--primary);
 }
 
-/* AG Grid Customization */
+.input::placeholder {
+  @apply text-text-muted;
+}
+
+/* Navigation item style - Databricks sidebar */
+.nav-item {
+  @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all;
+  transition-duration: 140ms;
+}
+
+.nav-item:hover {
+  background-color: var(--bg-surface-2);
+  color: var(--text);
+}
+
+.nav-item.active {
+  background-color: rgba(123, 75, 255, 0.1);
+  color: #7B4BFF;
+}
+
+/* AG Grid Customization per spec */
 .ag-theme-quartz-dark {
   --ag-background-color: var(--bg-surface);
   --ag-header-background-color: var(--bg-surface-2);
+  --ag-foreground-color: var(--text);
   --ag-row-hover-color: rgba(123, 75, 255, 0.08);
   --ag-selected-row-background-color: rgba(123, 75, 255, 0.12);
   --ag-borders: none;
@@ -140,14 +204,30 @@ h3 { font-size: 22px; font-weight: 600; }
 .ag-theme-quartz {
   --ag-background-color: var(--bg-surface);
   --ag-header-background-color: var(--bg-surface-2);
-  --ag-row-hover-color: rgba(138, 99, 255, 0.08);
-  --ag-selected-row-background-color: rgba(138, 99, 255, 0.12);
+  --ag-foreground-color: var(--text);
+  --ag-row-hover-color: rgba(123, 75, 255, 0.06);
+  --ag-selected-row-background-color: rgba(123, 75, 255, 0.1);
+  --ag-borders: none;
+  --ag-row-border-color: var(--divider);
+  --ag-border-color: var(--divider);
 }
 
-/* Scrollbar */
+/* Edited cell highlight for grid */
+.cell-edited {
+  background-color: rgba(123, 75, 255, 0.1) !important;
+  border-left: 2px solid #7B4BFF !important;
+}
+
+/* Validation error cell */
+.cell-error {
+  background-color: rgba(255, 83, 112, 0.1) !important;
+  border-left: 2px solid #FF5370 !important;
+}
+
+/* Scrollbar - Minimal */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -156,9 +236,338 @@ h3 { font-size: 22px; font-weight: 600; }
 
 ::-webkit-scrollbar-thumb {
   background: var(--divider);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
+}
+
+/* Reveal animation for landing page */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 600ms ease, transform 600ms ease;
+}
+
+.reveal.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Status badges */
+.badge {
+  @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+}
+
+.badge-success {
+  background-color: rgba(76, 217, 127, 0.1);
+  color: #4CD97F;
+  border: 1px solid rgba(76, 217, 127, 0.2);
+}
+
+.badge-warning {
+  background-color: rgba(244, 200, 74, 0.1);
+  color: #F4C84A;
+  border: 1px solid rgba(244, 200, 74, 0.2);
+}
+
+.badge-danger {
+  background-color: rgba(255, 83, 112, 0.1);
+  color: #FF5370;
+  border: 1px solid rgba(255, 83, 112, 0.2);
+}
+
+.badge-info {
+  background-color: rgba(62, 167, 255, 0.1);
+  color: #3EA7FF;
+  border: 1px solid rgba(62, 167, 255, 0.2);
+}
+
+.badge-primary {
+  background-color: rgba(123, 75, 255, 0.1);
+  color: #7B4BFF;
+  border: 1px solid rgba(123, 75, 255, 0.2);
+}
+
+/* Tooltip styling */
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
+[data-tooltip]:hover::after {
+  opacity: 1;
+}
+
+/* Gradient CTA pulse animation per spec */
+.btn-primary-pulse {
+  animation: cta-pulse 2s ease-in-out infinite;
+}
+
+@keyframes cta-pulse {
+  0%, 100% {
+    box-shadow: 0 2px 8px rgba(123, 75, 255, 0.25);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(123, 75, 255, 0.45);
+  }
+}
+
+/* Floating label input per spec */
+.input-floating {
+  @apply relative;
+}
+
+.input-floating input,
+.input-floating textarea {
+  @apply w-full px-4 pt-5 pb-2 rounded-input bg-surface-2 border text-text-primary;
+  border-color: var(--divider);
+  transition: all 200ms ease;
+}
+
+.input-floating label {
+  @apply absolute left-4 text-text-muted pointer-events-none;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: all 200ms ease;
+}
+
+.input-floating input:focus,
+.input-floating input:not(:placeholder-shown) {
+  @apply outline-none;
+  box-shadow: 0 0 0 3px rgba(123, 75, 255, 0.2);
+  border-color: var(--primary);
+}
+
+.input-floating input:focus + label,
+.input-floating input:not(:placeholder-shown) + label {
+  @apply text-xs;
+  color: var(--primary);
+  top: 8px;
+  transform: translateY(0);
+}
+
+/* Max content width utility */
+.max-w-content {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ============================================================================
+   AG Grid Databricks-Inspired Dark Theme
+   ============================================================================ */
+
+.ag-theme-quartz-dark {
+  --ag-background-color: #141720;
+  --ag-foreground-color: #F2F4FA;
+  --ag-header-background-color: #1A1E28;
+  --ag-odd-row-background-color: #141720;
+  --ag-row-hover-color: rgba(123, 75, 255, 0.08);
+  --ag-selected-row-background-color: rgba(123, 75, 255, 0.15);
+  --ag-range-selection-border-color: #7B4BFF;
+  --ag-range-selection-background-color: rgba(123, 75, 255, 0.1);
+  --ag-header-column-resize-handle-color: #2C3245;
+  --ag-border-color: #2C3245;
+  --ag-secondary-border-color: #2C3245;
+  --ag-row-border-color: #2C3245;
+  --ag-cell-horizontal-padding: 12px;
+  --ag-header-height: 36px;
+  --ag-row-height: 32px;
+  --ag-font-size: 13px;
+  --ag-font-family: 'IBM Plex Mono', 'Monaco', 'Consolas', monospace;
+  
+  /* Scrollbar styling */
+  --ag-scrollbar-width: 8px;
+  --ag-scrollbar-thumb-color: #3C4155;
+  --ag-scrollbar-thumb-hover-color: #4C5265;
+  --ag-scrollbar-track-color: transparent;
+  
+  /* Focus styling */
+  --ag-input-focus-border-color: #7B4BFF;
+  --ag-input-focus-box-shadow: 0 0 0 3px rgba(123, 75, 255, 0.2);
+  
+  /* Chip styling for filters */
+  --ag-chip-background-color: rgba(123, 75, 255, 0.15);
+  --ag-chip-border-color: rgba(123, 75, 255, 0.3);
+}
+
+/* Header cell styling */
+.ag-theme-quartz-dark .ag-header-cell {
+  background-color: #1A1E28;
+  border-right: 1px solid #2C3245;
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.025em;
+}
+
+.ag-theme-quartz-dark .ag-header-cell:hover {
+  background-color: #22262F;
+}
+
+/* Cell styling */
+.ag-theme-quartz-dark .ag-cell {
+  border-right: 1px solid rgba(44, 50, 69, 0.5);
+  font-family: 'IBM Plex Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 13px;
+  color: #D1D5E0;
+}
+
+.ag-theme-quartz-dark .ag-cell:focus {
+  border-color: #7B4BFF;
+  outline: none;
+}
+
+/* Row styling */
+.ag-theme-quartz-dark .ag-row {
+  border-bottom: 1px solid rgba(44, 50, 69, 0.3);
+}
+
+.ag-theme-quartz-dark .ag-row-hover {
+  background-color: rgba(123, 75, 255, 0.06);
+}
+
+.ag-theme-quartz-dark .ag-row-selected {
+  background-color: rgba(123, 75, 255, 0.12);
+}
+
+/* Pinned column styling */
+.ag-theme-quartz-dark .ag-pinned-left-header,
+.ag-theme-quartz-dark .ag-pinned-left-cols-container {
+  border-right: 2px solid #2C3245;
+}
+
+.ag-theme-quartz-dark .ag-pinned-right-header,
+.ag-theme-quartz-dark .ag-pinned-right-cols-container {
+  border-left: 2px solid #2C3245;
+}
+
+/* Filter popup styling */
+.ag-theme-quartz-dark .ag-popup {
+  background-color: #1A1E28;
+  border: 1px solid #2C3245;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+.ag-theme-quartz-dark .ag-filter-toolpanel-header,
+.ag-theme-quartz-dark .ag-filter-toolpanel-search {
+  background-color: #1A1E28;
+}
+
+/* Sort indicator styling */
+.ag-theme-quartz-dark .ag-icon-asc,
+.ag-theme-quartz-dark .ag-icon-desc {
+  color: #7B4BFF;
+}
+
+/* Menu styling */
+.ag-theme-quartz-dark .ag-menu {
+  background-color: #1A1E28;
+  border: 1px solid #2C3245;
+  border-radius: 8px;
+}
+
+.ag-theme-quartz-dark .ag-menu-option:hover {
+  background-color: rgba(123, 75, 255, 0.1);
+}
+
+.ag-theme-quartz-dark .ag-menu-option-active {
+  background-color: rgba(123, 75, 255, 0.15);
+}
+
+/* Column drag styling */
+.ag-theme-quartz-dark .ag-header-cell-moving {
+  background-color: rgba(123, 75, 255, 0.2);
+}
+
+/* Input styling in filters */
+.ag-theme-quartz-dark .ag-text-field-input {
+  background-color: #141720;
+  border: 1px solid #2C3245;
+  border-radius: 6px;
+  color: #F2F4FA;
+  padding: 6px 10px;
+}
+
+.ag-theme-quartz-dark .ag-text-field-input:focus {
+  border-color: #7B4BFF;
+  box-shadow: 0 0 0 3px rgba(123, 75, 255, 0.15);
+}
+
+/* Checkbox styling */
+.ag-theme-quartz-dark .ag-checkbox-input-wrapper {
+  background-color: #1A1E28;
+  border: 1px solid #3C4155;
+  border-radius: 4px;
+}
+
+.ag-theme-quartz-dark .ag-checkbox-input-wrapper.ag-checked {
+  background-color: #7B4BFF;
+  border-color: #7B4BFF;
+}
+
+.ag-theme-quartz-dark .ag-checkbox-input-wrapper.ag-checked::after {
+  color: white;
+}
+
+/* Loading overlay */
+.ag-theme-quartz-dark .ag-loading {
+  background-color: rgba(20, 23, 32, 0.9);
+}
+
+/* No rows overlay */
+.ag-theme-quartz-dark .ag-overlay-no-rows-center {
+  background-color: rgba(20, 23, 32, 0.95);
+  color: #6B7280;
+  font-size: 14px;
+}
+
+/* Tooltip */
+.ag-theme-quartz-dark .ag-tooltip {
+  background-color: #1A1E28;
+  border: 1px solid #2C3245;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #D1D5E0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Legacy theme alias - same styles as ag-theme-quartz-dark */
+.ag-theme-databricks-dark {
+  --ag-background-color: #141720;
+  --ag-foreground-color: #F2F4FA;
+  --ag-header-background-color: #1A1E28;
+  --ag-odd-row-background-color: #141720;
+  --ag-row-hover-color: rgba(123, 75, 255, 0.08);
+  --ag-selected-row-background-color: rgba(123, 75, 255, 0.15);
+  --ag-range-selection-border-color: #7B4BFF;
+  --ag-range-selection-background-color: rgba(123, 75, 255, 0.1);
+  --ag-header-column-resize-handle-color: #2C3245;
+  --ag-border-color: #2C3245;
+  --ag-secondary-border-color: #2C3245;
+  --ag-row-border-color: #2C3245;
+  --ag-cell-horizontal-padding: 12px;
+  --ag-header-height: 36px;
+  --ag-row-height: 32px;
+  --ag-font-size: 13px;
+  --ag-font-family: 'IBM Plex Mono', 'Monaco', 'Consolas', monospace;
 }

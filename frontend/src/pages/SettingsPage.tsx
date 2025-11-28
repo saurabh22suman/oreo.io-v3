@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { User, Settings, Monitor, Globe, Save, Loader2, Moon, Sun, Type, Clock, Hash, Code, Mail, Phone, Camera } from 'lucide-react'
+import { User, Settings, Monitor, Globe, Save, Loader2, Moon, Sun, Clock, Code, Mail, Phone } from 'lucide-react'
 
 type Prefs = {
   theme?: 'light'|'dark'
@@ -38,7 +38,6 @@ export default function SettingsPage(){
         if(!mounted) return
         setProfile({ name: p.name||'', email: p.email||'', phone: p.phone||'', avatar_url: p.avatar_url||'' })
         setPrefs(prev => ({ ...prev, ...(pr||{}) }))
-        // apply theme on load
         document.documentElement.classList.toggle('dark', (pr?.theme||prevTheme()) === 'dark')
       }catch(e:any){ if(mounted) setErr(e?.message||'Failed to load settings') }
       finally{ if(mounted) setLoading(false) }
@@ -78,172 +77,150 @@ export default function SettingsPage(){
   if(loading){ 
     return (
       <div className="flex items-center justify-center h-96">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
       </div>
     ) 
   }
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      {/* Header Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-surface-1/80 backdrop-blur-xl border border-divider p-8 shadow-2xl shadow-black/5">
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-3">
-              <span className="px-3 py-1 rounded-full bg-primary/10 text-xs font-bold border border-primary/20 text-primary shadow-sm">
-                Configuration
-              </span>
-            </div>
-            <h1 className="text-4xl font-bold mb-4 tracking-tight text-text font-display drop-shadow-sm">Settings</h1>
-            <p className="text-text-secondary max-w-lg text-base leading-relaxed">
-              Manage your account details, appearance preferences, and editor settings.
-            </p>
-          </div>
-        </div>
-        {/* Decorative background elements */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+    <div className="space-y-6 pb-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-semibold text-text-primary">Settings</h1>
+        <p className="text-sm text-text-muted mt-1">Manage your account and preferences</p>
       </div>
 
       {err && (
-        <div className="bg-danger/10 border border-danger/20 text-danger p-4 rounded-xl text-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
-          <div className="w-2 h-2 rounded-full bg-danger animate-pulse"></div>
+        <div className="bg-danger/10 border border-danger/20 text-danger p-3 rounded-lg text-sm">
           {err}
         </div>
       )}
       {ok && (
-        <div className="bg-success/10 border border-success/20 text-success p-4 rounded-xl text-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
-          <div className="w-2 h-2 rounded-full bg-success animate-pulse"></div>
+        <div className="bg-success/10 border border-success/20 text-success p-3 rounded-lg text-sm">
           {ok}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid lg:grid-cols-2 gap-6">
         {/* Account Settings */}
-        <div className="bg-surface-1 rounded-2xl border border-divider p-8 shadow-xl shadow-black/5 h-full flex flex-col">
-          <div className="flex items-center gap-4 mb-8 pb-6 border-b border-divider">
-            <div className="p-3 rounded-xl bg-primary/10 text-primary shadow-inner">
-              <User className="w-6 h-6" />
+        <div className="bg-surface-2 border border-divider rounded-card">
+          <div className="px-4 py-3 border-b border-divider flex items-center gap-3">
+            <div className="p-1.5 rounded-md bg-primary/10">
+              <User size={16} className="text-primary" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-text">Account Settings</h2>
-              <p className="text-xs text-text-secondary font-medium">Personal information and contact details</p>
+              <h2 className="font-medium text-text-primary text-sm">Account</h2>
+              <p className="text-xs text-text-muted">Personal information</p>
             </div>
           </div>
           
-          <div className="space-y-6 flex-1">
-            <div className="flex items-center gap-6">
-              <div className="relative group">
-                <img 
-                  src={profile.avatar_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(profile.email||profile.name||'User')} 
-                  alt="avatar" 
-                  className="w-24 h-24 rounded-full border-4 border-surface-2 shadow-lg object-cover transition-transform group-hover:scale-105" 
-                />
-                <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center text-white cursor-pointer backdrop-blur-sm">
-                  <Camera className="w-6 h-6" />
-                </div>
-              </div>
+          <div className="p-4 space-y-4">
+            <div className="flex items-center gap-4">
+              <img 
+                src={profile.avatar_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(profile.email||profile.name||'User')} 
+                alt="avatar" 
+                className="w-14 h-14 rounded-full border-2 border-divider object-cover" 
+              />
               <div className="flex-1">
-                <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">Profile Picture URL</label>
+                <label className="block text-xs text-text-muted mb-1">Avatar URL</label>
                 <input 
                   value={profile.avatar_url} 
                   onChange={e=>setProfile({...profile, avatar_url:e.target.value})} 
-                  className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm" 
+                  className="input w-full text-sm" 
                   placeholder="https://..." 
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-2">
-                <User className="w-3.5 h-3.5" /> Full Name
+              <label className="block text-xs text-text-muted mb-1 flex items-center gap-1">
+                <User size={12} /> Name
               </label>
               <input 
                 value={profile.name} 
                 onChange={e=>setProfile({...profile, name:e.target.value})} 
-                className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm" 
-                placeholder="John Doe"
+                className="input w-full" 
+                placeholder="Your name"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-2">
-                <Mail className="w-3.5 h-3.5" /> Email Address
+              <label className="block text-xs text-text-muted mb-1 flex items-center gap-1">
+                <Mail size={12} /> Email
               </label>
               <input 
                 value={profile.email} 
                 onChange={e=>setProfile({...profile, email:e.target.value})} 
-                className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm" 
-                placeholder="john@example.com"
+                className="input w-full" 
+                placeholder="you@example.com"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-2">
-                <Phone className="w-3.5 h-3.5" /> Phone Number
+              <label className="block text-xs text-text-muted mb-1 flex items-center gap-1">
+                <Phone size={12} /> Phone
               </label>
               <input 
                 value={profile.phone} 
                 onChange={e=>setProfile({...profile, phone:e.target.value})} 
-                className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm" 
+                className="input w-full" 
                 placeholder="+1 (555) 000-0000"
               />
             </div>
-          </div>
 
-          <div className="mt-10 pt-6 border-t border-divider flex justify-end">
-            <button 
-              onClick={saveProfile} 
-              disabled={saving}
-              className="btn btn-primary flex items-center gap-2 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all px-6 py-2.5 rounded-xl"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Save Changes
-            </button>
+            <div className="pt-3 border-t border-divider flex justify-end">
+              <button 
+                onClick={saveProfile} 
+                disabled={saving}
+                className="btn btn-primary text-sm flex items-center gap-2"
+              >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Save
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Preferences */}
-        <div className="bg-surface-1 rounded-2xl border border-divider p-8 shadow-xl shadow-black/5 h-full flex flex-col">
-          <div className="flex items-center gap-4 mb-8 pb-6 border-b border-divider">
-            <div className="p-3 rounded-xl bg-secondary/10 text-secondary shadow-inner">
-              <Settings className="w-6 h-6" />
+        <div className="bg-surface-2 border border-divider rounded-card">
+          <div className="px-4 py-3 border-b border-divider flex items-center gap-3">
+            <div className="p-1.5 rounded-md bg-secondary/10">
+              <Settings size={16} className="text-secondary" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-text">Preferences</h2>
-              <p className="text-xs text-text-secondary font-medium">Customize your experience</p>
+              <h2 className="font-medium text-text-primary text-sm">Preferences</h2>
+              <p className="text-xs text-text-muted">Customize your experience</p>
             </div>
           </div>
 
-          <div className="space-y-8 flex-1">
-            <div className="grid grid-cols-2 gap-6">
+          <div className="p-4 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-1.5">
-                  <Monitor className="w-3.5 h-3.5" /> Theme
+                <label className="block text-xs text-text-muted mb-1 flex items-center gap-1">
+                  <Monitor size={12} /> Theme
                 </label>
-                <div className="flex bg-surface-2 p-1.5 rounded-xl border border-divider shadow-inner">
+                <div className="flex bg-surface-3 p-0.5 rounded-md border border-divider">
                   <button 
                     onClick={()=>setPrefs({...prefs, theme:'light'})}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all ${prefs.theme==='light' ? 'bg-white text-primary shadow-sm' : 'text-text-secondary hover:text-text'}`}
+                    className={`flex-1 py-1.5 text-xs rounded flex items-center justify-center gap-1 transition-colors ${prefs.theme==='light' ? 'bg-surface-1 text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary'}`}
                   >
-                    <Sun className="w-3.5 h-3.5" /> Light
+                    <Sun size={12} /> Light
                   </button>
                   <button 
                     onClick={()=>setPrefs({...prefs, theme:'dark'})}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all ${prefs.theme==='dark' ? 'bg-slate-700 text-white shadow-sm' : 'text-text-secondary hover:text-text'}`}
+                    className={`flex-1 py-1.5 text-xs rounded flex items-center justify-center gap-1 transition-colors ${prefs.theme==='dark' ? 'bg-surface-1 text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary'}`}
                   >
-                    <Moon className="w-3.5 h-3.5" /> Dark
+                    <Moon size={12} /> Dark
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-1.5">
-                  <Type className="w-3.5 h-3.5" /> Density
-                </label>
+                <label className="block text-xs text-text-muted mb-1">Density</label>
                 <select 
                   value={prefs.density} 
                   onChange={e=>setPrefs({...prefs, density:e.target.value as any})} 
-                  className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                  className="input w-full"
                 >
                   <option value="comfortable">Comfortable</option>
                   <option value="compact">Compact</option>
@@ -251,15 +228,15 @@ export default function SettingsPage(){
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5" /> Language
+                <label className="block text-xs text-text-muted mb-1 flex items-center gap-1">
+                  <Globe size={12} /> Language
                 </label>
                 <select 
                   value={prefs.language} 
                   onChange={e=>setPrefs({...prefs, language:e.target.value})} 
-                  className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                  className="input w-full"
                 >
                   <option value="en">English</option>
                   <option value="es">Spanish</option>
@@ -268,13 +245,13 @@ export default function SettingsPage(){
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5" /> Timezone
+                <label className="block text-xs text-text-muted mb-1 flex items-center gap-1">
+                  <Clock size={12} /> Timezone
                 </label>
                 <select 
                   value={prefs.timezone} 
                   onChange={e=>setPrefs({...prefs, timezone:e.target.value})} 
-                  className="w-full px-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                  className="input w-full"
                 >
                   <option value={Intl.DateTimeFormat().resolvedOptions().timeZone}>System Default</option>
                   <option value="UTC">UTC</option>
@@ -285,59 +262,54 @@ export default function SettingsPage(){
               </div>
             </div>
 
-            <div className="pt-6 border-t border-divider">
-              <h3 className="text-sm font-bold text-text mb-4 flex items-center gap-2 uppercase tracking-wider">
-                <Code className="w-4 h-4 text-primary" /> Editor Settings
+            {/* Editor Settings */}
+            <div className="pt-3 border-t border-divider">
+              <h3 className="text-xs font-medium text-text-primary mb-3 flex items-center gap-1.5">
+                <Code size={12} className="text-primary" /> Editor
               </h3>
-              <div className="space-y-4 bg-surface-2/30 p-4 rounded-xl border border-divider">
+              <div className="space-y-3 bg-surface-3 p-3 rounded-lg border border-divider">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-text-secondary">Default Language</label>
+                  <label className="text-xs text-text-secondary">Default Language</label>
                   <select 
                     value={prefs.editor?.language} 
                     onChange={e=>setPrefs({...prefs, editor:{...prefs.editor, language:e.target.value as any}})} 
-                    className="px-3 py-1.5 bg-surface-1 border border-divider rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm"
+                    className="px-2 py-1 bg-surface-1 border border-divider rounded text-xs"
                   >
                     <option value="sql">SQL</option>
                     <option value="python">Python</option>
                   </select>
                 </div>
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-text-secondary">Autocomplete</label>
-                  <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
-                    <input 
-                      type="checkbox" 
-                      checked={prefs.editor?.autocomplete} 
-                      onChange={e=>setPrefs({...prefs, editor:{...prefs.editor, autocomplete:e.target.checked}})} 
-                      className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer checked:right-0 right-5 checked:border-primary"
-                    />
-                    <label className={`toggle-label block overflow-hidden h-5 rounded-full cursor-pointer ${prefs.editor?.autocomplete ? 'bg-primary' : 'bg-surface-3'}`}></label>
-                  </div>
+                  <label className="text-xs text-text-secondary">Autocomplete</label>
+                  <input 
+                    type="checkbox" 
+                    checked={prefs.editor?.autocomplete} 
+                    onChange={e=>setPrefs({...prefs, editor:{...prefs.editor, autocomplete:e.target.checked}})} 
+                    className="w-4 h-4 rounded border-divider bg-surface-1 text-primary focus:ring-primary/30"
+                  />
                 </div>
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-text-secondary">Line Numbers</label>
-                  <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
-                    <input 
-                      type="checkbox" 
-                      checked={prefs.editor?.lineNumbers} 
-                      onChange={e=>setPrefs({...prefs, editor:{...prefs.editor, lineNumbers:e.target.checked}})} 
-                      className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer checked:right-0 right-5 checked:border-primary"
-                    />
-                    <label className={`toggle-label block overflow-hidden h-5 rounded-full cursor-pointer ${prefs.editor?.lineNumbers ? 'bg-primary' : 'bg-surface-3'}`}></label>
-                  </div>
+                  <label className="text-xs text-text-secondary">Line Numbers</label>
+                  <input 
+                    type="checkbox" 
+                    checked={prefs.editor?.lineNumbers} 
+                    onChange={e=>setPrefs({...prefs, editor:{...prefs.editor, lineNumbers:e.target.checked}})} 
+                    className="w-4 h-4 rounded border-divider bg-surface-1 text-primary focus:ring-primary/30"
+                  />
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="mt-10 pt-6 border-t border-divider flex justify-end">
-            <button 
-              onClick={savePrefs} 
-              disabled={saving}
-              className="btn btn-primary flex items-center gap-2 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all px-6 py-2.5 rounded-xl"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Save Preferences
-            </button>
+            <div className="pt-3 border-t border-divider flex justify-end">
+              <button 
+                onClick={savePrefs} 
+                disabled={saving}
+                className="btn btn-primary text-sm flex items-center gap-2"
+              >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Save
+              </button>
+            </div>
           </div>
         </div>
       </div>

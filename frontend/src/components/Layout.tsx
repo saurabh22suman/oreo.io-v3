@@ -9,21 +9,19 @@ function InnerLayout() {
   const { collapsed } = useCollapse()
   
   return (
-    <div className="min-h-screen flex flex-col bg-page text-text font-sans transition-colors duration-300">
+    <div className="min-h-screen flex flex-col bg-surface-1 text-text-primary font-sans">
       <Navbar />
-      <div className="flex flex-1 relative">
-        {user && (
-          <Sidebar />
-        )}
+      <div className="flex flex-1">
+        {user && <Sidebar />}
 
         <main 
-          className={`flex-1 p-6 lg:p-8 transition-all duration-300 ${
-            user 
-              ? (collapsed ? 'ml-16' : 'ml-64') 
-              : 'ml-0'
-          }`}
+          className={`
+            flex-1 min-h-[calc(100vh-3.5rem)] p-6
+            transition-all duration-300 ease-out
+            ${user ? (collapsed ? 'ml-[68px]' : 'ml-64') : 'ml-0'}
+          `}
         >
-          <div className="max-w-7xl mx-auto animate-fade-in">
+          <div className="max-w-[1400px] mx-auto animate-fade-in">
             <Outlet />
           </div>
         </main>

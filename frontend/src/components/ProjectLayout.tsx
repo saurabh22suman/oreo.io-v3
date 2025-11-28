@@ -1,6 +1,6 @@
 import { ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Database, Users, Settings, LayoutDashboard } from 'lucide-react'
+import { ArrowLeft, Database, Users, Settings } from 'lucide-react'
 
 type ProjectLayoutProps = {
     project: any
@@ -13,85 +13,85 @@ export default function ProjectLayout({ project, role, loading, children }: Proj
     const navigate = useNavigate()
 
     if (loading) {
-        return <div className="p-8 text-center text-text-secondary">Loading project...</div>
+        return (
+            <div className="flex items-center justify-center py-12">
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+        )
     }
 
     if (!project) {
-        return <div className="p-8 text-center text-danger">Project not found</div>
+        return (
+            <div className="text-center py-12">
+                <p className="text-danger">Project not found</p>
+            </div>
+        )
     }
 
     return (
-        <div className="space-y-8 animate-fade-in">
-            {/* Header Section */}
-            <div className="relative overflow-hidden rounded-3xl bg-surface-1 border border-divider p-8 shadow-lg">
-                <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-                    <div className="flex-1">
-                        <button
-                            onClick={() => navigate('/projects')}
-                            className="flex items-center gap-2 text-text-secondary hover:text-text transition-colors mb-4 group text-sm font-medium"
-                        >
-                            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                            Back to Projects
-                        </button>
+        <div className="space-y-6 animate-fade-in">
+            {/* Header */}
+            <div>
+                <button
+                    onClick={() => navigate('/projects')}
+                    className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors mb-4 group"
+                >
+                    <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+                    Back to Projects
+                </button>
 
-                        <div className="flex items-center gap-3 mb-2">
-                            <span className="px-3 py-1 rounded-full bg-primary/10 text-xs font-bold border border-primary/20 text-primary">
-                                Project Workspace
-                            </span>
-                        </div>
-                        <h1 className="text-4xl font-bold mb-3 tracking-tight text-text font-display">{project.name}</h1>
-                        <p className="text-text-secondary max-w-md text-sm leading-relaxed">
-                            {project.description || 'Manage your datasets, collaborate with members, and configure project settings.'}
+                <div className="flex items-start justify-between">
+                    <div>
+                        <h1 className="text-2xl font-semibold text-text-primary mb-1">{project.name}</h1>
+                        <p className="text-sm text-text-secondary">
+                            {project.description || 'Manage datasets, members, and settings'}
                         </p>
                     </div>
                 </div>
-
-                {/* Decorative background elements */}
-                <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
             </div>
 
             {/* Navigation Tabs */}
             <div className="border-b border-divider">
-                <nav className="flex gap-8">
+                <nav className="flex gap-6">
                     <NavLink
                         end
                         to={`/projects/${project.id}`}
                         className={({ isActive }) => `
-              flex items-center gap-2 pb-4 text-sm font-medium border-b-2 transition-all
-              ${isActive
+                            flex items-center gap-2 pb-3 text-sm font-medium border-b-2 -mb-px transition-colors
+                            ${isActive
                                 ? 'border-primary text-primary'
-                                : 'border-transparent text-text-secondary hover:text-text hover:border-divider'
+                                : 'border-transparent text-text-secondary hover:text-text-primary'
                             }
-            `}
+                        `}
                     >
-                        <Database className="w-4 h-4" />
+                        <Database size={16} />
                         Datasets
                     </NavLink>
                     <NavLink
                         to={`/projects/${project.id}/members`}
                         className={({ isActive }) => `
-              flex items-center gap-2 pb-4 text-sm font-medium border-b-2 transition-all
-              ${isActive
+                            flex items-center gap-2 pb-3 text-sm font-medium border-b-2 -mb-px transition-colors
+                            ${isActive
                                 ? 'border-primary text-primary'
-                                : 'border-transparent text-text-secondary hover:text-text hover:border-divider'
+                                : 'border-transparent text-text-secondary hover:text-text-primary'
                             }
-            `}
+                        `}
                     >
-                        <Users className="w-4 h-4" />
+                        <Users size={16} />
                         Members
                     </NavLink>
                     {role === 'owner' && (
                         <NavLink
                             to={`/projects/${project.id}/settings`}
                             className={({ isActive }) => `
-                flex items-center gap-2 pb-4 text-sm font-medium border-b-2 transition-all
-                ${isActive
+                                flex items-center gap-2 pb-3 text-sm font-medium border-b-2 -mb-px transition-colors
+                                ${isActive
                                     ? 'border-primary text-primary'
-                                    : 'border-transparent text-text-secondary hover:text-text hover:border-divider'
+                                    : 'border-transparent text-text-secondary hover:text-text-primary'
                                 }
-              `}
+                            `}
                         >
-                            <Settings className="w-4 h-4" />
+                            <Settings size={16} />
                             Settings
                         </NavLink>
                     )}
@@ -99,9 +99,7 @@ export default function ProjectLayout({ project, role, loading, children }: Proj
             </div>
 
             {/* Content */}
-            <div className="animate-fade-in">
-                {children}
-            </div>
+            <div>{children}</div>
         </div>
     )
 }

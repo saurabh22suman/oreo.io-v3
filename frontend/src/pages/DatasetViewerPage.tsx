@@ -1,207 +1,39 @@
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getDatasetDataTop, getDatasetStatsTop, getProject, getDataset, getDatasetSchemaTop } from '../api'
 import Alert from '../components/Alert'
-import { AgGridReact } from 'ag-grid-react'
-import type { ColDef, GridApi } from 'ag-grid-community'
-import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community'
-ModuleRegistry.registerModules([AllCommunityModule])
-import 'ag-grid-community/styles/ag-theme-quartz.css'
+import { DataTable, DataType } from '../components/DataTable'
 import {
-  ChevronLeft, Database, BarChart3, Table2, RefreshCw, Download,
-  ChevronRight, ChevronLeft as PrevIcon, Edit3, Type, Hash, Calendar,
-  ToggleLeft, FileSpreadsheet, FileText, ChevronDown, MoreVertical,
-  Filter, Copy, Pin, Clock, ArrowUp, ArrowDown, ArrowUpDown, X, Plus, Edit2, ArrowLeft
+  Table2, RefreshCw, Edit2, ArrowLeft
 } from 'lucide-react'
-
-// Custom Header Component with Sort Icons and Context Menu
-const CustomHeader = (props: any) => {
-  const { displayName, column, api, setFilterColumn, sortKey } = props;
-  const type = props.columnType || 'text';
-  const [showMenu, setShowMenu] = useState(false);
-  const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [currentSort, setCurrentSort] = useState<string | null | undefined>(column.getSort());
-
-  // Update sort state when sortKey changes (triggered by parent)
-  useEffect(() => {
-    setCurrentSort(column.getSort());
-  }, [sortKey, column]);
-
-  const Icon = {
-    text: Type,
-    number: Hash,
-    date: Calendar,
-    boolean: ToggleLeft
-  }[type] || Type;
-
-  const SortIcon = currentSort === 'asc' ? ArrowUp : currentSort === 'desc' ? ArrowDown : ArrowUpDown;
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(event.target as Node) &&
-        buttonRef.current && !buttonRef.current.contains(event.target as Node)
-      ) {
-        setShowMenu(false);
-      }
-    };
-
-    if (showMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [showMenu]);
-
-  const handleMenuClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!showMenu && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setMenuPos({ x: rect.right - 192, y: rect.bottom + 5 });
-    }
-    setShowMenu(!showMenu);
-  };
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(displayName);
-    setShowMenu(false);
-  };
-
-  const handleFilter = () => {
-    setFilterColumn({
-      name: displayName,
-      field: column.getColId(),
-      type: type
-    });
-    setShowMenu(false);
-  };
-
-  const handlePin = () => {
-    const colId = column.getColId();
-    const isPinned = column.isPinned();
-    api.applyColumnState({
-      state: [{ colId, pinned: isPinned ? null : 'left' }],
-      defaultState: { pinned: null }
-    });
-    setShowMenu(false);
-  };
-
-  const handleSort = () => {
-    const colId = column.getColId();
-    let newSort: 'asc' | 'desc' | null = null;
-    
-    if (!currentSort) {
-      newSort = 'asc';
-    } else if (currentSort === 'asc') {
-      newSort = 'desc';
-    } else {
-      newSort = null;
-    }
-    
-    api.applyColumnState({
-      state: [{ colId, sort: newSort }],
-      defaultState: { sort: null }
-    });
-    setCurrentSort(newSort);
-    
-    // Trigger parent to update sortKey for other headers
-    if (props.onSortChanged) {
-      props.onSortChanged();
-    }
-  };
-
-  return (
-    <div className="flex items-center justify-between w-full h-full group">
-      <div className="flex items-center gap-2 text-xs font-bold text-text-secondary group-hover:text-text transition-colors">
-        <Icon className="w-3.5 h-3.5 opacity-50" />
-        <span>{displayName}</span>
-        <button
-          onClick={handleSort}
-          className="opacity-0 group-hover:opacity-100 transition-opacity"
-        >
-          <SortIcon className={`w-3.5 h-3.5 ${currentSort ? 'text-primary' : 'text-text-secondary'}`} />
-        </button>
-      </div>
-
-      <div className="relative">
-        <button
-          ref={buttonRef}
-          onClick={handleMenuClick}
-          className={`p-1 rounded hover:bg-surface-3 text-text-secondary hover:text-text opacity-0 group-hover:opacity-100 transition-all ${showMenu ? 'opacity-100 bg-surface-3 text-text' : ''}`}
-        >
-          <MoreVertical className="w-3.5 h-3.5" />
-        </button>
-
-        {showMenu && createPortal(
-          <div
-            ref={menuRef}
-            style={{ position: 'fixed', left: `${menuPos.x}px`, top: `${menuPos.y}px` }}
-            className="w-48 bg-surface-1 border border-divider rounded-lg shadow-xl z-[9999] py-1"
-          >
-            <button onClick={handleCopy} className="w-full px-3 py-2 text-left text-xs text-text-secondary hover:bg-surface-2 flex items-center gap-2">
-              <Copy className="w-3.5 h-3.5" />
-              Copy column name
-            </button>
-            <button onClick={handleFilter} className="w-full px-3 py-2 text-left text-xs text-text-secondary hover:bg-surface-2 flex items-center gap-2">
-              <Filter className="w-3.5 h-3.5" />
-              Filter
-            </button>
-            <div className="relative group/sub">
-              <button className="w-full px-3 py-2 text-left text-xs text-text-secondary hover:bg-surface-2 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Edit3 className="w-3.5 h-3.5" />
-                  Format
-                </div>
-                <ChevronRight className="w-3 h-3" />
-              </button>
-            </div>
-            <div className="h-px bg-divider my-1" />
-            <button onClick={handlePin} className="w-full px-3 py-2 text-left text-xs text-text-secondary hover:bg-surface-2 flex items-center gap-2">
-              <Pin className="w-3.5 h-3.5" />
-              {column.isPinned() ? 'Unpin column' : 'Pin column'}
-            </button>
-          </div>,
-          document.body
-        )}
-      </div>
-    </div>
-  );
-};
 
 export default function DatasetViewerPage() {
   const { id, datasetId } = useParams()
   const projectId = Number(id)
   const dsId = Number(datasetId)
-  const gridRef = useRef<AgGridReact>(null)
-  const [api, setApi] = useState<GridApi | null>(null)
+  
   const [project, setProject] = useState<any>(null)
   const [dataset, setDataset] = useState<any>(null)
   const [stats, setStats] = useState<any>(null)
   const [rows, setRows] = useState<any[]>([])
   const [columns, setColumns] = useState<string[]>([])
-  const [columnMappings, setColumnMappings] = useState<Record<string, string>>({}) // originalName -> displayName
+  const [columnMappings, setColumnMappings] = useState<Record<string, string>>({})
+  const [columnTypes, setColumnTypes] = useState<Record<string, DataType>>({})
   const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(50)
+  const [pageSize] = useState(50)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [showDownloadMenu, setShowDownloadMenu] = useState(false)
   const [runtime, setRuntime] = useState<number>(0)
-  const [filterColumn, setFilterColumn] = useState<any>(null)
-  const [filterCondition, setFilterCondition] = useState('contains')
-  const [filterValue, setFilterValue] = useState('')
-  const [activeFilters, setActiveFilters] = useState<Array<{ field: string; name: string; condition: string; value: string }>>([])
-  const [sortKey, setSortKey] = useState(0)
+  const [lastRefreshed, setLastRefreshed] = useState<Date | undefined>()
 
-  async function loadData(offset: number, limit: number) {
+  const loadData = useCallback(async (offset: number, limit: number) => {
     try {
       setLoading(true)
       const start = performance.now()
       const response = await getDatasetDataTop(dsId, limit, offset)
       const end = performance.now()
       setRuntime((end - start) / 1000)
+      setLastRefreshed(new Date())
 
       if (!response) throw new Error('No response from server')
 
@@ -216,7 +48,7 @@ export default function DatasetViewerPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [dsId])
 
   useEffect(() => {
     (async () => {
@@ -225,7 +57,7 @@ export default function DatasetViewerPage() {
         setDataset(await getDataset(projectId, dsId))
         setStats(await getDatasetStatsTop(dsId))
         
-        // Fetch schema to get column mappings (originalName -> displayName)
+        // Fetch schema to get column mappings and types
         try {
           const schemaResp = await getDatasetSchemaTop(dsId)
           if (schemaResp?.schema) {
@@ -233,19 +65,31 @@ export default function DatasetViewerPage() {
               ? JSON.parse(schemaResp.schema) 
               : schemaResp.schema
             
-            // Check if schema has columnMappings or extract from properties
-            if (schemaObj.columnMappings) {
-              setColumnMappings(schemaObj.columnMappings)
-            } else if (schemaObj.properties) {
-              // Build mappings from properties.originalName -> propertyKey
-              const mappings: Record<string, string> = {}
+            // Build mappings and types from schema
+            const mappings: Record<string, string> = {}
+            const types: Record<string, DataType> = {}
+            
+            if (schemaObj.properties) {
               Object.entries(schemaObj.properties).forEach(([key, prop]: [string, any]) => {
+                // Column mappings
                 if (prop.originalName && prop.originalName !== key) {
                   mappings[prop.originalName] = key
                 }
+                // Column types from schema
+                if (prop.type === 'integer' || prop.type === 'number') {
+                  types[key] = 'number'
+                } else if (prop.type === 'boolean') {
+                  types[key] = 'boolean'
+                } else if (prop.format === 'date' || prop.format === 'date-time') {
+                  types[key] = prop.format === 'date-time' ? 'timestamp' : 'date'
+                } else {
+                  types[key] = 'text'
+                }
               })
-              setColumnMappings(mappings)
             }
+            
+            setColumnMappings(mappings)
+            setColumnTypes(types)
           }
         } catch (schemaErr) {
           console.warn('Could not fetch schema for column mappings:', schemaErr)
@@ -257,90 +101,12 @@ export default function DatasetViewerPage() {
         setLoading(false)
       }
     })()
-  }, [projectId, dsId])
+  }, [projectId, dsId, loadData])
 
-  const columnTypes = useMemo(() => {
-    const types: Record<string, string> = {};
-    if (rows.length > 0) {
-      columns.forEach(col => {
-        const val = rows[0][col];
-        if (typeof val === 'number') types[col] = 'number';
-        else if (typeof val === 'boolean') types[col] = 'boolean';
-        else if (val instanceof Date) types[col] = 'date';
-        else if (typeof val === 'string' && !isNaN(Number(val)) && val.trim() !== '') types[col] = 'number';
-        else if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) types[col] = 'date';
-        else types[col] = 'text';
-      });
-    }
-    return types;
-  }, [rows, columns]);
-
-  const colDefs = useMemo<ColDef[]>(() => {
-    const defs: ColDef[] = [
-      {
-        headerName: '',
-        valueGetter: 'node.rowIndex + 1',
-        width: 50,
-        pinned: 'left',
-        sortable: false,
-        filter: false,
-        resizable: false,
-        cellClass: 'bg-surface-2 text-text-secondary text-xs font-mono flex items-center justify-center border-r border-divider',
-        headerClass: 'bg-surface-2 border-r border-divider',
-      }
-    ];
-
-    return [...defs, ...columns.map((c) => {
-      // Use display name from column mappings if available
-      const displayName = columnMappings[c] || c
-      return {
-        headerName: displayName,
-        field: c,
-        colId: c,
-        valueGetter: (p: any) => p?.data?.[c],
-        editable: false,
-        resizable: true,
-        sortable: true,
-        filter: true,
-        headerComponent: CustomHeader,
-        headerComponentParams: { 
-          columnType: columnTypes[c], 
-          setFilterColumn,
-          sortKey,
-          onSortChanged: () => setSortKey(k => k + 1)
-        },
-        cellClass: 'text-sm text-text font-mono border-r border-divider',
-      }
-    })]
-  }, [columns, columnTypes, columnMappings, sortKey])
-
-  const defaultColDef = useMemo<ColDef>(() => ({
-    sortable: true,
-    filter: true,
-    resizable: true,
-    minWidth: 100,
-    headerClass: 'bg-surface-2 border-r border-divider',
-  }), [])
-
-  const onGridReady = useCallback((params: { api: GridApi }) => {
-    setApi(params.api)
-    params.api.setGridOption('rowData', rows)
-    setTimeout(() => params.api.sizeColumnsToFit({ defaultMinWidth: 100 }), 0)
-  }, [rows])
-
-  const handleNextPage = useCallback(() => {
-    const newPage = page + 1
-    setPage(newPage)
-    loadData(newPage * pageSize, pageSize)
-  }, [page, pageSize])
-
-  const handlePrevPage = useCallback(() => {
-    if (page > 0) {
-      const newPage = page - 1
-      setPage(newPage)
-      loadData(newPage * pageSize, pageSize)
-    }
-  }, [page, pageSize])
+  const handlePageChange = useCallback((newPage: number, newPageSize: number) => {
+    setPage(newPage - 1)
+    loadData((newPage - 1) * newPageSize, newPageSize)
+  }, [loadData])
 
   const handleRefresh = useCallback(async () => {
     try {
@@ -349,82 +115,27 @@ export default function DatasetViewerPage() {
     } catch (e: any) {
       setError(e.message)
     }
-  }, [dsId, page, pageSize])
+  }, [dsId, page, pageSize, loadData])
 
-  const exportCsv = useCallback(() => {
-    api?.exportDataAsCsv({ fileName: `${dataset?.name || 'dataset'}.csv` })
-    setShowDownloadMenu(false)
-  }, [api, dataset])
-
-  const exportExcel = useCallback(() => {
-    api?.exportDataAsCsv({ fileName: `${dataset?.name || 'dataset'}.csv` })
-    setShowDownloadMenu(false)
-  }, [api, dataset])
-
-  const applyFilter = () => {
-    if (!api || !filterColumn || !filterValue) return;
+  // Auto-detect column types from data if not from schema
+  const detectedColumnTypes = useMemo(() => {
+    if (Object.keys(columnTypes).length > 0) return columnTypes
     
-    // Add to active filters
-    const newFilter = {
-      field: filterColumn.field,
-      name: filterColumn.name,
-      condition: filterCondition,
-      value: filterValue
-    };
-    
-    // Build filter model from all active filters including new one
-    const updatedFilters = [...activeFilters.filter(f => f.field !== filterColumn.field), newFilter];
-    setActiveFilters(updatedFilters);
-    
-    const filterModel: any = {};
-    updatedFilters.forEach(f => {
-      filterModel[f.field] = {
-        type: f.condition === 'equals' ? 'equals' : 
-              f.condition === 'is one of' ? 'equals' :
-              'contains',
-        filter: f.value
-      };
-    });
-    api.setFilterModel(filterModel);
-    setFilterColumn(null);
-    setFilterValue('');
-    setFilterCondition('contains');
-  };
-
-  const removeFilter = (field: string) => {
-    if (!api) return;
-    const updatedFilters = activeFilters.filter(f => f.field !== field);
-    setActiveFilters(updatedFilters);
-    
-    if (updatedFilters.length === 0) {
-      api.setFilterModel(null);
-    } else {
-      const filterModel: any = {};
-      updatedFilters.forEach(f => {
-        filterModel[f.field] = {
-          type: f.condition === 'equals' ? 'equals' : 
-                f.condition === 'is one of' ? 'equals' :
-                'contains',
-          filter: f.value
-        };
-      });
-      api.setFilterModel(filterModel);
+    const types: Record<string, DataType> = {}
+    if (rows.length > 0) {
+      columns.forEach(col => {
+        const val = rows[0][col]
+        if (typeof val === 'number') types[col] = 'number'
+        else if (typeof val === 'boolean') types[col] = 'boolean'
+        else if (val instanceof Date) types[col] = 'date'
+        else if (typeof val === 'string' && !isNaN(Number(val)) && val.trim() !== '') types[col] = 'number'
+        else if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(val)) types[col] = 'timestamp'
+        else if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) types[col] = 'date'
+        else types[col] = 'text'
+      })
     }
-  };
-
-  const clearAllFilters = () => {
-    if (!api) return;
-    api.setFilterModel(null);
-    setActiveFilters([]);
-  };
-
-  useEffect(() => {
-    if (api && rows.length > 0) {
-      api.setGridOption('rowData', rows)
-    }
-  }, [rows, api])
-
-  const totalPages = Math.ceil((stats?.row_count || 0) / pageSize)
+    return types
+  }, [rows, columns, columnTypes])
 
   return (
     <div className="min-h-screen bg-surface-1 text-text animate-fade-in">
@@ -474,189 +185,37 @@ export default function DatasetViewerPage() {
       <div className="max-w-full px-6 py-6">
         {error && <Alert type="error" message={error} onClose={() => setError('')} />}
 
-        <div className="bg-surface-1 rounded-3xl border border-divider overflow-hidden flex flex-col h-[calc(100vh-220px)] shadow-lg shadow-black/5">
-          {/* Active Filters Display */}
-          {activeFilters.length > 0 && (
-            <div className="px-4 py-3 border-b border-divider bg-surface-2/30 flex items-center gap-2 flex-wrap">
-              {activeFilters.map((f, idx) => (
-                <div key={f.field} className="flex items-center gap-2 bg-surface-1 border border-divider rounded-lg px-3 py-1.5 text-xs shadow-sm">
-                  <span className="text-text-secondary font-medium">{f.name}</span>
-                  <span className="text-text-muted italic">{f.condition === 'is one of' ? 'is one of' : f.condition}</span>
-                  <span className="text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded">{f.value}</span>
-                  <button 
-                    onClick={() => removeFilter(f.field)}
-                    className="ml-1 p-0.5 hover:bg-surface-2 hover:text-error rounded-md transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-              <button
-                onClick={() => setFilterColumn({ name: 'column', field: '', type: 'text' })}
-                className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary-hover px-3 py-1.5 hover:bg-primary/5 rounded-lg transition-colors border border-transparent hover:border-primary/20"
-              >
-                <Plus className="w-3 h-3" />
-                Add filter
-              </button>
-            </div>
-          )}
-          
-          {filterColumn && (
-            <div className="p-4 border-b border-divider bg-surface-2/50 animate-in fade-in slide-in-from-top-2">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-1.5 bg-primary/10 rounded-lg">
-                  <Filter className="w-4 h-4 text-primary" />
-                </div>
-                <span className="text-sm font-bold text-text">Add filter</span>
-                <button onClick={() => setFilterColumn(null)} className="ml-auto p-1.5 hover:bg-surface-3 rounded-lg text-text-secondary hover:text-text transition-colors">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-text-secondary bg-surface-3 px-2.5 py-1 rounded-md border border-divider">
-                    Column: <span className="text-text font-bold">{filterColumn.name}</span>
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-[1fr,2fr] gap-3">
-                  <select
-                    value={filterCondition}
-                    onChange={(e) => setFilterCondition(e.target.value)}
-                    className="px-3 py-2.5 bg-surface-1 border border-divider rounded-xl text-sm text-text focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-                  >
-                    <option value="is one of">is one of</option>
-                    <option value="contains">contains</option>
-                    <option value="equals">equals</option>
-                  </select>
-
-                  <input
-                    type="text"
-                    value={filterValue}
-                    onChange={(e) => setFilterValue(e.target.value)}
-                    placeholder="Type or select value..."
-                    className="px-3 py-2.5 bg-surface-1 border border-divider rounded-xl text-sm text-text placeholder-text-muted focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-                    autoFocus
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={applyFilter}
-                    className="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-lg shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5"
-                  >
-                    Apply Filter
-                  </button>
-                  <button
-                    onClick={() => setFilterColumn(null)}
-                    className="px-4 py-2 bg-surface-3 hover:bg-surface-2 text-text-secondary hover:text-text text-xs font-medium rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="flex-1 ag-theme-databricks-dark w-full">
-            {loading && rows.length === 0 ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-text-secondary flex items-center gap-2">
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Loading data...
-                </div>
-              </div>
-            ) : (
-              <AgGridReact
-                ref={gridRef as any}
-                columnDefs={colDefs}
-                defaultColDef={defaultColDef}
-                rowData={rows}
-                animateRows
-                onGridReady={onGridReady as any}
-                enableCellTextSelection
-                suppressPaginationPanel={true}
-                domLayout="normal"
-                rowHeight={32}
-                headerHeight={36}
-              />
-            )}
-          </div>
-
-          <div className="px-4 py-3 border-t border-divider bg-surface-2 flex items-center justify-between text-xs text-text-secondary font-mono">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <button
-                  onClick={() => setShowDownloadMenu(!showDownloadMenu)}
-                  className="flex items-center gap-2 px-3 py-1.5 border border-divider hover:bg-surface-3 hover:border-primary/30 rounded-lg text-text-secondary hover:text-primary transition-all shadow-sm"
-                  title="Download"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span className="font-medium">Export</span>
-                </button>
-
-                {showDownloadMenu && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setShowDownloadMenu(false)}
-                    />
-                    <div className="absolute bottom-full left-0 mb-2 w-48 bg-surface-1 rounded-xl shadow-xl border border-divider py-1.5 z-20 animate-in fade-in zoom-in-95 duration-200">
-                      <button
-                        onClick={exportCsv}
-                        className="w-full px-4 py-2.5 text-left text-xs text-text-secondary hover:bg-surface-2 hover:text-text flex items-center gap-3 transition-colors"
-                      >
-                        <FileText className="w-4 h-4 text-text-muted" />
-                        Download CSV
-                      </button>
-                      <button
-                        onClick={exportExcel}
-                        className="w-full px-4 py-2.5 text-left text-xs text-text-secondary hover:bg-surface-2 hover:text-text flex items-center gap-3 transition-colors"
-                      >
-                        <FileSpreadsheet className="w-4 h-4 text-success" />
-                        Download Excel
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2 bg-surface-1 rounded-lg border border-divider p-1 shadow-sm">
-                <button
-                  onClick={handlePrevPage}
-                  disabled={page === 0}
-                  className="p-1 hover:bg-surface-2 rounded text-text-secondary hover:text-text disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <PrevIcon className="w-3.5 h-3.5" />
-                </button>
-                <span className="px-2 font-medium text-text">
-                  {page * pageSize + 1}-{Math.min((page + 1) * pageSize, stats?.row_count || 0)}
-                </span>
-                <button
-                  onClick={handleNextPage}
-                  disabled={page >= totalPages - 1 || rows.length < pageSize}
-                  className="p-1 hover:bg-surface-2 rounded text-text-secondary hover:text-text disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <div className="h-4 w-px bg-divider" />
-
-              <span className="font-medium text-text">{rows.length} rows loaded</span>
-
-              <div className="h-4 w-px bg-divider" />
-
-              <div className="flex items-center gap-1.5 text-text-muted">
-                <Clock className="w-3 h-3" />
-                <span>{runtime.toFixed(2)}s</span>
-              </div>
+        {loading && rows.length === 0 ? (
+          <div className="flex items-center justify-center h-[calc(100vh-220px)]">
+            <div className="text-text-secondary flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              Loading data...
             </div>
           </div>
-        </div>
+        ) : (
+          <DataTable
+            rows={rows}
+            columns={columns}
+            columnTypes={detectedColumnTypes}
+            columnMappings={columnMappings}
+            title={dataset?.name || 'Dataset'}
+            height="calc(100vh - 220px)"
+            allowEdit={false}
+            allowSearch={true}
+            allowFilter={true}
+            allowColumnToggle={true}
+            allowExport={true}
+            allowRefresh={true}
+            pageSize={pageSize}
+            totalRows={stats?.row_count}
+            currentPage={page + 1}
+            onPageChange={handlePageChange}
+            onRefresh={handleRefresh}
+            runtime={runtime}
+            lastRefreshed={lastRefreshed}
+            className="shadow-lg shadow-black/5"
+          />
+        )}
       </div>
     </div>
   )
