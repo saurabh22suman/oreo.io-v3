@@ -335,6 +335,22 @@ func SetupRouter() *gin.Engine {
 			}
 			forwardJSON(c, base+"/rules/validate")
 		})
+		// Proxy: /data/rules/validate/cell -> python /rules/validate/cell (cell-level validation)
+		api.POST("/data/rules/validate/cell", func(c *gin.Context) {
+			base := cfg.PythonServiceURL
+			if strings.TrimSpace(base) == "" {
+				base = "http://python-service:8000"
+			}
+			forwardJSON(c, base+"/rules/validate/cell")
+		})
+		// Proxy: /data/rules/validate/batch -> python /rules/validate/batch (batch validation with GE)
+		api.POST("/data/rules/validate/batch", func(c *gin.Context) {
+			base := cfg.PythonServiceURL
+			if strings.TrimSpace(base) == "" {
+				base = "http://python-service:8000"
+			}
+			forwardJSON(c, base+"/rules/validate/batch")
+		})
 	}
 
 	return r

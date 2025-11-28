@@ -89,7 +89,7 @@ export default function DatasetSchemaRulesPage() {
             setColumns(cols)
             const rules: ColumnRule[] = cols.map(col => ({
               name: col.name,
-              required: false,
+              required: true,  // Default all columns to required
               editable: true,
               validationType: 'none'
             }))
@@ -150,7 +150,7 @@ export default function DatasetSchemaRulesPage() {
                   setColumns(cols)
                   const rules: ColumnRule[] = cols.map(col => ({
                     name: col.name,
-                    required: false,
+                    required: true,  // Default all columns to required
                     editable: true,
                     validationType: 'none'
                   }))
@@ -200,6 +200,12 @@ export default function DatasetSchemaRulesPage() {
   }
 
   const handleSaveRules = async () => {
+    // In staging mode, rules are saved when creating the dataset
+    if (isStagingMode || !datasetId || datasetId === 'new') {
+      setToast('Rules will be saved when you create the dataset')
+      return
+    }
+
     try {
       const rules: any[] = []
 
@@ -630,13 +636,19 @@ export default function DatasetSchemaRulesPage() {
             </table>
           </div>
           <div className="px-6 py-4 bg-[var(--bg-page)] border-t border-[var(--divider)] flex justify-end">
-            <button
-              onClick={handleSaveRules}
-              disabled={role === 'viewer'}
-              className="btn-primary"
-            >
-              Save Rules
-            </button>
+            {isStagingMode || !datasetId || datasetId === 'new' ? (
+              <span className="text-sm text-[var(--text-muted)]">
+                Rules will be saved when you click "Create Dataset"
+              </span>
+            ) : (
+              <button
+                onClick={handleSaveRules}
+                disabled={role === 'viewer'}
+                className="btn-primary"
+              >
+                Save Rules
+              </button>
+            )}
           </div>
         </div>
       )}

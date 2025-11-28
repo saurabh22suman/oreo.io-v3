@@ -1163,9 +1163,9 @@ func DatasetSchemaGet(c *gin.Context) {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return
 	}
-	// If schema exists, return it.
+	// If schema exists, return it along with rules.
 	if strings.TrimSpace(ds.Schema) != "" {
-		c.JSON(200, gin.H{"schema": ds.Schema})
+		c.JSON(200, gin.H{"schema": ds.Schema, "rules": ds.Rules})
 		return
 	}
 
@@ -1205,14 +1205,14 @@ func DatasetSchemaGet(c *gin.Context) {
 				if schemaBytes, err := json.Marshal(result.Schema); err == nil {
 					ds.Schema = string(schemaBytes)
 					_ = gdb.Save(ds).Error
-					c.JSON(200, gin.H{"schema": ds.Schema})
+					c.JSON(200, gin.H{"schema": ds.Schema, "rules": ds.Rules})
 					return
 				}
 			}
 		}
 	}
 	// Nothing to infer now — respond with no schema (frontend may poll)
-	c.JSON(200, gin.H{"schema": nil})
+	c.JSON(200, gin.H{"schema": nil, "rules": ds.Rules})
 }
 func DatasetSchemaSet(c *gin.Context) {
 	gdb := dbpkg.Get()

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { getProject, getDataset, getDatasetDataTop, getDatasetSchemaTop, listMembers, myProjectRole, currentUser } from '../api'
+import { getProject, getDataset, getDatasetDataTop, getDatasetSchemaTop, listMembers, myProjectRole, currentUser, validateCellRule } from '../api'
 import Alert from '../components/Alert'
 import Card from '../components/Card'
 import { AgGridReact } from 'ag-grid-react'
@@ -29,6 +29,127 @@ type DeletedRow = {
   rowIndex: number
   rowId: string
   rowData: any
+}
+
+type ValidationError = {
+  column: string
+  rowId: string
+  severity: 'error' | 'warning' | 'info'
+  message: string
+  ruleType: string
+}
+
+// Custom cell renderer for cells with validation errors (shows tooltip on hover)
+const ValidationErrorCellRenderer = (params: any) => {
+  const { value, validationErrors, editedCellMap, deletedRowIds, node, colDef } = params
+  const rowId = node?.data?._row_id
+  const column = colDef?.field
+  const key = `${rowId}|${column}`
+  const validationError = validationErrors?.get(key)
+  const editInfo = editedCellMap?.get(key)
+  const isDeleted = deletedRowIds?.has(rowId)
+  const cellRef = useRef<HTMLDivElement>(null)
+  const [showTooltip, setShowTooltip] = useState(false)
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+
+  const handleMouseEnter = () => {
+    if (cellRef.current && (validationError || editInfo)) {
+      const rect = cellRef.current.getBoundingClientRect()
+      setTooltipPos({
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8
+      })
+      setShowTooltip(true)
+    }
+  }
+
+  const handleMouseLeave = () => {
+    setShowTooltip(false)
+  }
+
+  // Deleted row styling
+  if (isDeleted) {
+    return (
+      <div className="w-full h-full flex items-center">
+        <span className="line-through text-red-400 opacity-60">{value}</span>
+      </div>
+    )
+  }
+
+  // Validation error styling with tooltip
+  if (validationError) {
+    return (
+      <div
+        ref={cellRef}
+        className="w-full h-full flex items-center cursor-help"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        <span className="text-red-300">{value}</span>
+        <AlertCircle className="w-3 h-3 ml-1 text-red-500 flex-shrink-0" />
+        {showTooltip && createPortal(
+          <div
+            style={{
+              position: 'fixed',
+              left: `${tooltipPos.x}px`,
+              top: `${tooltipPos.y}px`,
+              transform: 'translate(-50%, -100%)',
+            }}
+            className="z-[9999] px-3 py-2 bg-red-950 border border-red-700 rounded-lg shadow-xl text-xs whitespace-nowrap pointer-events-none max-w-xs"
+          >
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-red-300 font-medium">{validationError.message}</p>
+                {editInfo && (
+                  <p className="text-red-400/70 text-[10px] mt-1">
+                    Original: {String(editInfo.oldValue ?? '(empty)')}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-2 h-2 bg-red-950 border-r border-b border-red-700"></div>
+          </div>,
+          document.body
+        )}
+      </div>
+    )
+  }
+
+  // Edited cell without error - show change tooltip
+  if (editInfo) {
+    return (
+      <div
+        ref={cellRef}
+        className="w-full h-full flex items-center cursor-help"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        <span>{value}</span>
+        {showTooltip && createPortal(
+          <div
+            style={{
+              position: 'fixed',
+              left: `${tooltipPos.x}px`,
+              top: `${tooltipPos.y}px`,
+              transform: 'translate(-50%, -100%)',
+            }}
+            className="z-[9999] px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg shadow-xl text-xs whitespace-nowrap pointer-events-none"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-red-400 line-through">{String(editInfo.oldValue ?? '')}</span>
+              <ArrowRight className="w-3 h-3 text-slate-500" />
+              <span className="text-green-400 font-semibold">{String(editInfo.newValue ?? '')}</span>
+            </div>
+            <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-2 h-2 bg-slate-900 border-r border-b border-slate-700"></div>
+          </div>,
+          document.body
+        )}
+      </div>
+    )
+  }
+
+  return <span>{value}</span>
 }
 
 // Custom cell renderer for edited cells with tooltip
@@ -131,6 +252,11 @@ export default function LiveEditPage() {
   const [selectedRows, setSelectedRows] = useState<any[]>([])
   const originalRowsRef = useRef<any[]>([])
 
+  // Business rules validation
+  const [businessRules, setBusinessRules] = useState<any[]>([])
+  const [validationErrors, setValidationErrors] = useState<Map<string, ValidationError>>(new Map())
+  const [validating, setValidating] = useState(false)
+
   // Submit dialog
   const [submitDialog, setSubmitDialog] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -198,10 +324,11 @@ export default function LiveEditPage() {
               ? JSON.parse(schemaResp.schema)
               : schemaResp.schema
 
-            // Check rules for readonly columns
+            // Check rules for readonly columns and store business rules
             const readonlyColumns = new Set<string>()
+            let rules: any[] = []
             if (schemaResp.rules) {
-              const rules = typeof schemaResp.rules === 'string'
+              rules = typeof schemaResp.rules === 'string'
                 ? JSON.parse(schemaResp.rules)
                 : schemaResp.rules
               
@@ -213,6 +340,9 @@ export default function LiveEditPage() {
                 })
               }
             }
+            
+            // Store business rules for validation
+            setBusinessRules(rules)
 
             // All columns except readonly ones are editable
             const allColumns = Object.keys(schemaObj.properties || {})
@@ -319,15 +449,15 @@ export default function LiveEditPage() {
         return editableColumns.has(c) && !deletedRowIds.has(rowId)
       },
       resizable: true,
-      // Only use custom renderer for deleted rows or edited cells (show tooltip)
+      // Use custom renderer for cells with validation errors, deleted rows, or edited cells
       cellRendererSelector: (params: any) => {
         const rowId = params.data?._row_id
         const key = `${rowId}|${c}`
-        // Use custom renderer only for deleted rows or edited cells
-        if (deletedRowIds.has(rowId) || editedCellMap.has(key)) {
+        // Use ValidationErrorCellRenderer for all cells that need special rendering
+        if (deletedRowIds.has(rowId) || editedCellMap.has(key) || validationErrors.has(key)) {
           return {
-            component: EditedCellRenderer,
-            params: { editedCellMap, deletedRowIds }
+            component: ValidationErrorCellRenderer,
+            params: { validationErrors, editedCellMap, deletedRowIds }
           }
         }
         return undefined // Use default renderer (allows editing)
@@ -339,6 +469,16 @@ export default function LiveEditPage() {
         // Deleted row styling
         if (deletedRowIds.has(rowId)) {
           return { backgroundColor: '#450a0a', color: '#fca5a5', textDecoration: 'line-through' }
+        }
+
+        // Validation error styling (red border/background)
+        if (validationErrors.has(key)) {
+          const error = validationErrors.get(key)!
+          if (error.severity === 'error') {
+            return { backgroundColor: '#7f1d1d', color: '#fca5a5', borderLeft: '3px solid #ef4444' }
+          } else if (error.severity === 'warning') {
+            return { backgroundColor: '#78350f', color: '#fcd34d', borderLeft: '3px solid #f59e0b' }
+          }
         }
 
         // Edited cell styling
@@ -353,12 +493,21 @@ export default function LiveEditPage() {
 
         return undefined
       },
+      // Add tooltip for validation errors
+      tooltipValueGetter: (params: any) => {
+        const rowId = params.data?._row_id
+        const key = `${rowId}|${c}`
+        if (validationErrors.has(key)) {
+          return validationErrors.get(key)!.message
+        }
+        return undefined
+      },
       cellClass: 'text-sm text-slate-300 font-mono border-r border-slate-800',
       headerClass: 'bg-[#0f172a] border-r border-slate-800 text-xs font-bold text-slate-400',
     }))
 
     return [selectionCol, ...dataCols]
-  }, [columns, editableColumns, editedCellMap, deletedRowIds])
+  }, [columns, editableColumns, editedCellMap, deletedRowIds, validationErrors])
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
@@ -373,7 +522,7 @@ export default function LiveEditPage() {
   }, [rows])
 
   // Handle cell value change
-  const onCellValueChanged = useCallback((e: CellValueChangedEvent) => {
+  const onCellValueChanged = useCallback(async (e: CellValueChangedEvent) => {
     const rowId = e.data?._row_id
     const column = e.colDef.field!
     const rowIndex = e.node.rowIndex!
@@ -385,6 +534,12 @@ export default function LiveEditPage() {
     // If new value equals original, remove from edits
     if (e.newValue === originalValue) {
       setEditedCells(prev => prev.filter(edit => !(edit.rowId === rowId && edit.column === column)))
+      // Also clear any validation errors for this cell
+      setValidationErrors(prev => {
+        const newMap = new Map(prev)
+        newMap.delete(`${rowId}|${column}`)
+        return newMap
+      })
     } else {
       // Add or update the edit
       setEditedCells(prev => {
@@ -400,8 +555,39 @@ export default function LiveEditPage() {
           }
         ]
       })
+
+      // Validate the cell if we have business rules
+      if (businessRules.length > 0) {
+        try {
+          const result = await validateCellRule(column, e.newValue, businessRules, rowId, e.data)
+          if (!result.valid && result.errors?.length > 0) {
+            // Store validation error
+            const firstError = result.errors[0]
+            setValidationErrors(prev => {
+              const newMap = new Map(prev)
+              newMap.set(`${rowId}|${column}`, {
+                column,
+                rowId: String(rowId),
+                severity: firstError.severity || 'error',
+                message: firstError.message,
+                ruleType: firstError.rule_type || 'unknown'
+              })
+              return newMap
+            })
+          } else {
+            // Clear validation error for this cell
+            setValidationErrors(prev => {
+              const newMap = new Map(prev)
+              newMap.delete(`${rowId}|${column}`)
+              return newMap
+            })
+          }
+        } catch (err) {
+          console.error('Cell validation failed:', err)
+        }
+      }
     }
-  }, [])
+  }, [businessRules])
 
   // Handle row selection
   const onSelectionChanged = useCallback(() => {
@@ -445,11 +631,16 @@ export default function LiveEditPage() {
   const handleUndo = useCallback(() => {
     setEditedCells([])
     setDeletedRows([])
+    setValidationErrors(new Map()) // Clear validation errors
     setRows(JSON.parse(JSON.stringify(originalRowsRef.current)))
     api?.setGridOption('rowData', originalRowsRef.current)
     api?.refreshCells({ force: true })
     setToast('All changes reverted')
   }, [api])
+
+  // Check if submission is allowed (has changes but no validation errors)
+  const hasValidationErrors = validationErrors.size > 0
+  const canSubmit = hasChanges && !hasValidationErrors
 
   // Approver options (exclude current user)
   const approverOptions = useMemo(() => {
@@ -459,7 +650,12 @@ export default function LiveEditPage() {
 
   // Submit change request
   const handleSubmit = async () => {
-    if (!hasChanges) return
+    if (!canSubmit) {
+      if (hasValidationErrors) {
+        setError('Please fix validation errors before submitting')
+      }
+      return
+    }
     if (selectedReviewerIds.length === 0) {
       setError('Please select at least one approver')
       return
@@ -569,14 +765,21 @@ export default function LiveEditPage() {
                     <RotateCcw className="w-4 h-4" />
                     Undo All
                   </button>
-                  <button
-                    onClick={() => setSubmitDialog(true)}
-                    disabled={role === 'viewer'}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Send className="w-4 h-4" />
-                    Proceed ({editedCells.length + deletedRows.length} changes)
-                  </button>
+                  {hasValidationErrors ? (
+                    <div className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-400 bg-red-950/50 border border-red-800 rounded-lg cursor-not-allowed">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{validationErrors.size} validation error{validationErrors.size > 1 ? 's' : ''}</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setSubmitDialog(true)}
+                      disabled={role === 'viewer'}
+                      className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Send className="w-4 h-4" />
+                      Proceed ({editedCells.length + deletedRows.length} changes)
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -602,6 +805,11 @@ export default function LiveEditPage() {
               {editableColumns.size < columns.length && (
                 <span className="block mt-1 text-purple-400">
                   Note: Some columns are read-only based on business rules.
+                </span>
+              )}
+              {businessRules.length > 0 && (
+                <span className="block mt-1 text-purple-400">
+                  Business rules are enforced. Invalid values will be highlighted in red.
                 </span>
               )}
             </p>
@@ -647,6 +855,12 @@ export default function LiveEditPage() {
               {deletedRows.length} row{deletedRows.length !== 1 ? 's' : ''} deleted
             </span>
           )}
+          {validationErrors.size > 0 && (
+            <span className="flex items-center gap-1.5 px-2 py-1 bg-red-900/50 text-red-300 rounded border border-red-500/30">
+              <AlertCircle className="w-3.5 h-3.5" />
+              {validationErrors.size} validation error{validationErrors.size !== 1 ? 's' : ''}
+            </span>
+          )}
           <span>{totalRows.toLocaleString()} total rows</span>
         </div>
       </div>
@@ -669,6 +883,7 @@ export default function LiveEditPage() {
             onSelectionChanged={onSelectionChanged}
             animateRows={true}
             enableCellTextSelection={true}
+            tooltipShowDelay={200}
             getRowId={(params) => params.data._row_id}
             rowClassRules={{
               'deleted-row': (params) => deletedRowIds.has(params.data?._row_id)
@@ -773,6 +988,12 @@ export default function LiveEditPage() {
             </div>
 
             <div className="p-6 border-t border-slate-700 flex justify-end gap-3">
+              {hasValidationErrors && (
+                <div className="flex-1 flex items-center gap-2 text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Fix {validationErrors.size} validation error{validationErrors.size !== 1 ? 's' : ''} before submitting</span>
+                </div>
+              )}
               <button
                 onClick={() => setSubmitDialog(false)}
                 className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
@@ -781,7 +1002,7 @@ export default function LiveEditPage() {
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={submitting || selectedReviewerIds.length === 0}
+                disabled={submitting || selectedReviewerIds.length === 0 || hasValidationErrors}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? (

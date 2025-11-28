@@ -1096,12 +1096,298 @@ def validate_rules(payload: RulesPayload):
                     bad.append(i)
             if bad:
                 errors.append({"rule": rtype, "column": col, "rows": bad, "message": f"Column '{col}' has values outside allowed set"})
+        # Support additional numeric validation types from UI
+        elif rtype == "greater_than":
+            col = r.get("column")
+            threshold = r.get("value")
+            if col and threshold is not None:
+                bad = []
+                for i, row in enumerate(rows):
+                    val = row.get(col)
+                    if val is None:
+                        continue
+                    try:
+                        if float(val) <= float(threshold):
+                            bad.append(i)
+                    except (ValueError, TypeError):
+                        bad.append(i)
+                if bad:
+                    errors.append({"rule": "greater_than", "column": col, "rows": bad, "message": f"Column '{col}' must be greater than {threshold}"})
+        elif rtype == "less_than":
+            col = r.get("column")
+            threshold = r.get("value")
+            if col and threshold is not None:
+                bad = []
+                for i, row in enumerate(rows):
+                    val = row.get(col)
+                    if val is None:
+                        continue
+                    try:
+                        if float(val) >= float(threshold):
+                            bad.append(i)
+                    except (ValueError, TypeError):
+                        bad.append(i)
+                if bad:
+                    errors.append({"rule": "less_than", "column": col, "rows": bad, "message": f"Column '{col}' must be less than {threshold}"})
+        elif rtype == "between":
+            col = r.get("column")
+            minv = r.get("min") or r.get("value")
+            maxv = r.get("max") or r.get("value2")
+            bad = []
+            for i, row in enumerate(rows):
+                val = row.get(col)
+                if val is None:
+                    continue
+                try:
+                    f = float(val)
+                except Exception:
+                    bad.append(i)
+                    continue
+                if minv is not None and f < float(minv):
+                    bad.append(i)
+                elif maxv is not None and f > float(maxv):
+                    bad.append(i)
+            if bad:
+                errors.append({"rule": "between", "column": col, "rows": bad, "message": f"Column '{col}' must be between {minv} and {maxv}"})
+        elif rtype == "equals":
+            col = r.get("column")
+            expected = r.get("value")
+            if col and expected is not None:
+                bad = []
+                for i, row in enumerate(rows):
+                    val = row.get(col)
+                    if val is None:
+                        continue
+                    try:
+                        if isinstance(expected, (int, float)):
+                            if float(val) != float(expected):
+                                bad.append(i)
+                        elif str(val) != str(expected):
+                            bad.append(i)
+                    except (ValueError, TypeError):
+                        if str(val) != str(expected):
+                            bad.append(i)
+                if bad:
+                    errors.append({"rule": "equals", "column": col, "rows": bad, "message": f"Column '{col}' must equal {expected}"})
         else:
             # Unknown rule -> ignore for forward compat
             continue
 
     return {"valid": len(errors) == 0, "errors": errors}
 
+
+# --------- Business Rules Cell Validation ---------
+try:
+    from business_rules_service import get_business_rules_service, CellValidationResult, BatchValidationResult
+    _business_rules_service = get_business_rules_service()
+except Exception as e:
+    import sys, traceback
+    print(f"[BusinessRulesServiceInitError] {type(e).__name__}: {e}", file=sys.stderr)
+    traceback.print_exc()
+    _business_rules_service = None
+
+
+class CellValidateRequest(BaseModel):
+    """Request for cell-level validation during live edit"""
+    column: str
+    value: Any
+    rules: List[Dict[str, Any]]
+    row_id: Optional[Any] = None
+    row_data: Optional[Dict[str, Any]] = None
+
+
+class BatchValidateRequest(BaseModel):
+    """Request for batch validation of multiple rows"""
+    rows: List[Dict[str, Any]]
+    rules: List[Dict[str, Any]]
+    use_ge: bool = True  # Whether to use Great Expectations
+
+
+@app.post("/rules/validate/cell")
+def validate_cell_rule(req: CellValidateRequest):
+    """
+    Validate a single cell value against business rules.
+    
+    Used for real-time validation feedback during live editing.
+    Returns validation result with any errors found.
+    """
+    if _business_rules_service is None:
+        # Fallback to simple validation
+        return _validate_cell_fallback(req.column, req.value, req.rules, req.row_id)
+    
+    try:
+        result = _business_rules_service.validate_cell(
+            column=req.column,
+            value=req.value,
+            rules=req.rules,
+            row_id=req.row_id,
+            row_data=req.row_data
+        )
+        return {
+            "valid": result.valid,
+            "errors": [e.model_dump() for e in result.errors],
+            "column": result.column,
+            "value": result.value
+        }
+    except Exception as e:
+        return {"valid": False, "errors": [{"message": str(e), "severity": "error"}], "column": req.column, "value": req.value}
+
+
+@app.post("/rules/validate/batch")
+def validate_batch_rules(req: BatchValidateRequest):
+    """
+    Validate multiple rows against business rules.
+    
+    Uses Great Expectations for batch validation when available.
+    Returns detailed validation results with all errors found.
+    """
+    if _business_rules_service is None:
+        # Fallback to existing /rules/validate endpoint logic
+        payload = RulesPayload(rules=req.rules, data=req.rows)
+        return validate_rules(payload)
+    
+    try:
+        result = _business_rules_service.validate_rows(
+            rows=req.rows,
+            rules=req.rules,
+            use_ge=req.use_ge
+        )
+        return {
+            "valid": result.valid,
+            "error_count": result.error_count,
+            "warning_count": result.warning_count,
+            "errors": [e.model_dump() for e in result.errors],
+            "summary": result.summary
+        }
+    except Exception as e:
+        return {"valid": False, "error_count": 1, "warning_count": 0, "errors": [{"message": str(e), "severity": "error"}], "summary": {}}
+
+
+def _validate_cell_fallback(column: str, value: Any, rules: List[Dict[str, Any]], row_id: Any = None) -> Dict[str, Any]:
+    """Fallback cell validation when BusinessRulesService is not available"""
+    errors = []
+    
+    for rule in rules:
+        rule_type = rule.get("type")
+        
+        # Check if rule applies to this column
+        if rule.get("column") != column and column not in rule.get("columns", []):
+            continue
+        
+        # Required check
+        if rule_type == "required":
+            if value is None or (isinstance(value, str) and value.strip() == ""):
+                errors.append({
+                    "column": column,
+                    "severity": "error",
+                    "rule_type": "required",
+                    "message": f"'{column}' is required"
+                })
+        
+        # Skip other validations for null values
+        if value is None or (isinstance(value, str) and value.strip() == ""):
+            continue
+        
+        # Numeric validations
+        if rule_type == "greater_than":
+            threshold = rule.get("value")
+            if threshold is not None:
+                try:
+                    if float(value) <= float(threshold):
+                        errors.append({
+                            "column": column,
+                            "severity": "error",
+                            "rule_type": "greater_than",
+                            "message": f"'{column}' must be greater than {threshold}"
+                        })
+                except (ValueError, TypeError):
+                    errors.append({
+                        "column": column,
+                        "severity": "error",
+                        "rule_type": "greater_than",
+                        "message": f"'{column}' must be a valid number"
+                    })
+        
+        elif rule_type == "less_than":
+            threshold = rule.get("value")
+            if threshold is not None:
+                try:
+                    if float(value) >= float(threshold):
+                        errors.append({
+                            "column": column,
+                            "severity": "error",
+                            "rule_type": "less_than",
+                            "message": f"'{column}' must be less than {threshold}"
+                        })
+                except (ValueError, TypeError):
+                    errors.append({
+                        "column": column,
+                        "severity": "error",
+                        "rule_type": "less_than",
+                        "message": f"'{column}' must be a valid number"
+                    })
+        
+        elif rule_type in ("between", "range"):
+            min_val = rule.get("min") or rule.get("value")
+            max_val = rule.get("max") or rule.get("value2")
+            try:
+                num_value = float(value)
+                if min_val is not None and num_value < float(min_val):
+                    errors.append({
+                        "column": column,
+                        "severity": "error",
+                        "rule_type": "between",
+                        "message": f"'{column}' must be at least {min_val}"
+                    })
+                elif max_val is not None and num_value > float(max_val):
+                    errors.append({
+                        "column": column,
+                        "severity": "error",
+                        "rule_type": "between",
+                        "message": f"'{column}' must be at most {max_val}"
+                    })
+            except (ValueError, TypeError):
+                errors.append({
+                    "column": column,
+                    "severity": "error",
+                    "rule_type": "between",
+                    "message": f"'{column}' must be a valid number"
+                })
+        
+        elif rule_type == "equals":
+            expected = rule.get("value")
+            if expected is not None:
+                try:
+                    if isinstance(expected, (int, float)):
+                        if float(value) != float(expected):
+                            errors.append({
+                                "column": column,
+                                "severity": "error",
+                                "rule_type": "equals",
+                                "message": f"'{column}' must equal {expected}"
+                            })
+                    elif str(value) != str(expected):
+                        errors.append({
+                            "column": column,
+                            "severity": "error",
+                            "rule_type": "equals",
+                            "message": f"'{column}' must equal {expected}"
+                        })
+                except (ValueError, TypeError):
+                    if str(value) != str(expected):
+                        errors.append({
+                            "column": column,
+                            "severity": "error",
+                            "rule_type": "equals",
+                            "message": f"'{column}' must equal {expected}"
+                        })
+    
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "column": column,
+        "value": value
+    }
 
 
 # --------- Validation Service (State Machine) ---------

@@ -201,6 +201,28 @@ export async function validateRules(data: any[], rules: any[]) {
   if (!r.ok) throw new Error(await r.text()); return r.json()
 }
 
+// Cell-level validation for real-time feedback during live edit
+export async function validateCellRule(column: string, value: any, rules: any[], rowId?: string | number, rowData?: Record<string, any>) {
+  const r = await fetch(`${API_BASE}/data/rules/validate/cell`, { 
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json', ...authHeaders() }, 
+    body: JSON.stringify({ column, value, rules, row_id: rowId, row_data: rowData }) 
+  })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+// Batch validation for multiple rows (uses Great Expectations when available)
+export async function validateBatchRules(rows: any[], rules: any[], useGE: boolean = true) {
+  const r = await fetch(`${API_BASE}/data/rules/validate/batch`, { 
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json', ...authHeaders() }, 
+    body: JSON.stringify({ rows, rules, use_ge: useGE }) 
+  })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
 // Change Requests (workflow)
 export async function listChanges(projectId: number) {
   const r = await fetch(`${API_BASE}/projects/${projectId}/changes`, { headers: { ...authHeaders() } })
