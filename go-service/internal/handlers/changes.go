@@ -202,7 +202,7 @@ func ChangeApprove(c *gin.Context) {
 				c.JSON(500, gin.H{"error": "append_failed"})
 				return
 			}
-			
+
 			// Parse Python response to get duplicate info
 			var pyResp struct {
 				Ok         bool `json:"ok"`
@@ -212,16 +212,16 @@ func ChangeApprove(c *gin.Context) {
 			}
 			bodyBytes, _ := io.ReadAll(resp.Body)
 			_ = json.Unmarshal(bodyBytes, &pyResp)
-			
+
 			// Update timestamps and meta
 			now := time.Now()
 			ds.LastUploadAt = &now
 			_ = gdb.Save(&ds).Error
 			upsertDatasetMeta(gdb, &ds)
-			
+
 			// Fetch Delta operation stats for audit
 			rowsAdded, rowsUpdated, _, totalRows := FetchDeltaOperationStats(ds.ProjectID, ds.ID)
-			
+
 			// Update dataset meta with new row count
 			if totalRows > 0 {
 				var meta models.DatasetMeta
@@ -231,7 +231,7 @@ func ChangeApprove(c *gin.Context) {
 					_ = gdb.Save(&meta).Error
 				}
 			}
-			
+
 			// Record version snapshot (delta path reference)
 			cfg = config.Get()
 			root := strings.TrimRight(cfg.DeltaDataRoot, "/\\")
@@ -268,7 +268,7 @@ func ChangeApprove(c *gin.Context) {
 				}
 				_ = AddNotification(cr.UserID, notifyMsg, models.JSONB{"type": "append_completed", "project_id": uint(pid), "dataset_id": cr.DatasetID, "change_request_id": cr.ID, "inserted": pyResp.Inserted, "duplicates": pyResp.Duplicates})
 			}
-			
+
 			// Get cells changed from payload for audit
 			var cellsChanged int
 			var payloadData struct {
@@ -277,13 +277,13 @@ func ChangeApprove(c *gin.Context) {
 			if json.Unmarshal([]byte(cr.Payload), &payloadData) == nil {
 				cellsChanged = len(payloadData.EditedCells)
 			}
-			
+
 			// Use actual inserted count from Python response if available
 			actualRowsAdded := rowsAdded
 			if pyResp.Inserted > 0 {
 				actualRowsAdded = pyResp.Inserted
 			}
-			
+
 			// Record audit event for CR merge with Delta stats
 			crID := cr.ID
 			_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, models.AuditEventTypeCRMerged,
@@ -444,7 +444,7 @@ func ChangeApprove(c *gin.Context) {
 			eventType = models.AuditEventTypeCRApproved
 			eventTitle = fmt.Sprintf("Change Request #%d approved", cr.ID)
 		}
-		
+
 		// Get cells changed from payload
 		var cellsChanged int
 		var payloadData struct {
@@ -453,7 +453,7 @@ func ChangeApprove(c *gin.Context) {
 		if json.Unmarshal([]byte(cr.Payload), &payloadData) == nil {
 			cellsChanged = len(payloadData.EditedCells)
 		}
-		
+
 		_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, eventType,
 			eventTitle,
 			fmt.Sprintf("%d rows added, %d cells changed", rowCount, cellsChanged),

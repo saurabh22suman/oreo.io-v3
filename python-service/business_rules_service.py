@@ -86,6 +86,7 @@ class BusinessRulesService:
     - less_than: Numeric values must be < threshold
     - between: Numeric values must be within range [min, max]
     - equals: Values must equal a specific value
+    - not_contains: String values must not contain a specific substring
     - range: Alias for between (legacy support)
     """
 
@@ -471,6 +472,27 @@ class BusinessRulesService:
                             rule_type=rule_type,
                             message=f"'{column}' must equal {expected}",
                             expected_value=str(expected),
+                            actual_value=value
+                        )
+
+        elif rule_type == "not_contains":
+            # Support both single value and array of values
+            forbidden_values = rule.get("values", [])
+            single_value = rule.get("value")
+            if single_value and not forbidden_values:
+                forbidden_values = [single_value]
+            
+            if forbidden_values:
+                str_value = str(value).lower()
+                for forbidden in forbidden_values:
+                    if forbidden and str(forbidden).lower() in str_value:
+                        return CellValidationError(
+                            column=column,
+                            row_id=row_id,
+                            severity=severity,
+                            rule_type=rule_type,
+                            message=f"'{column}' must not contain '{forbidden}'",
+                            expected_value=f"not contain '{forbidden}'",
                             actual_value=value
                         )
 

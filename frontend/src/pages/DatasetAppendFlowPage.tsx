@@ -12,7 +12,7 @@ import 'ag-grid-community/styles/ag-theme-quartz.css'
 import { 
   ChevronLeft, Upload, FileCheck, Edit3, Eye, Send, X, AlertCircle, Users, 
   File as FileIcon, Loader2, AlertTriangle, CheckCircle, Type, Hash, Calendar,
-  ToggleLeft, Table2, Trash2, RotateCcw, Save, ArrowRight, Download, FileText, FileSpreadsheet
+  ToggleLeft, Table2, Trash2, RotateCcw, Save, ArrowRight, Download, FileText, FileSpreadsheet, Info, Lock, Lightbulb
 } from 'lucide-react'
 
 export default function DatasetAppendFlowPage() {
@@ -46,6 +46,7 @@ export default function DatasetAppendFlowPage() {
   
   // Business rules validation state
   const [businessRules, setBusinessRules] = useState<any[]>([])
+  const [readonlyColumns, setReadonlyColumns] = useState<Set<string>>(new Set())
   const [validationErrors, setValidationErrors] = useState<Array<{ row: number; column: string; message: string }>>([])
   const [validationErrorsMap, setValidationErrorsMap] = useState<Map<string, { message: string }>>(new Map())
   const [isValidating, setIsValidating] = useState(false)
@@ -58,6 +59,10 @@ export default function DatasetAppendFlowPage() {
   const [deletedRowIds, setDeletedRowIds] = useState<Set<number>>(new Set())
   const [editMode, setEditMode] = useState(false)
   const originalRowsRef = useRef<any[]>([])
+
+  // Edit mode info dialog state
+  const [showEditInfoDialog, setShowEditInfoDialog] = useState(false)
+  const [showEditInfoTooltip, setShowEditInfoTooltip] = useState(false)
 
   const typeMap = useMemo(() => {
     try {
@@ -368,7 +373,7 @@ export default function DatasetAppendFlowPage() {
 
   // Custom Header Component with type icons
   const CustomHeader = useCallback((props: any) => {
-    const { displayName, columnType } = props
+    const { displayName, columnType, isReadonly } = props
     const Icon = {
       text: Type,
       number: Hash,
@@ -377,9 +382,14 @@ export default function DatasetAppendFlowPage() {
     }[columnType] || Type
 
     return (
-      <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+      <div className={`flex items-center gap-2 text-xs font-bold ${isReadonly ? 'text-slate-500' : 'text-slate-400'}`}>
         <Icon className="w-3.5 h-3.5 opacity-50" />
         <span>{displayName}</span>
+        {isReadonly && (
+          <span title="Read-only column">
+            <Lock className="w-3 h-3 text-slate-500" />
+          </span>
+        )}
       </div>
     )
   }, [])
@@ -401,43 +411,64 @@ export default function DatasetAppendFlowPage() {
       }
     ]
 
-    return [...defs, ...cols.map((c) => ({
-      headerName: c,
-      field: c,
-      colId: c,
-      valueGetter: (p: any) => p?.data?.[c],
-      valueSetter: (p: any) => { if (!p?.data) return false; p.data[c] = p.newValue; return true },
-      editable: editMode && role !== 'viewer',
-      resizable: true,
-      sortable: true,
-      filter: true,
-      headerComponent: CustomHeader,
-      headerComponentParams: { columnType: columnTypes[c] },
-      cellRenderer: ValidationCellRenderer,
-      cellStyle: (p: any) => {
-        const ri = p?.rowIndex
-        const key = `${typeof ri === 'number' ? ri : -1}|${c}`
-        
-        // Deleted row
-        if (typeof ri === 'number' && deletedRowIds.has(ri)) {
-          return { backgroundColor: '#450a0a', color: '#f87171', opacity: 0.6 }
-        }
-        
-        // Validation error
-        if (validationErrorsMap.has(key)) {
-          return { backgroundColor: '#7F1D1D', color: '#FCA5A5' }
-        }
-        
-        // Edited cell
-        if (editedCellMap.has(key)) {
-          return { backgroundColor: '#1e3a5f', color: '#93c5fd', fontWeight: '600' }
-        }
-        
-        return undefined
-      },
-      cellClass: 'text-sm text-slate-300 font-mono border-r border-slate-800',
-    }))]
-  }, [cols, columnTypes, editMode, role, deletedRowIds, validationErrorsMap, editedCellMap, ValidationCellRenderer, CustomHeader])
+    return [...defs, ...cols.map((c) => {
+      const isReadonly = readonlyColumns.has(c)
+      return {
+        headerName: c,
+        field: c,
+        colId: c,
+        valueGetter: (p: any) => p?.data?.[c],
+        valueSetter: (p: any) => { if (!p?.data) return false; p.data[c] = p.newValue; return true },
+        editable: editMode && role !== 'viewer' && !isReadonly,
+        // Prevent cell focus/click on readonly columns in edit mode
+        suppressNavigable: editMode && isReadonly,
+        resizable: true,
+        sortable: true,
+        filter: true,
+        headerComponent: CustomHeader,
+        headerComponentParams: { columnType: columnTypes[c], isReadonly: editMode && isReadonly },
+        cellRenderer: ValidationCellRenderer,
+        cellStyle: (p: any) => {
+          const ri = p?.rowIndex
+          const key = `${typeof ri === 'number' ? ri : -1}|${c}`
+          
+          // Deleted row
+          if (typeof ri === 'number' && deletedRowIds.has(ri)) {
+            return { backgroundColor: '#450a0a', color: '#f87171', opacity: 0.6 }
+          }
+          
+          // Validation error
+          if (validationErrorsMap.has(key)) {
+            return { backgroundColor: '#7F1D1D', color: '#FCA5A5' }
+          }
+          
+          // Edited cell
+          if (editedCellMap.has(key)) {
+            return { backgroundColor: '#1e3a5f', color: '#93c5fd', fontWeight: '600' }
+          }
+          
+          // Non-editable column styling (more prominent in edit mode)
+          if (editMode && isReadonly) {
+            return { 
+              backgroundColor: '#334155', 
+              color: '#64748b', 
+              cursor: 'not-allowed',
+              opacity: 0.7
+            }
+          }
+          
+          return undefined
+        },
+        cellClass: (p: any) => {
+          const base = 'text-sm text-slate-300 font-mono border-r border-slate-800'
+          if (editMode && isReadonly) {
+            return `${base} cursor-not-allowed select-none`
+          }
+          return base
+        },
+      }
+    })]
+  }, [cols, columnTypes, editMode, role, deletedRowIds, validationErrorsMap, editedCellMap, readonlyColumns, ValidationCellRenderer, CustomHeader])
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
@@ -540,6 +571,14 @@ export default function DatasetAppendFlowPage() {
             // Ensure rules is an array
             if (Array.isArray(parsedRules)) {
               setBusinessRules(parsedRules)
+              // Extract readonly columns from business rules
+              const readonlyCols = new Set<string>()
+              parsedRules.forEach((rule: any) => {
+                if (rule.type === 'readonly' && Array.isArray(rule.columns)) {
+                  rule.columns.forEach((col: string) => readonlyCols.add(col))
+                }
+              })
+              setReadonlyColumns(readonlyCols)
             }
           }
         } catch { /* no rules */ }
@@ -807,7 +846,7 @@ export default function DatasetAppendFlowPage() {
                     </>
                   ) : (
                     <button
-                      onClick={() => setEditMode(true)}
+                      onClick={() => { setEditMode(true); setShowEditInfoDialog(true); }}
                       className="flex items-center gap-2 px-3 py-1.5 bg-amber-900/50 hover:bg-amber-800/50 border border-amber-700/50 text-amber-200 text-sm font-medium rounded-lg transition-colors"
                       title="Live Edit"
                     >
@@ -815,6 +854,44 @@ export default function DatasetAppendFlowPage() {
                       Live Edit
                       <span className="text-[10px] bg-amber-800 text-amber-200 px-1.5 py-0.5 rounded">Beta</span>
                     </button>
+                  )}
+                  {/* Info icon with hover tooltip for edit mode */}
+                  {editMode && (
+                    <div 
+                      className="relative"
+                      onMouseEnter={() => setShowEditInfoTooltip(true)}
+                      onMouseLeave={() => setShowEditInfoTooltip(false)}
+                    >
+                      <button
+                        className="p-1.5 text-amber-400 hover:text-amber-300 hover:bg-amber-900/30 rounded-lg transition-colors"
+                        title="How to use Live Edit"
+                      >
+                        <Lightbulb className="w-5 h-5" />
+                      </button>
+                      {showEditInfoTooltip && (
+                        <div className="absolute right-0 top-full mt-2 z-50 w-80 p-4 bg-slate-800 border border-slate-700 rounded-lg shadow-xl">
+                          <div className="text-sm text-slate-200">
+                            <p className="font-medium mb-2 text-purple-300">Live Edit Mode</p>
+                            <p className="text-slate-300 mb-2">
+                              Edit cells by double-clicking. Select rows and click delete to mark for deletion.
+                              Changes are staged until you submit a change request for approval.
+                            </p>
+                            {readonlyColumns.size > 0 && (
+                              <p className="text-purple-400 text-xs mb-1">
+                                Note: Some columns are read-only based on business rules.
+                              </p>
+                            )}
+                            {businessRules.length > 0 && (
+                              <p className="text-purple-400 text-xs">
+                                Business rules are enforced. Invalid values will be highlighted in red.
+                              </p>
+                            )}
+                          </div>
+                          {/* Arrow pointer */}
+                          <div className="absolute -top-2 right-4 w-3 h-3 bg-slate-800 border-l border-t border-slate-700 transform rotate-45" />
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -825,6 +902,39 @@ export default function DatasetAppendFlowPage() {
                   <div className="flex items-center gap-2 text-red-300">
                     <AlertTriangle className="w-5 h-5" />
                     <span className="font-medium">Data Violation found, please review and edit the data then proceed.</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Dismissible Edit Mode Info Dialog */}
+              {editMode && showEditInfoDialog && (
+                <div className="mt-4 p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg relative">
+                  <button
+                    onClick={() => setShowEditInfoDialog(false)}
+                    className="absolute top-2 right-2 p-1 text-purple-400 hover:text-purple-200 hover:bg-purple-800/30 rounded transition-colors"
+                    title="Dismiss"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="flex items-start gap-3 pr-6">
+                    <Info className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-purple-200">
+                      <p className="font-medium mb-1">Live Edit Mode</p>
+                      <p className="text-purple-300/80">
+                        Edit cells by double-clicking. Select rows and click delete to mark for deletion.
+                        Changes are staged until you submit a change request for approval.
+                        {readonlyColumns.size > 0 && (
+                          <span className="block mt-1 text-purple-400">
+                            Note: Some columns are read-only based on business rules.
+                          </span>
+                        )}
+                        {businessRules.length > 0 && (
+                          <span className="block mt-1 text-purple-400">
+                            Business rules are enforced. Invalid values will be highlighted in red.
+                          </span>
+                        )}
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}

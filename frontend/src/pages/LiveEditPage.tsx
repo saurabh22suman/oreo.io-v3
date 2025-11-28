@@ -12,7 +12,7 @@ import 'ag-grid-community/styles/ag-theme-quartz.css'
 import {
   ChevronLeft, Pencil, Save, RotateCcw, Trash2, Send, X,
   AlertCircle, Users, Loader2, ArrowRight, Eye, FileText,
-  CheckCircle, XCircle, Info
+  CheckCircle, XCircle, Info, Lock, Lightbulb
 } from 'lucide-react'
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || '/api'
@@ -271,6 +271,10 @@ export default function LiveEditPage() {
   const [pageSize] = useState(100)
   const [totalRows, setTotalRows] = useState(0)
 
+  // Info dialog state
+  const [showInfoDialog, setShowInfoDialog] = useState(true)
+  const [showInfoTooltip, setShowInfoTooltip] = useState(false)
+
   // Computed values
   const editedCellMap = useMemo(() => {
     const map = new Map<string, EditedCell>()
@@ -383,11 +387,6 @@ export default function LiveEditPage() {
       setColumns(visibleColumns)
       setTotalRows(response.total || dataArray.length)
       originalRowsRef.current = JSON.parse(JSON.stringify(dataArray))
-      
-      // If no editable columns set yet, default to all visible columns being editable
-      if (editableColumns.size === 0 && visibleColumns.length > 0) {
-        setEditableColumns(new Set(visibleColumns))
-      }
     } catch (e: any) {
       setError(e.message)
     }
@@ -439,72 +438,100 @@ export default function LiveEditPage() {
       headerClass: 'bg-[#0f172a]',
     }
 
-    const dataCols: ColDef[] = columns.map((c) => ({
-      headerName: c,
-      field: c,
-      colId: c,
-      editable: (params: any) => {
-        // Don't allow editing deleted rows or non-editable columns
-        const rowId = params.data?._row_id
-        return editableColumns.has(c) && !deletedRowIds.has(rowId)
-      },
-      resizable: true,
-      // Use custom renderer for cells with validation errors, deleted rows, or edited cells
-      cellRendererSelector: (params: any) => {
-        const rowId = params.data?._row_id
-        const key = `${rowId}|${c}`
-        // Use ValidationErrorCellRenderer for all cells that need special rendering
-        if (deletedRowIds.has(rowId) || editedCellMap.has(key) || validationErrors.has(key)) {
-          return {
-            component: ValidationErrorCellRenderer,
-            params: { validationErrors, editedCellMap, deletedRowIds }
+    const dataCols: ColDef[] = columns.map((c) => {
+      const isReadonly = !editableColumns.has(c)
+      return {
+        headerName: c,
+        field: c,
+        colId: c,
+        // Custom header component to show Lock icon for readonly columns
+        headerComponent: isReadonly ? (props: any) => (
+          <div className="flex items-center gap-1 text-xs font-bold text-slate-500">
+            <span>{props.displayName}</span>
+            <span title="Read-only column">
+              <Lock className="w-3 h-3 text-slate-500" />
+            </span>
+          </div>
+        ) : undefined,
+        editable: (params: any) => {
+          // Don't allow editing deleted rows or non-editable columns
+          const rowId = params.data?._row_id
+          return editableColumns.has(c) && !deletedRowIds.has(rowId)
+        },
+        // Prevent cell focus/click on readonly columns
+        suppressNavigable: isReadonly,
+        resizable: true,
+        // Use custom renderer for cells with validation errors, deleted rows, or edited cells
+        cellRendererSelector: (params: any) => {
+          const rowId = params.data?._row_id
+          const key = `${rowId}|${c}`
+          // Use ValidationErrorCellRenderer for all cells that need special rendering
+          if (deletedRowIds.has(rowId) || editedCellMap.has(key) || validationErrors.has(key)) {
+            return {
+              component: ValidationErrorCellRenderer,
+              params: { validationErrors, editedCellMap, deletedRowIds }
+            }
           }
-        }
-        return undefined // Use default renderer (allows editing)
-      },
-      cellStyle: (params: any) => {
-        const rowId = params.data?._row_id
-        const key = `${rowId}|${c}`
+          return undefined // Use default renderer (allows editing)
+        },
+        cellStyle: (params: any) => {
+          const rowId = params.data?._row_id
+          const key = `${rowId}|${c}`
 
-        // Deleted row styling
-        if (deletedRowIds.has(rowId)) {
-          return { backgroundColor: '#450a0a', color: '#fca5a5', textDecoration: 'line-through' }
-        }
-
-        // Validation error styling (red border/background)
-        if (validationErrors.has(key)) {
-          const error = validationErrors.get(key)!
-          if (error.severity === 'error') {
-            return { backgroundColor: '#7f1d1d', color: '#fca5a5', borderLeft: '3px solid #ef4444' }
-          } else if (error.severity === 'warning') {
-            return { backgroundColor: '#78350f', color: '#fcd34d', borderLeft: '3px solid #f59e0b' }
+          // Deleted row styling
+          if (deletedRowIds.has(rowId)) {
+            return { backgroundColor: '#450a0a', color: '#fca5a5', textDecoration: 'line-through' }
           }
-        }
 
-        // Edited cell styling
-        if (editedCellMap.has(key)) {
-          return { backgroundColor: '#1e3a5f', color: '#93c5fd', fontWeight: '600' }
-        }
+          // Validation error styling (red border/background)
+          if (validationErrors.has(key)) {
+            const error = validationErrors.get(key)!
+            if (error.severity === 'error') {
+              return { backgroundColor: '#7f1d1d', color: '#fca5a5', borderLeft: '3px solid #ef4444' }
+            } else if (error.severity === 'warning') {
+              return { backgroundColor: '#78350f', color: '#fcd34d', borderLeft: '3px solid #f59e0b' }
+            }
+          }
 
-        // Non-editable column styling
-        if (!editableColumns.has(c)) {
-          return { backgroundColor: '#1e293b', color: '#94a3b8' }
-        }
+          // Edited cell styling
+          if (editedCellMap.has(key)) {
+            return { backgroundColor: '#1e3a5f', color: '#93c5fd', fontWeight: '600' }
+          }
 
-        return undefined
-      },
-      // Add tooltip for validation errors
-      tooltipValueGetter: (params: any) => {
-        const rowId = params.data?._row_id
-        const key = `${rowId}|${c}`
-        if (validationErrors.has(key)) {
-          return validationErrors.get(key)!.message
-        }
-        return undefined
-      },
-      cellClass: 'text-sm text-slate-300 font-mono border-r border-slate-800',
-      headerClass: 'bg-[#0f172a] border-r border-slate-800 text-xs font-bold text-slate-400',
-    }))
+          // Non-editable column styling (more prominent)
+          if (isReadonly) {
+            return { 
+              backgroundColor: '#334155', 
+              color: '#64748b', 
+              cursor: 'not-allowed',
+              opacity: 0.7
+            }
+          }
+
+          return undefined
+        },
+        // Add tooltip for validation errors
+        tooltipValueGetter: (params: any) => {
+          const rowId = params.data?._row_id
+          const key = `${rowId}|${c}`
+          if (validationErrors.has(key)) {
+            return validationErrors.get(key)!.message
+          }
+          if (isReadonly) {
+            return 'This column is read-only'
+          }
+          return undefined
+        },
+        cellClass: (params: any) => {
+          const base = 'text-sm text-slate-300 font-mono border-r border-slate-800'
+          if (isReadonly) {
+            return `${base} cursor-not-allowed select-none`
+          }
+          return base
+        },
+        headerClass: `bg-[#0f172a] border-r border-slate-800 text-xs font-bold ${isReadonly ? 'text-slate-500' : 'text-slate-400'}`,
+      }
+    })
 
     return [selectionCol, ...dataCols]
   }, [columns, editableColumns, editedCellMap, deletedRowIds, validationErrors])
@@ -748,9 +775,47 @@ export default function LiveEditPage() {
               <div className="p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
                 <Pencil className="w-5 h-5 text-purple-400" />
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-white leading-tight">Live Editor</h1>
-                <p className="text-slate-400 text-sm">Edit {dataset?.name} data directly</p>
+              <div className="flex items-center gap-2">
+                <div>
+                  <h1 className="text-xl font-bold text-white leading-tight">Live Editor</h1>
+                  <p className="text-slate-400 text-sm">Edit {dataset?.name} data directly</p>
+                </div>
+                {/* Info icon with hover tooltip */}
+                <div 
+                  className="relative"
+                  onMouseEnter={() => setShowInfoTooltip(true)}
+                  onMouseLeave={() => setShowInfoTooltip(false)}
+                >
+                  <button
+                    className="p-1.5 text-amber-400 hover:text-amber-300 hover:bg-amber-900/30 rounded-lg transition-colors"
+                    title="How to use Live Editor"
+                  >
+                    <Lightbulb className="w-5 h-5" />
+                  </button>
+                  {showInfoTooltip && (
+                    <div className="absolute left-0 top-full mt-2 z-50 w-80 p-4 bg-slate-800 border border-slate-700 rounded-lg shadow-xl">
+                      <div className="text-sm text-slate-200">
+                        <p className="font-medium mb-2 text-purple-300">Live Edit Mode</p>
+                        <p className="text-slate-300 mb-2">
+                          Edit cells by double-clicking. Select rows and click "Delete Selected" to mark for deletion.
+                          Changes are staged until you submit a change request for approval.
+                        </p>
+                        {editableColumns.size < columns.length && (
+                          <p className="text-purple-400 text-xs mb-1">
+                            Note: Some columns are read-only based on business rules.
+                          </p>
+                        )}
+                        {businessRules.length > 0 && (
+                          <p className="text-purple-400 text-xs">
+                            Business rules are enforced. Invalid values will be highlighted in red.
+                          </p>
+                        )}
+                      </div>
+                      {/* Arrow pointer */}
+                      <div className="absolute -top-2 left-4 w-3 h-3 bg-slate-800 border-l border-t border-slate-700 transform rotate-45" />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -793,29 +858,38 @@ export default function LiveEditPage() {
         {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss />}
       </div>
 
-      {/* Info banner */}
-      <div className="px-6 pt-4">
-        <div className="flex items-start gap-3 p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
-          <Info className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-purple-200">
-            <p className="font-medium mb-1">Live Edit Mode</p>
-            <p className="text-purple-300/80">
-              Edit cells by double-clicking. Select rows and click "Delete Selected" to mark for deletion.
-              Changes are staged until you submit a change request for approval.
-              {editableColumns.size < columns.length && (
-                <span className="block mt-1 text-purple-400">
-                  Note: Some columns are read-only based on business rules.
-                </span>
-              )}
-              {businessRules.length > 0 && (
-                <span className="block mt-1 text-purple-400">
-                  Business rules are enforced. Invalid values will be highlighted in red.
-                </span>
-              )}
-            </p>
+      {/* Dismissible Info Dialog */}
+      {showInfoDialog && (
+        <div className="px-6 pt-4">
+          <div className="flex items-start gap-3 p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg relative">
+            <button
+              onClick={() => setShowInfoDialog(false)}
+              className="absolute top-2 right-2 p-1 text-purple-400 hover:text-purple-200 hover:bg-purple-800/30 rounded transition-colors"
+              title="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <Info className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-purple-200 pr-6">
+              <p className="font-medium mb-1">Live Edit Mode</p>
+              <p className="text-purple-300/80">
+                Edit cells by double-clicking. Select rows and click "Delete Selected" to mark for deletion.
+                Changes are staged until you submit a change request for approval.
+                {editableColumns.size < columns.length && (
+                  <span className="block mt-1 text-purple-400">
+                    Note: Some columns are read-only based on business rules.
+                  </span>
+                )}
+                {businessRules.length > 0 && (
+                  <span className="block mt-1 text-purple-400">
+                    Business rules are enforced. Invalid values will be highlighted in red.
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Toolbar */}
       <div className="px-6 py-4 flex items-center justify-between">

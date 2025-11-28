@@ -1169,6 +1169,30 @@ def validate_rules(payload: RulesPayload):
                             bad.append(i)
                 if bad:
                     errors.append({"rule": "equals", "column": col, "rows": bad, "message": f"Column '{col}' must equal {expected}"})
+        elif rtype == "not_contains":
+            col = r.get("column")
+            # Support both single value and array of values
+            forbidden_values = r.get("values", [])
+            single_value = r.get("value")
+            if single_value and not forbidden_values:
+                forbidden_values = [single_value]
+            
+            if col and forbidden_values:
+                bad = []
+                for i, row in enumerate(rows):
+                    val = row.get(col)
+                    if val is None:
+                        continue
+                    str_val = str(val).lower()
+                    for forbidden in forbidden_values:
+                        if forbidden and str(forbidden).lower() in str_val:
+                            bad.append(i)
+                            break  # Only add row once even if multiple matches
+                if bad:
+                    forbidden_list = ', '.join(f"'{f}'" for f in forbidden_values[:3])
+                    if len(forbidden_values) > 3:
+                        forbidden_list += f" and {len(forbidden_values) - 3} more"
+                    errors.append({"rule": "not_contains", "column": col, "rows": bad, "message": f"Column '{col}' must not contain {forbidden_list}"})
         else:
             # Unknown rule -> ignore for forward compat
             continue

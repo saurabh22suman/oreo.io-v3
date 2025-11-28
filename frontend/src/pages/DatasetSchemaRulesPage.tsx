@@ -14,17 +14,26 @@ type ColumnRule = {
   name: string
   required: boolean
   editable: boolean
-  validationType?: 'between' | 'greater_than' | 'less_than' | 'equals' | 'none'
+  validationType?: 'between' | 'greater_than' | 'less_than' | 'equals' | 'not_contains' | 'none'
   validationValue?: any
   validationValue2?: any // For 'between'
 }
 
 const DATA_TYPES = ['string', 'integer', 'number', 'boolean', 'date', 'datetime', 'timestamp']
-const VALIDATION_TYPES = [
+
+// Validation types for numeric columns
+const NUMERIC_VALIDATION_TYPES = [
   { value: 'none', label: 'None' },
   { value: 'greater_than', label: 'Greater Than' },
   { value: 'less_than', label: 'Less Than' },
   { value: 'between', label: 'Between' },
+  { value: 'equals', label: 'Equals' },
+]
+
+// Validation types for string columns
+const STRING_VALIDATION_TYPES = [
+  { value: 'none', label: 'None' },
+  { value: 'not_contains', label: 'Not Contains' },
   { value: 'equals', label: 'Equals' },
 ]
 
@@ -226,6 +235,10 @@ export default function DatasetSchemaRulesPage() {
           if (rule.validationType === 'between') {
             ruleObj.min = rule.validationValue
             ruleObj.max = rule.validationValue2
+          } else if (rule.validationType === 'not_contains') {
+            // Convert comma-separated string to array of trimmed values
+            const valStr = String(rule.validationValue || '')
+            ruleObj.values = valStr.split(',').map((v: string) => v.trim()).filter((v: string) => v.length > 0)
           } else {
             ruleObj.value = rule.validationValue
           }
@@ -298,6 +311,10 @@ export default function DatasetSchemaRulesPage() {
               if (rule.validationType === 'between') {
                 ruleObj.min = rule.validationValue
                 ruleObj.max = rule.validationValue2
+              } else if (rule.validationType === 'not_contains') {
+                // Convert comma-separated string to array of trimmed values
+                const valStr = String(rule.validationValue || '')
+                ruleObj.values = valStr.split(',').map((v: string) => v.trim()).filter((v: string) => v.length > 0)
               } else {
                 ruleObj.value = rule.validationValue
               }
@@ -529,6 +546,8 @@ export default function DatasetSchemaRulesPage() {
                 {columnRules.map((rule, idx) => {
                   const colType = columns.find(c => c.originalName === rule.name)?.type
                   const isNumeric = colType === 'integer' || colType === 'number'
+                  const isString = colType === 'string'
+                  const validationTypes = isNumeric ? NUMERIC_VALIDATION_TYPES : isString ? STRING_VALIDATION_TYPES : [{ value: 'none', label: 'None' }]
 
                   return (
                     <tr key={idx} className="hover:bg-[var(--bg-page)] transition-colors">
@@ -575,10 +594,10 @@ export default function DatasetSchemaRulesPage() {
                             newRules[idx].validationType = e.target.value as any
                             setColumnRules(newRules)
                           }}
-                          disabled={!isNumeric || role === 'viewer'}
+                          disabled={(!isNumeric && !isString) || role === 'viewer'}
                           className="input-compact"
                         >
-                          {VALIDATION_TYPES.map(vt => (
+                          {validationTypes.map(vt => (
                             <option key={vt.value} value={vt.value}>{vt.label}</option>
                           ))}
                         </select>
@@ -612,9 +631,26 @@ export default function DatasetSchemaRulesPage() {
                               disabled={role === 'viewer'}
                             />
                           </div>
+                        ) : rule.validationType === 'not_contains' ? (
+                          <div className="flex flex-col gap-1">
+                            <input
+                              type="text"
+                              placeholder="e.g. bad, forbidden, test"
+                              value={Array.isArray(rule.validationValue) ? rule.validationValue.join(', ') : (rule.validationValue || '')}
+                              onChange={(e) => {
+                                const newRules = [...columnRules]
+                                // Store as comma-separated string, will be converted to array when saving
+                                newRules[idx].validationValue = e.target.value
+                                setColumnRules(newRules)
+                              }}
+                              className="input-compact w-48"
+                              disabled={role === 'viewer'}
+                            />
+                            <span className="text-[10px] text-[var(--text-muted)]">Comma-separated values</span>
+                          </div>
                         ) : rule.validationType && rule.validationType !== 'none' ? (
                           <input
-                            type="number"
+                            type={isNumeric ? 'number' : 'text'}
                             placeholder="Value"
                             value={rule.validationValue || ''}
                             onChange={(e) => {
