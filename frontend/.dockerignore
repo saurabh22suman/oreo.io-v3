@@ -5,5 +5,4 @@ coverage
 .git
 .gitignore
 .DS_Store
-dist
 .idea

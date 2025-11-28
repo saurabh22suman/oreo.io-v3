@@ -457,22 +457,32 @@ h4 {
   }
 
   .badge-primary {
-    @apply bg-primary/10 text-primary border border-primary/20;
+    background-color: rgba(123, 75, 255, 0.1);
+    color: var(--primary);
+    border: 1px solid rgba(123, 75, 255, 0.2);
   }
 
   .badge-success {
-    @apply bg-success/10 text-success border border-success/20;
+    background-color: rgba(76, 217, 127, 0.1);
+    color: #4CD97F;
+    border: 1px solid rgba(76, 217, 127, 0.2);
   }
 
   .badge-warning {
-    @apply bg-warning/10 text-warning border border-warning/20;
+    background-color: rgba(244, 200, 74, 0.1);
+    color: #F4C84A;
+    border: 1px solid rgba(244, 200, 74, 0.2);
   }
 
   .badge-danger {
-    @apply bg-danger/10 text-danger border border-danger/20;
+    background-color: rgba(255, 83, 112, 0.1);
+    color: #FF5370;
+    border: 1px solid rgba(255, 83, 112, 0.2);
   }
 
   .badge-info {
-    @apply bg-info/10 text-info border border-info/20;
+    background-color: rgba(62, 167, 255, 0.1);
+    color: #3EA7FF;
+    border: 1px solid rgba(62, 167, 255, 0.2);
   }
 }
