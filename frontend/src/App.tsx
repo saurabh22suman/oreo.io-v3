@@ -32,6 +32,9 @@ import DatasetAuditPage from './pages/DatasetAuditPage'
 import DatasetSnapshotPage from './pages/DatasetSnapshotPage'
 import LiveEditPage from './pages/LiveEditPage'
 import ThemePreviewPage from './pages/ThemePreviewPage'
+import DatasetRulesPage from './pages/DatasetRulesPage'
+import DeveloperOptionsPage from './pages/DeveloperOptionsPage'
+import SharedQueryPage from './pages/SharedQueryPage'
 
 function RootRedirect() {
   const { user, ready } = useUser()
@@ -73,6 +76,9 @@ export default function App() {
       {/* Admin base - public for now */}
       <Route path="/admin_base" element={<AdminBasePage />} />
 
+      {/* Public shared query page */}
+      <Route path="/share/:shareId" element={<SharedQueryPage />} />
+
       {/* App routes under layout - protected */}
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<DashboardPage />} />
@@ -94,6 +100,8 @@ export default function App() {
         <Route path="/projects/:id/datasets/:datasetId/view" element={<DatasetViewerPage />} />
         <Route path="/projects/:id/datasets/:datasetId/changes/:changeId" element={<ChangeDetailsPage />} />
         <Route path="/projects/:id/labs" element={<ProjectQueryPage />} />
+        <Route path="/projects/:id/datasets/:datasetId/rules" element={<DatasetRulesPage />} />
+        <Route path="/projects/:id/datasets/:datasetId/developer" element={<DeveloperOptionsPage />} />
         <Route path="/projects/:id/dashboard" element={<ProjectPlaceholderPage />} />
         <Route path="/projects/:id/audit" element={<ProjectRoleGuard allow={['owner', 'contributor']}><ProjectPlaceholderPage /></ProjectRoleGuard>} />
         <Route path="/projects/:id/settings" element={<ProjectRoleGuard allow={['owner']}><ProjectSettingsPage /></ProjectRoleGuard>} />

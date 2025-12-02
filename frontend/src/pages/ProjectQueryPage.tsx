@@ -1,6 +1,6 @@
 import { ReactNode } from 'react'
 import { Link, useSearchParams, useParams } from 'react-router-dom'
-import { RotateCcw, ShieldCheck, FileSearch, ArrowRight, FlaskConical, Pencil } from 'lucide-react'
+import { RotateCcw, ShieldCheck, FileSearch, ArrowRight, FlaskConical, Pencil, Code2 } from 'lucide-react'
 
 export default function ProjectQueryPage() {
     const { id } = useParams<{ id: string }>()
@@ -73,6 +73,14 @@ export default function ProjectQueryPage() {
                     color="warning"
                     to={datasetId ? `/projects/${id}/datasets/${datasetId}/audit` : '#'}
                 />
+
+                <FeatureCard
+                    icon={<Code2 className="w-6 h-6" />}
+                    title="Developer"
+                    description="Run SQL queries against your dataset and share results publicly."
+                    color="info"
+                    to={datasetId ? `/projects/${id}/datasets/${datasetId}/developer` : '#'}
+                />
             </div>
         </div>
     )
@@ -82,7 +90,7 @@ function FeatureCard({ icon, title, description, color, to }: {
     icon: ReactNode
     title: string
     description: string
-    color: 'primary' | 'accent' | 'success' | 'warning'
+    color: 'primary' | 'accent' | 'success' | 'warning' | 'info'
     to: string
 }) {
     return (
