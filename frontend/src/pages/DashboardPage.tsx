@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { listProjects, getInboxUnreadCount } from '../api'
+import { listProjects, getInboxUnreadCount, listChanges } from '../api'
 import ProjectModal from '../components/ProjectModal'
-import { Plus, FolderKanban, Bell, Activity, ArrowRight, Clock } from 'lucide-react'
+import { Plus, FolderKanban, Bell, GitPullRequestArrow, ArrowRight } from 'lucide-react'
 
 export default function DashboardPage() {
   const [projects, setProjects] = useState<any[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
+  const [pendingCRCount, setPendingCRCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
@@ -22,6 +23,19 @@ export default function DashboardPage() {
         if (mounted) {
           setProjects(projs || [])
           setUnreadCount(unread)
+          
+          // Fetch pending change requests across all projects
+          let totalPending = 0
+          for (const proj of (projs || [])) {
+            try {
+              const changes = await listChanges(proj.id)
+              const pending = (changes || []).filter((c: any) => c.status === 'pending')
+              totalPending += pending.length
+            } catch {
+              // Ignore errors for individual projects
+            }
+          }
+          if (mounted) setPendingCRCount(totalPending)
         }
       } catch (err) {
         console.error(err)
@@ -66,10 +80,11 @@ export default function DashboardPage() {
           onClick={() => navigate('/inbox')}
         />
         <StatCard
-          icon={<Activity size={20} />}
-          label="Recent Activity"
-          value={projects.length > 0 ? 'Active' : 'None'}
-          valueSmall
+          icon={<GitPullRequestArrow size={20} />}
+          label="Pending Reviews"
+          value={pendingCRCount}
+          highlight={pendingCRCount > 0}
+          onClick={() => navigate('/projects')}
         />
       </div>
 
@@ -129,23 +144,6 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <QuickAction
-          title="Browse Projects"
-          description="View and manage all your data projects"
-          icon={<FolderKanban size={20} />}
-          onClick={() => navigate('/projects')}
-        />
-        <QuickAction
-          title="Check Inbox"
-          description="Review notifications and approvals"
-          icon={<Bell size={20} />}
-          badge={unreadCount > 0 ? unreadCount : undefined}
-          onClick={() => navigate('/inbox')}
-        />
-      </div>
-
       <ProjectModal open={open} onClose={() => setOpen(false)} onCreate={() => window.location.reload()} />
     </div>
   )
@@ -177,39 +175,6 @@ function StatCard({ icon, label, value, highlight, valueSmall, onClick }: {
         {value}
       </div>
       <div className="text-sm text-text-secondary mt-0.5">{label}</div>
-    </div>
-  )
-}
-
-function QuickAction({ title, description, icon, badge, onClick }: {
-  title: string
-  description: string
-  icon: React.ReactNode
-  badge?: number
-  onClick: () => void
-}) {
-  return (
-    <div 
-      className="bg-surface-2 rounded-card border border-divider p-5 cursor-pointer hover:border-primary/30 hover:bg-surface-3/50 transition-all group"
-      onClick={onClick}
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-4">
-          <div className="p-2.5 rounded-lg bg-surface-3 text-text-secondary group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-            {icon}
-          </div>
-          <div>
-            <h3 className="font-medium text-text-primary group-hover:text-primary transition-colors flex items-center gap-2">
-              {title}
-              {badge !== undefined && badge > 0 && (
-                <span className="badge badge-primary">{badge > 99 ? '99+' : badge}</span>
-              )}
-            </h3>
-            <p className="text-sm text-text-secondary mt-0.5">{description}</p>
-          </div>
-        </div>
-        <ArrowRight size={16} className="text-text-muted group-hover:text-primary group-hover:translate-x-0.5 transition-all mt-1" />
-      </div>
     </div>
   )
 }

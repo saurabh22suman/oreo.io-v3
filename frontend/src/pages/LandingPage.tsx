@@ -3,7 +3,7 @@ import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import {
   Table, ShieldCheck, History, 
-  ArrowRight, CheckCircle2, Database, GitBranch, Lock
+  ArrowRight, Database, GitBranch, Lock, CheckCircle2
 } from 'lucide-react'
 
 export default function LandingPage() {
@@ -64,58 +64,78 @@ export default function LandingPage() {
             </a>
           </div>
 
-          {/* Hero Visual - Editor Mockup */}
-          <div className="reveal mt-16 max-w-4xl mx-auto">
-            <div className="bg-surface-2 rounded-card border border-divider shadow-elevated overflow-hidden">
+          {/* Hero Visual - The "Live Editor" Mockup */}
+          <div className="reveal mt-16 relative max-w-5xl mx-auto">
+            <div className="absolute -inset-1 bg-gradient-to-r from-primary to-primary-glow rounded-2xl blur opacity-20"></div>
+            <div className="relative rounded-2xl bg-surface-2 border border-divider shadow-2xl overflow-hidden">
               {/* Mockup Header */}
-              <div className="h-10 bg-surface-3 border-b border-divider flex items-center px-4 gap-2">
-                <div className="flex gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-danger/60" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-warning/60" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-success/60" />
+              <div className="h-12 bg-surface-3 border-b border-divider flex items-center px-6 gap-4">
+                <div className="flex gap-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500/50"></div>
+                  <div className="w-3 h-3 rounded-full bg-yellow-500/50"></div>
+                  <div className="w-3 h-3 rounded-full bg-green-500/50"></div>
                 </div>
-                <div className="flex-1 flex justify-center">
-                  <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-surface-4 border border-divider">
-                    <Lock size={10} className="text-success" />
-                    <span className="text-[11px] text-text-muted font-mono">oreo.io/editor/transactions</span>
-                  </div>
-                </div>
+                <div className="flex-1 text-center text-xs font-mono text-text-secondary">user_transactions.data — Oreo Editor</div>
               </div>
 
-              {/* Mockup Grid */}
-              <div className="p-px bg-surface-3">
-                <div className="bg-surface-2">
-                  {/* Header Row */}
-                  <div className="grid grid-cols-4 text-xs font-medium text-text-secondary border-b border-divider">
-                    <div className="px-4 py-2.5 border-r border-divider">user_id</div>
-                    <div className="px-4 py-2.5 border-r border-divider">status</div>
-                    <div className="px-4 py-2.5 border-r border-divider">amount</div>
-                    <div className="px-4 py-2.5">validation</div>
+              {/* Mockup Body */}
+              <div className="p-8 grid md:grid-cols-3 gap-8">
+                {/* Left: The Editor UI */}
+                <div className="md:col-span-2 space-y-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-text flex items-center gap-2">
+                      <Table className="w-5 h-5 text-primary" /> Data Grid
+                    </h3>
+                    <span className="text-xs px-2 py-1 rounded bg-success/20 text-success border border-success/30">Live Mode</span>
                   </div>
-                  {/* Data Rows */}
-                  {[
-                    { id: 'u_8392', status: 'active', statusColor: 'success', amount: '$1,240.00', valid: true },
-                    { id: 'u_8393', status: 'pending', statusColor: 'warning', amount: '$450.00', valid: true, highlight: true },
-                    { id: 'u_8394', status: 'failed', statusColor: 'danger', amount: '$0.00', valid: false },
-                  ].map((row, i) => (
-                    <div 
-                      key={i} 
-                      className={`grid grid-cols-4 text-sm border-b border-divider last:border-b-0 ${row.highlight ? 'bg-primary/5 border-l-2 border-l-primary' : ''}`}
-                    >
-                      <div className="px-4 py-3 border-r border-divider font-mono text-text-muted">{row.id}</div>
-                      <div className="px-4 py-3 border-r border-divider">
-                        <span className={`badge badge-${row.statusColor}`}>{row.status}</span>
+                  {/* Fake Table */}
+                  <div className="border border-divider rounded-lg overflow-hidden bg-surface-1">
+                    <div className="grid grid-cols-3 bg-surface-3 text-xs font-medium text-text-secondary p-3 border-b border-divider">
+                      <div>user_id</div>
+                      <div>status</div>
+                      <div>amount</div>
+                    </div>
+                    <div className="divide-y divide-divider text-sm text-text">
+                      <div className="grid grid-cols-3 p-3 hover:bg-surface-2 transition-colors cursor-text group">
+                        <div className="font-mono text-text-secondary">u_8392</div>
+                        <div className="text-success">active</div>
+                        <div>$1,240.00</div>
                       </div>
-                      <div className="px-4 py-3 border-r border-divider font-mono">{row.amount}</div>
-                      <div className="px-4 py-3">
-                        {row.valid ? (
-                          <CheckCircle2 size={16} className="text-success" />
-                        ) : (
-                          <span className="text-danger text-xs">Invalid</span>
-                        )}
+                      <div className="grid grid-cols-3 p-3 hover:bg-surface-2 transition-colors cursor-text group bg-primary/10">
+                        <div className="font-mono text-text-secondary">u_8393</div>
+                        <div className="text-warning flex items-center gap-2">
+                          pending
+                          <span className="opacity-0 group-hover:opacity-100 text-[10px] bg-primary px-1 rounded text-white">EDIT</span>
+                        </div>
+                        <div className="border border-primary rounded px-1 bg-surface-1">$450.50|</div>
+                      </div>
+                      <div className="grid grid-cols-3 p-3 hover:bg-surface-2 transition-colors cursor-text group">
+                        <div className="font-mono text-text-secondary">u_8394</div>
+                        <div className="text-error">blocked</div>
+                        <div>$0.00</div>
                       </div>
                     </div>
-                  ))}
+                  </div>
+                </div>
+
+                {/* Right: The Mascot/Validator */}
+                <div className="relative flex flex-col items-center justify-center text-center space-y-4 border-l border-divider pl-8">
+                  <div className="w-32 h-32 relative">
+                    <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse"></div>
+                    <img src="/images/oreo_rabbit.png" alt="Oreo" className="relative z-10 w-full h-full object-contain" />
+                  </div>
+                  <div>
+                    <h4 className="text-text font-medium">Oreo Validator</h4>
+                    <p className="text-xs text-text-secondary mt-1">Schema enforcement active.</p>
+                  </div>
+                  <div className="w-full bg-surface-3 rounded-lg p-3 text-left space-y-2">
+                    <div className="flex items-center gap-2 text-xs text-success">
+                      <CheckCircle2 className="w-3 h-3" /> Type check passed
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-success">
+                      <CheckCircle2 className="w-3 h-3" /> Constraints satisfied
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -11,9 +11,12 @@ ModuleRegistry.registerModules([AllCommunityModule])
 import 'ag-grid-community/styles/ag-theme-quartz.css'
 import { 
   ChevronLeft, Upload, FileCheck, Edit3, Eye, Send, X, AlertCircle, Users, 
-  File as FileIcon, Loader2, AlertTriangle, CheckCircle, Type, Hash, Calendar,
-  ToggleLeft, Table2, Trash2, RotateCcw, Save, ArrowRight, Download, FileText, FileSpreadsheet, Info, Lock, Lightbulb, ArrowLeft
+  File as FileIcon, Loader2, AlertTriangle, CheckCircle, ALargeSmall, Binary, CalendarDays, ToggleRight, Clock4,
+  Table2, Trash2, RotateCcw, Save, ArrowRight, Download, FileText, FileSpreadsheet, Info, Lock, Lightbulb, ArrowLeft
 } from 'lucide-react'
+
+// Data type definition
+type DataType = 'text' | 'number' | 'date' | 'boolean' | 'timestamp'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '../components/ui/dialog'
 
 export default function DatasetAppendFlowPage() {
@@ -355,20 +358,22 @@ export default function DatasetAppendFlowPage() {
   // Custom Header Component with type icons
   const CustomHeader = useCallback((props: any) => {
     const { displayName, columnType, isReadonly } = props
-    const Icon = {
-      text: Type,
-      number: Hash,
-      date: Calendar,
-      boolean: ToggleLeft
-    }[columnType] || Type
+    const icons: Record<DataType, any> = {
+      text: ALargeSmall,
+      number: Binary,
+      date: CalendarDays,
+      boolean: ToggleRight,
+      timestamp: Clock4
+    }
+    const Icon = icons[columnType as DataType] || ALargeSmall
 
     return (
-      <div className={`flex items-center gap-2 text-xs font-bold ${isReadonly ? 'text-text-muted' : 'text-text-secondary'}`}>
-        <Icon className="w-3.5 h-3.5 opacity-50" />
+      <div className={`flex items-center gap-1.5 text-xs font-bold ${isReadonly ? 'text-text-muted' : 'text-slate-400'}`}>
+        <Icon className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
         <span>{displayName}</span>
         {isReadonly && (
           <span title="Read-only column">
-            <Lock className="w-3 h-3 text-text-muted" />
+            <Lock className="w-3 h-3 text-slate-500" />
           </span>
         )}
       </div>
@@ -522,6 +527,40 @@ export default function DatasetAppendFlowPage() {
     await validateDataAgainstRules(normalized)
     setEditMode(false)
   }, [rows, deletedRowIds, normalizeRowsBySchema, validateDataAgainstRules])
+
+  // Export to CSV
+  const exportToCsv = useCallback(() => {
+    if (!rows.length || !cols.length) return
+    
+    // Filter out deleted rows
+    const activeRows = rows.filter((_, idx) => !deletedRowIds.has(idx))
+    
+    // Build CSV content  
+    const headers = cols.join(',')
+    const csvRows = activeRows.map(row => 
+      cols.map(col => {
+        const val = row[col]
+        if (val === null || val === undefined) return ''
+        const str = String(val)
+        // Escape quotes and wrap in quotes if contains comma, quote, or newline
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return `"${str.replace(/"/g, '""')}"`
+        }
+        return str
+      }).join(',')
+    )
+    
+    const csvContent = [headers, ...csvRows].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${file?.name?.replace(/\.[^/.]+$/, '') || 'preview'}_export.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }, [rows, cols, deletedRowIds, file])
 
   // Grid ready handler
   const onGridReady = useCallback((params: { api: GridApi }) => {
@@ -937,8 +976,8 @@ export default function DatasetAppendFlowPage() {
           </div>
 
           {/* Preview Grid */}
-          <div className="max-w-full px-6 py-4">
-            <div className="bg-surface-1 rounded-3xl border border-divider overflow-hidden flex flex-col h-[calc(100vh-220px)] shadow-lg shadow-black/5">
+          <div className="w-full">
+            <div className="bg-surface-1 border-y border-divider overflow-hidden flex flex-col h-[calc(100vh-180px)]">
               <div className="flex-1 ag-theme-databricks-dark w-full">
                 <AgGridReact
                   ref={gridRef as any}
@@ -960,6 +999,14 @@ export default function DatasetAppendFlowPage() {
               {/* Footer with stats and actions */}
               <div className="px-4 py-3 border-t border-divider bg-surface-2 flex items-center justify-between text-xs text-text-secondary font-mono">
                 <div className="flex items-center gap-4">
+                  {/* Download CSV Button */}
+                  <button
+                    onClick={exportToCsv}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-3 hover:bg-surface-2 border border-divider text-text-secondary hover:text-text text-xs font-medium rounded-lg transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download CSV
+                  </button>
                   {editMode && (
                     <button
                       onClick={() => {

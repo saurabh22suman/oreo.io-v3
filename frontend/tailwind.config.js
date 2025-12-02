@@ -49,8 +49,9 @@ export default {
         divider: 'var(--divider)',
       },
       fontFamily: {
-        sans: ['Inter', 'IBM Plex Sans', 'system-ui', 'sans-serif'],
-        display: ['IBM Plex Sans', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Geist', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['Geist', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['Geist Mono', 'IBM Plex Mono', 'Monaco', 'Consolas', 'monospace'],
       },
       fontSize: {
         // Typography scale per spec (1.25 ratio)

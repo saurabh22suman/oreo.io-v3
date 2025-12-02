@@ -21,7 +21,7 @@ function InnerLayout() {
             ${user ? (collapsed ? 'ml-[68px]' : 'ml-64') : 'ml-0'}
           `}
         >
-          <div className="max-w-[1400px] mx-auto animate-fade-in">
+          <div className="w-full animate-fade-in">
             <Outlet />
           </div>
         </main>

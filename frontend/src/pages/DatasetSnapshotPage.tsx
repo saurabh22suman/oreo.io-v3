@@ -39,9 +39,11 @@ import {
   Eye,
   Table2,
   Download,
-  Type,
-  Hash,
-  ToggleLeft,
+  ALargeSmall,
+  Binary,
+  CalendarDays,
+  ToggleRight,
+  Clock4,
   MoreVertical,
   Filter,
   Copy,
@@ -50,6 +52,9 @@ import {
   ArrowDown,
   ArrowUpDown
 } from 'lucide-react'
+
+// Data type definition
+type DataType = 'text' | 'number' | 'date' | 'boolean' | 'timestamp'
 
 // Custom Header Component with Sort Icons and Context Menu (Databricks style)
 const CustomHeader = (props: any) => {
@@ -62,12 +67,14 @@ const CustomHeader = (props: any) => {
 
   const sortState = column.getSort();
 
-  const Icon = {
-    text: Type,
-    number: Hash,
-    date: Calendar,
-    boolean: ToggleLeft
-  }[type] || Type;
+  const icons: Record<DataType, any> = {
+    text: ALargeSmall,
+    number: Binary,
+    date: CalendarDays,
+    boolean: ToggleRight,
+    timestamp: Clock4
+  };
+  const Icon = icons[type as DataType] || ALargeSmall;
 
   const SortIcon = sortState === 'asc' ? ArrowUp : sortState === 'desc' ? ArrowDown : ArrowUpDown;
 

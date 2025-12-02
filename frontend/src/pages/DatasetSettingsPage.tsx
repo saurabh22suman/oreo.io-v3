@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { deleteDataset, getDataset, getDatasetStatsTop, getProject, myProjectRole } from '../api'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '../components/ui/dialog'
+import { DeleteConfirmationDialog } from '../components/ui/DeleteConfirmationDialog'
 import Alert from '../components/Alert'
-import { Settings, ChevronLeft, Database, User, Calendar, Table2, BarChart3, AlertTriangle, Trash2, Info, ChevronRight } from 'lucide-react'
+import { Settings, Database, User, Calendar, Table2, BarChart3, AlertTriangle, Trash2, Info, ChevronRight } from 'lucide-react'
 
 export default function DatasetSettingsPage() {
   const { id, datasetId } = useParams()
@@ -16,7 +16,6 @@ export default function DatasetSettingsPage() {
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [confirmName, setConfirmName] = useState('')
   const [busy, setBusy] = useState(false)
   const [role, setRole] = useState<'owner' | 'contributor' | 'viewer' | null>(null)
 
@@ -177,59 +176,26 @@ export default function DatasetSettingsPage() {
           )}
 
           {/* Delete confirmation modal */}
-          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-            <DialogContent className="max-w-md w-full p-0 overflow-hidden rounded-3xl border-0 bg-surface-1 shadow-2xl">
-              <div className="bg-error/10 p-8 flex flex-col items-center text-center border-b border-error/20">
-                <div className="w-16 h-16 rounded-full bg-error/20 flex items-center justify-center mb-4 text-error shadow-inner border border-error/10">
-                  <AlertTriangle className="w-8 h-8" />
-                </div>
-                <DialogTitle className="text-2xl font-bold text-text font-display">Delete Dataset?</DialogTitle>
-                <DialogDescription className="text-text-secondary mt-2 text-base">
-                  This will permanently delete <span className="font-bold text-text">{dataset?.name}</span>. This action cannot be undone.
-                </DialogDescription>
-              </div>
-
-              <div className="p-8">
-                <div className="mb-6">
-                  <label className="block text-sm font-bold text-text-secondary mb-2 uppercase tracking-wider">
-                    Type <span className="font-mono font-bold select-all text-text normal-case px-1.5 py-0.5 rounded bg-surface-2 border border-divider">{dataset?.name}</span> to confirm
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full px-4 py-3 rounded-xl border border-divider bg-surface-2 text-text focus:ring-2 focus:ring-error/20 focus:border-error outline-none transition-all shadow-sm"
-                    placeholder="Type dataset name"
-                    onChange={(e) => setConfirmName(e.target.value)}
-                  />
-                </div>
-                <div className="flex items-center justify-end gap-3">
-                  <DialogClose asChild>
-                    <button
-                      className="px-6 py-2.5 rounded-xl font-bold text-text-secondary hover:bg-surface-2 hover:text-text transition-colors"
-                      disabled={busy}
-                    >
-                      Cancel
-                    </button>
-                  </DialogClose>
-                  <button
-                    className="px-8 py-2.5 rounded-xl bg-error hover:bg-error-hover text-white font-bold shadow-lg shadow-error/30 hover:shadow-error/40 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                    disabled={busy || confirmName !== dataset?.name}
-                    onClick={async () => {
-                      setBusy(true)
-                      try {
-                        await deleteDataset(projectId, dsId)
-                        setDeleteOpen(false)
-                        setToast('Dataset deleted successfully')
-                        nav(`/projects/${projectId}`)
-                      } catch (e: any) { setToast(e.message) }
-                      finally { setBusy(false) }
-                    }}
-                  >
-                    {busy ? 'Deleting...' : 'Yes, Delete Dataset'}
-                  </button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <DeleteConfirmationDialog
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            itemName={dataset?.name || ''}
+            itemType="dataset"
+            loading={busy}
+            onConfirm={async () => {
+              setBusy(true)
+              try {
+                await deleteDataset(projectId, dsId)
+                setDeleteOpen(false)
+                setToast('Dataset deleted successfully')
+                nav(`/projects/${projectId}`)
+              } catch (e: any) {
+                setToast(e.message)
+              } finally {
+                setBusy(false)
+              }
+            }}
+          />
 
 
           {role !== 'owner' && (

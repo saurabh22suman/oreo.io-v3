@@ -31,6 +31,7 @@ import InboxPage from './pages/InboxPage'
 import DatasetAuditPage from './pages/DatasetAuditPage'
 import DatasetSnapshotPage from './pages/DatasetSnapshotPage'
 import LiveEditPage from './pages/LiveEditPage'
+import ThemePreviewPage from './pages/ThemePreviewPage'
 
 function RootRedirect() {
   const { user, ready } = useUser()
@@ -64,6 +65,7 @@ export default function App() {
       <Route path="/docs" element={<DocsPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/theme-preview" element={<ThemePreviewPage />} />
 
       {/* Legacy auth route retained */}
       <Route path="/auth" element={<AuthPage />} />

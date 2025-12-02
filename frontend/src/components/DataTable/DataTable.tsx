@@ -8,8 +8,9 @@ import 'ag-grid-community/styles/ag-theme-quartz.css'
 import {
   ChevronLeft, ChevronRight, Download, ArrowRight, Search, X, Filter,
   Columns3, RefreshCw, Copy, Pin, ArrowUp, ArrowDown, ArrowUpDown,
-  MoreVertical, Type, Hash, Calendar, ToggleLeft, Clock, Check,
-  FileSpreadsheet, ChevronDown
+  MoreVertical, Check, FileSpreadsheet, ChevronDown,
+  // Data type icons
+  ALargeSmall, Binary, CalendarDays, ToggleRight, Clock4
 } from 'lucide-react'
 
 // ============================================================================
@@ -97,13 +98,13 @@ export type DataTableProps = {
 
 const DataTypeIcon = ({ type, className = '' }: { type: DataType; className?: string }) => {
   const icons: Record<DataType, any> = {
-    text: Type,
-    number: Hash,
-    date: Calendar,
-    boolean: ToggleLeft,
-    timestamp: Clock
+    text: ALargeSmall,      // Abc text icon
+    number: Binary,          // Binary/numeric icon
+    date: CalendarDays,      // Calendar with days
+    boolean: ToggleRight,    // Toggle switch
+    timestamp: Clock4        // Clock with time
   }
-  const Icon = icons[type] || Type
+  const Icon = icons[type] || ALargeSmall
   return <Icon className={className} />
 }
 
@@ -233,11 +234,30 @@ const CustomHeader = (props: any) => {
 }
 
 // ============================================================================
-// Edited Cell Renderer
+// Edited Cell Renderer (with search highlighting)
 // ============================================================================
 
+const HighlightText = ({ text, searchTerm }: { text: string; searchTerm: string }) => {
+  if (!searchTerm || !text) return <>{text}</>
+  
+  const textStr = String(text)
+  const parts = textStr.split(new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
+  
+  return (
+    <>
+      {parts.map((part, i) => 
+        part.toLowerCase() === searchTerm.toLowerCase() ? (
+          <mark key={i} className="bg-warning/40 text-warning-foreground rounded px-0.5">{part}</mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  )
+}
+
 const EditedCellRenderer = (params: any) => {
-  const { value, editedCellMap, deletedRowIds, node, colDef } = params
+  const { value, editedCellMap, deletedRowIds, node, colDef, searchTerm } = params
   const rowIndex = node?.rowIndex ?? -1
   const rowId = node?.data?._row_id ?? rowIndex
   const c = colDef?.field
@@ -255,16 +275,22 @@ const EditedCellRenderer = (params: any) => {
     }
   }
 
+  const displayValue = value != null ? String(value) : ''
+
   if (isDeleted) {
     return (
       <div className="w-full h-full flex items-center">
-        <span className="line-through text-danger opacity-60">{value}</span>
+        <span className="line-through text-danger opacity-60">{displayValue}</span>
       </div>
     )
   }
 
   if (!editInfo) {
-    return <span className="truncate">{value}</span>
+    return (
+      <span className="truncate">
+        {searchTerm ? <HighlightText text={displayValue} searchTerm={searchTerm} /> : displayValue}
+      </span>
+    )
   }
 
   return (
@@ -274,7 +300,9 @@ const EditedCellRenderer = (params: any) => {
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShowTooltip(false)}
     >
-      <span className="truncate">{value}</span>
+      <span className="truncate">
+        {searchTerm ? <HighlightText text={displayValue} searchTerm={searchTerm} /> : displayValue}
+      </span>
       {showTooltip && createPortal(
         <div
           style={{
@@ -362,11 +390,15 @@ const ColumnTogglePanel = ({
   columns,
   visibleColumns,
   onToggle,
+  onSelectAll,
+  onDeselectAll,
   onClose
 }: {
   columns: Array<{ field: string; headerName: string; type?: DataType }>
   visibleColumns: Set<string>
   onToggle: (field: string) => void
+  onSelectAll: () => void
+  onDeselectAll: () => void
   onClose: () => void
 }) => {
   const [search, setSearch] = useState('')
@@ -374,50 +406,79 @@ const ColumnTogglePanel = ({
     c.headerName.toLowerCase().includes(search.toLowerCase()) ||
     c.field.toLowerCase().includes(search.toLowerCase())
   )
+  
+  const allSelected = visibleColumns.size === columns.length
+  const someSelected = visibleColumns.size > 0 && visibleColumns.size < columns.length
 
   return (
-    <div className="w-64 bg-surface-2 border border-divider rounded-lg shadow-elevated overflow-hidden animate-fade-in">
-      <div className="px-3 py-2 border-b border-divider flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={visibleColumns.size === columns.length}
-          onChange={() => {
-            if (visibleColumns.size === columns.length) {
-              // Hide all (keep at least one visible)
-            } else {
-              columns.forEach(c => !visibleColumns.has(c.field) && onToggle(c.field))
-            }
-          }}
-          className="w-4 h-4 rounded border-divider bg-surface-3 text-primary"
-        />
-        <div className="flex-1 relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted" />
+    <div className="w-72 bg-surface-2 border border-divider rounded-xl shadow-elevated overflow-hidden animate-fade-in">
+      {/* Header */}
+      <div className="px-3 py-2.5 border-b border-divider bg-surface-3/50">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-text-primary">Explore Columns</span>
+          <span className="text-[10px] text-text-muted">{visibleColumns.size} of {columns.length} visible</span>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted" />
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search for column"
-            className="w-full pl-7 pr-2 py-1.5 bg-surface-3 border border-divider rounded text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-primary/50"
+            placeholder="Search columns..."
+            className="w-full pl-8 pr-3 py-1.5 bg-surface-1 border border-divider rounded-lg text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+            autoFocus
           />
         </div>
       </div>
-      <div className="max-h-64 overflow-y-auto">
-        {filtered.map(col => (
-          <div 
-            key={col.field}
-            className="flex items-center gap-2 px-3 py-2 hover:bg-surface-3 cursor-pointer transition-colors"
-            onClick={() => onToggle(col.field)}
-          >
-            <input
-              type="checkbox"
-              checked={visibleColumns.has(col.field)}
-              onChange={() => onToggle(col.field)}
-              className="w-4 h-4 rounded border-divider bg-surface-3 text-primary"
-            />
-            <DataTypeIcon type={col.type || 'text'} className="w-3.5 h-3.5 text-text-muted" />
-            <span className="text-sm text-text-primary truncate">{col.headerName}</span>
+
+      {/* Select All / Deselect All buttons */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-divider">
+        <button
+          onClick={onSelectAll}
+          disabled={allSelected}
+          className="flex-1 px-2 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-3 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Select All
+        </button>
+        <div className="w-px h-4 bg-divider" />
+        <button
+          onClick={onDeselectAll}
+          disabled={visibleColumns.size <= 1}
+          className="flex-1 px-2 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-3 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Deselect All
+        </button>
+      </div>
+
+      {/* Column list */}
+      <div className="max-h-72 overflow-y-auto">
+        {filtered.length === 0 ? (
+          <div className="px-3 py-4 text-center text-xs text-text-muted">
+            No columns match "{search}"
           </div>
-        ))}
+        ) : (
+          filtered.map(col => (
+            <div 
+              key={col.field}
+              className={`flex items-center gap-2.5 px-3 py-2 hover:bg-surface-3 cursor-pointer transition-colors ${
+                visibleColumns.has(col.field) ? 'bg-primary/5' : ''
+              }`}
+              onClick={() => onToggle(col.field)}
+            >
+              <input
+                type="checkbox"
+                checked={visibleColumns.has(col.field)}
+                onChange={() => onToggle(col.field)}
+                className="w-4 h-4 rounded border-divider bg-surface-3 text-primary focus:ring-primary/30"
+              />
+              <DataTypeIcon type={col.type || 'text'} className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+              <span className="text-sm text-text-primary truncate flex-1">{col.headerName}</span>
+              {visibleColumns.has(col.field) && (
+                <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+              )}
+            </div>
+          ))
+        )}
       </div>
     </div>
   )
@@ -672,7 +733,7 @@ export default function DataTable({
           onSortChanged: () => setSortKey(k => k + 1)
         },
         cellRenderer: EditedCellRenderer,
-        cellRendererParams: { editedCellMap, deletedRowIds },
+        cellRendererParams: { editedCellMap, deletedRowIds, searchTerm: searchValue },
         cellStyle: (p: any) => {
           const ri = p?.rowIndex
           const rowId = p?.data?._row_id ?? ri
@@ -701,7 +762,7 @@ export default function DataTable({
     })
 
     return defs
-  }, [parsedColumns, showRowNumbers, visibleColumns, columnTypes, allowEdit, editedCellMap, deletedRowIds, invalidCellSet, invalidRowSet, sortKey])
+  }, [parsedColumns, showRowNumbers, visibleColumns, columnTypes, allowEdit, editedCellMap, deletedRowIds, invalidCellSet, invalidRowSet, sortKey, searchValue])
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
@@ -794,6 +855,17 @@ export default function DataTable({
     })
   }, [])
 
+  const selectAllColumns = useCallback(() => {
+    setVisibleColumns(new Set(parsedColumns.map(c => c.field)))
+  }, [parsedColumns])
+
+  const deselectAllColumns = useCallback(() => {
+    // Keep at least the first column visible
+    if (parsedColumns.length > 0) {
+      setVisibleColumns(new Set([parsedColumns[0].field]))
+    }
+  }, [parsedColumns])
+
   const applyFilter = useCallback((filter: FilterConfig) => {
     const newFilters = [...activeFilters.filter(f => f.field !== filter.field), filter]
     setActiveFilters(newFilters)
@@ -858,7 +930,7 @@ export default function DataTable({
   const actualTotalRows = totalRows ?? localRows.length
 
   return (
-    <div className={`flex flex-col bg-surface-1 border border-divider rounded-card overflow-hidden ${className}`} style={{ height, ...style }}>
+    <div className={`flex flex-col bg-surface-1 border-y border-divider overflow-hidden ${className}`} style={{ height, ...style }}>
       {/* Toolbar */}
       {showToolbar && (
         <div className="flex items-center justify-between px-3 py-2 border-b border-divider bg-surface-2">
@@ -919,6 +991,8 @@ export default function DataTable({
                       }))}
                       visibleColumns={visibleColumns}
                       onToggle={toggleColumn}
+                      onSelectAll={selectAllColumns}
+                      onDeselectAll={deselectAllColumns}
                       onClose={() => setShowColumnToggle(false)}
                     />
                   </div>

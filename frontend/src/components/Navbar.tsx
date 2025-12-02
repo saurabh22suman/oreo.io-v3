@@ -58,7 +58,7 @@ export default function Navbar() {
   return (
     <header 
       className={`
-        sticky top-0 z-50 h-14
+        sticky top-0 z-50 h-14 w-full
         transition-all duration-300
         ${scrolled 
           ? 'bg-surface-1/80 backdrop-blur-xl border-b border-divider/50 shadow-sm' 
@@ -66,10 +66,10 @@ export default function Navbar() {
         }
       `}
     >
-      <nav className="h-full max-w-[1600px] mx-auto px-4 sm:px-6">
-        <div className="flex h-full items-center justify-between gap-4">
-          {/* Brand */}
-          <Link to={user ? "/dashboard" : "/landing"} className="flex items-center gap-2.5 group shrink-0">
+      <nav className="h-full w-full px-4 sm:px-6 lg:px-8">
+        <div className="flex h-full items-center justify-between">
+          {/* Left: Brand - Always leftmost */}
+          <Link to={user ? "/dashboard" : "/landing"} className="flex items-center gap-2.5 group">
             <div className="relative w-8 h-8 flex items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 group-hover:from-primary/30 group-hover:to-primary/10 transition-all duration-300 shadow-sm">
               <img src="/images/oreo_rabbit.png" alt="oreo.io" className="h-5 w-5 object-contain" />
               <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-primary/10" />
@@ -79,18 +79,18 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* Desktop Navigation - Landing page links */}
+          {/* Center: Navigation Links (Landing page only) */}
           {!user && isLanding && (
-            <div className="hidden md:flex items-center gap-1 bg-surface-2/50 rounded-xl px-1.5 py-1">
+            <div className="hidden md:flex items-center gap-1 bg-surface-2/50 rounded-xl px-1.5 py-1 absolute left-1/2 -translate-x-1/2">
               <a href="#features" className="px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-3 rounded-lg transition-all">Features</a>
               <a href="#how" className="px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-3 rounded-lg transition-all">How it works</a>
               <Link to="/docs" className="px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-3 rounded-lg transition-all">Docs</Link>
             </div>
           )}
 
-          {/* Actions */}
+          {/* Right: Actions - Always rightmost */}
           <div className="hidden md:flex items-center gap-2">
-            {/* Theme Toggle - Enhanced */}
+            {/* Theme Toggle */}
             <button
               onClick={() => setDarkMode(!darkMode)}
               className="relative p-2.5 rounded-xl text-text-secondary hover:text-text-primary bg-surface-2/50 hover:bg-surface-3 transition-all duration-200 group"
@@ -146,7 +146,7 @@ export default function Navbar() {
                   />
                 </button>
 
-                {/* User Dropdown - Premium feel */}
+                {/* User Dropdown */}
                 {userMenuOpen && (
                   <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-surface-2 border border-divider/50 shadow-elevated animate-fade-in overflow-hidden">
                     {/* User info header */}

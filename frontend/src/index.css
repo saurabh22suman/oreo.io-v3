@@ -1,76 +1,94 @@
+/* Geist Font Import */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100;200;300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Oreo.io UI Revamp - Purple Accent Theme (Databricks-inspired) */
+/* Oreo.io UI Revamp - Warm Purple Accent Theme */
 
 :root {
-  /* Light Mode Variables - Purple Accent Databricks-inspired */
-  --bg-page: #F8F9FC;
+  /* Light Mode Variables - Warm Purple Undertones */
+  --bg-page: #F9FAFF;          /* Soft lavender-white */
   --bg-surface: #FFFFFF;
-  --bg-surface-2: #F3F4F8;
-  --bg-surface-3: #E8EAF0;
-  --bg-surface-4: #DCDFE6;
+  --bg-surface-2: #F5F3FB;     /* Purple-tinted off-white */
+  --bg-surface-3: #EBE8F5;     /* Warm lavender gray */
+  --bg-surface-4: #DDD8EC;     /* Deeper lavender */
   
   --primary: #7B4BFF;
+  --primary-hover: #6B3BEF;
   --primary-glow: #A87CFF;
-  --primary-gradient: linear-gradient(135deg, #7B4BFF 0%, #A87CFF 100%);
+  --primary-gradient: linear-gradient(135deg, #7B4BFF 0%, #9D6CFF 50%, #A87CFF 100%);
   
-  --text: #1A1D26;
-  --text-secondary: #5A5F72;
-  --text-muted: #8B90A0;
+  --text: #1F1A2E;             /* Warm dark purple-black */
+  --text-secondary: #5C5472;   /* Purple-tinted gray */
+  --text-muted: #908AA0;       /* Soft purple-gray */
   
-  --border-subtle: rgba(0,0,0,0.08);
-  --divider: #E2E5EB;
+  --border-subtle: rgba(123, 75, 255, 0.06);  /* Purple-tinted border */
+  --divider: #E5E1F0;          /* Warm purple divider */
   
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
-  --shadow-hover: 0 8px 24px rgba(123, 75, 255, 0.12);
-  --shadow-elevated: 0 12px 40px rgba(0, 0, 0, 0.08);
+  --shadow-card: 0 1px 3px rgba(123, 75, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-hover: 0 8px 24px rgba(123, 75, 255, 0.15);
+  --shadow-elevated: 0 12px 40px rgba(123, 75, 255, 0.1);
+  
+  /* Semantic colors - Light mode */
+  --success: #4CD97F;
+  --warning: #F4C84A;
+  --danger: #FF5370;
+  --info: #3EA7FF;
   
   /* AG Grid Light Theme */
   --ag-background-color: #FFFFFF;
-  --ag-header-background-color: #F8F9FC;
+  --ag-header-background-color: #F9FAFF;
   --ag-row-hover-color: rgba(123, 75, 255, 0.06);
-  --ag-border-color: #E2E5EB;
-  --ag-foreground-color: #1A1D26;
+  --ag-border-color: #E5E1F0;
+  --ag-foreground-color: #1F1A2E;
 }
 
-/* Dark Mode Variables */
+/* Dark Mode Variables - Warmer tones with purple undertones */
 .dark {
-  --bg-page: #0D0F14;
-  --bg-surface: #141720;
-  --bg-surface-2: #1A1E28;
-  --bg-surface-3: #212635;
-  --bg-surface-4: #2C3245;
+  --bg-page: #0F1117;          /* Warmer near-black with purple hint */
+  --bg-surface: #161822;       /* Warm dark surface */
+  --bg-surface-2: #1C1F2B;     /* Purple-tinted dark */
+  --bg-surface-3: #242838;     /* Warm medium dark */
+  --bg-surface-4: #2F3448;     /* Lighter warm dark */
   
-  --primary: #7B4BFF;
+  --primary: #8B5CF6;          /* Slightly warmer purple */
+  --primary-hover: #9D6CFF;
   --primary-glow: #A87CFF;
-  --primary-gradient: linear-gradient(135deg, #7B4BFF 0%, #A87CFF 100%);
+  --primary-gradient: linear-gradient(135deg, #7B4BFF 0%, #9D6CFF 50%, #A87CFF 100%);
   
-  --text: #F2F4FA;
-  --text-secondary: #9CA3AF;
-  --text-muted: #6B7280;
+  --text: #F5F3FA;             /* Warm off-white */
+  --text-secondary: #A8A3B8;   /* Purple-tinted gray */
+  --text-muted: #6E6980;       /* Soft purple-gray */
   
-  --border-subtle: rgba(255,255,255,0.06);
-  --divider: #2C3245;
+  --border-subtle: rgba(139, 92, 246, 0.08);  /* Purple-tinted border */
+  --divider: #2F3448;
   
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-hover: 0 8px 24px rgba(123, 75, 255, 0.2);
-  --shadow-elevated: 0 12px 40px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-hover: 0 8px 24px rgba(139, 92, 246, 0.25);
+  --shadow-elevated: 0 12px 40px rgba(0, 0, 0, 0.5);
+  
+  /* Semantic colors - Dark mode */
+  --success: #4CD97F;
+  --warning: #F4C84A;
+  --danger: #FF5370;
+  --info: #3EA7FF;
   
   /* AG Grid Dark Theme */
-  --ag-background-color: #141720;
-  --ag-header-background-color: #1A1E28;
-  --ag-row-hover-color: rgba(123, 75, 255, 0.08);
-  --ag-border-color: #2C3245;
-  --ag-foreground-color: #F2F4FA;
+  --ag-background-color: #161822;
+  --ag-header-background-color: #1C1F2B;
+  --ag-row-hover-color: rgba(139, 92, 246, 0.1);
+  --ag-border-color: #2F3448;
+  --ag-foreground-color: #F5F3FA;
 }
 
 html,
 body,
 #root {
   height: 100%;
-  font-family: 'Inter', 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: 'Geist', 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 250ms ease, color 250ms ease;
@@ -85,7 +103,7 @@ body {
 
 /* Typography per spec */
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'IBM Plex Sans', 'Inter', sans-serif;
+  font-family: 'Geist', 'Inter', sans-serif;
   line-height: 1.2;
   color: var(--text);
 }
@@ -155,10 +173,18 @@ h4 { font-size: 18px; font-weight: 600; }
 
 /* Inputs per spec: radius 10px, 1px subtle border, purple focus ring */
 .input {
-  @apply w-full px-4 py-3 rounded-input bg-surface-2 border text-text-primary;
+  @apply w-full py-3 rounded-input bg-surface-2 border text-text-primary;
+  padding-left: var(--input-pl, 1rem);
+  padding-right: var(--input-pr, 1rem);
   border-color: var(--divider);
   transition: all 200ms ease;
 }
+
+/* Allow Tailwind padding utilities to override */
+.input.pl-10 { --input-pl: 2.5rem; }
+.input.pl-12 { --input-pl: 3rem; }
+.input.pr-10 { --input-pr: 2.5rem; }
+.input.pr-12 { --input-pr: 3rem; }
 
 .input:focus {
   @apply outline-none;

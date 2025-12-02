@@ -12,8 +12,25 @@ import 'ag-grid-community/styles/ag-theme-quartz.css'
 import {
   ChevronLeft, Pencil, Save, RotateCcw, Trash2, Send, X,
   AlertCircle, Users, Loader2, ArrowRight, ArrowLeft, Eye, FileText,
-  CheckCircle, XCircle, Info, Lock, Lightbulb
+  CheckCircle, XCircle, Info, Lock, Lightbulb, Search, Download, Columns3, Check,
+  ALargeSmall, ArrowUp, ArrowDown, Binary, CalendarDays, ToggleRight, Clock4
 } from 'lucide-react'
+
+// Data type definition
+type DataType = 'text' | 'number' | 'date' | 'boolean' | 'timestamp'
+
+// Data Type Icon component
+const DataTypeIcon = ({ type, className = '' }: { type: DataType; className?: string }) => {
+  const icons: Record<DataType, any> = {
+    text: ALargeSmall,
+    number: Binary,
+    date: CalendarDays,
+    boolean: ToggleRight,
+    timestamp: Clock4
+  }
+  const Icon = icons[type] || ALargeSmall
+  return <Icon className={className} />
+}
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || '/api'
 
@@ -271,9 +288,30 @@ export default function LiveEditPage() {
   const [pageSize] = useState(100)
   const [totalRows, setTotalRows] = useState(0)
 
-  // Info dialog state
-  const [showInfoDialog, setShowInfoDialog] = useState(true)
+  // Search & Column toggle state
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchValue, setSearchValue] = useState('')
+  const [searchMatches, setSearchMatches] = useState(0)
+  const [currentMatch, setCurrentMatch] = useState(1)
+  const [showColumnToggle, setShowColumnToggle] = useState(false)
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set())
+  const columnToggleRef = useRef<HTMLDivElement>(null)
+
+  // Column types from schema
+  const [columnTypes, setColumnTypes] = useState<Map<string, DataType>>(new Map())
+
+  // Info dialog state - show popup only on first visit (check localStorage)
+  const [showInfoDialog, setShowInfoDialog] = useState(() => {
+    const dismissed = localStorage.getItem('liveEditInfoDismissed')
+    return dismissed !== 'true'
+  })
   const [showInfoTooltip, setShowInfoTooltip] = useState(false)
+
+  // Handler to dismiss and remember
+  const dismissInfoDialog = useCallback(() => {
+    setShowInfoDialog(false)
+    localStorage.setItem('liveEditInfoDismissed', 'true')
+  }, [])
 
   // Computed values
   const editedCellMap = useMemo(() => {
@@ -352,6 +390,22 @@ export default function LiveEditPage() {
             const allColumns = Object.keys(schemaObj.properties || {})
             const editable = new Set(allColumns.filter(col => !readonlyColumns.has(col)))
             setEditableColumns(editable)
+
+            // Extract column types from schema
+            const types = new Map<string, DataType>()
+            for (const [col, prop] of Object.entries(schemaObj.properties || {})) {
+              const p = prop as any
+              if (p.type === 'integer' || p.type === 'number') {
+                types.set(col, 'number')
+              } else if (p.type === 'boolean') {
+                types.set(col, 'boolean')
+              } else if (p.format === 'date' || p.format === 'date-time') {
+                types.set(col, p.format === 'date-time' ? 'timestamp' : 'date')
+              } else {
+                types.set(col, 'text')
+              }
+            }
+            setColumnTypes(types)
           }
         } catch (e) {
           console.error('Failed to load schema:', e)
@@ -367,6 +421,99 @@ export default function LiveEditPage() {
       }
     })()
   }, [projectId, dsId])
+
+  // Initialize visible columns when columns change
+  useEffect(() => {
+    if (columns.length > 0 && visibleColumns.size === 0) {
+      setVisibleColumns(new Set(columns))
+    }
+  }, [columns])
+
+  // Search functionality
+  const handleSearch = useCallback((value: string) => {
+    setSearchValue(value)
+    if (!value.trim()) {
+      setSearchMatches(0)
+      setCurrentMatch(1)
+      return
+    }
+    
+    // Count matches in visible rows
+    const searchLower = value.toLowerCase()
+    let count = 0
+    rows.forEach(row => {
+      columns.forEach(col => {
+        if (visibleColumns.has(col)) {
+          const cellValue = String(row[col] ?? '').toLowerCase()
+          if (cellValue.includes(searchLower)) {
+            count++
+          }
+        }
+      })
+    })
+    setSearchMatches(count)
+    setCurrentMatch(count > 0 ? 1 : 0)
+  }, [rows, columns, visibleColumns])
+
+  // Column toggle handlers
+  const toggleColumn = useCallback((field: string) => {
+    setVisibleColumns(prev => {
+      const next = new Set(prev)
+      if (next.has(field)) {
+        if (next.size > 1) next.delete(field)
+      } else {
+        next.add(field)
+      }
+      return next
+    })
+  }, [])
+
+  const selectAllColumns = useCallback(() => {
+    setVisibleColumns(new Set(columns))
+  }, [columns])
+
+  const deselectAllColumns = useCallback(() => {
+    // Keep at least the first column
+    if (columns.length > 0) {
+      setVisibleColumns(new Set([columns[0]]))
+    }
+  }, [columns])
+
+  // Export CSV
+  const exportCsv = useCallback(() => {
+    if (!api) return
+    const visibleCols = columns.filter(c => visibleColumns.has(c))
+    const csvHeader = visibleCols.join(',')
+    const csvRows = rows.map(row => 
+      visibleCols.map(col => {
+        const val = String(row[col] ?? '')
+        return val.includes(',') || val.includes('"') || val.includes('\n')
+          ? `"${val.replace(/"/g, '""')}"`
+          : val
+      }).join(',')
+    )
+    const csv = [csvHeader, ...csvRows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${dataset?.name || 'export'}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [api, columns, visibleColumns, rows, dataset])
+
+  // Click outside to close column toggle
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (columnToggleRef.current && !columnToggleRef.current.contains(e.target as Node)) {
+        setShowColumnToggle(false)
+      }
+    }
+    if (showColumnToggle) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showColumnToggle])
 
   const loadData = async (offset: number, limit: number) => {
     try {
@@ -428,31 +575,38 @@ export default function LiveEditPage() {
 
   // Column definitions
   const colDefs = useMemo<ColDef[]>(() => {
-    // Row selection column
-    const selectionCol: ColDef = {
-      headerCheckboxSelection: true,
-      checkboxSelection: true,
-      width: 50,
-      pinned: 'left',
-      lockPosition: true,
-      headerClass: 'bg-[#0f172a]',
-    }
-
-    const dataCols: ColDef[] = columns.map((c) => {
+    // Filter columns to only show visible ones
+    const visibleColumnsList = columns.filter(c => visibleColumns.has(c))
+    const dataCols: ColDef[] = visibleColumnsList.map((c, index) => {
+      // Add selection checkbox to first column
+      const isFirstColumn = index === 0
       const isReadonly = !editableColumns.has(c)
       return {
         headerName: c,
         field: c,
         colId: c,
-        // Custom header component to show Lock icon for readonly columns
-        headerComponent: isReadonly ? (props: any) => (
-          <div className="flex items-center gap-1 text-xs font-bold text-slate-500">
-            <span>{props.displayName}</span>
-            <span title="Read-only column">
-              <Lock className="w-3 h-3 text-slate-500" />
-            </span>
-          </div>
-        ) : undefined,
+        // Add checkbox selection to first column only with separator
+        ...(isFirstColumn ? {
+          headerCheckboxSelection: true,
+          checkboxSelection: true,
+          cellStyle: { borderRight: '2px solid #334155' },
+          headerClass: 'border-r-2 border-slate-700',
+        } : {}),
+        // Custom header component to show data type icon and Lock icon for readonly columns
+        headerComponent: (props: any) => {
+          const colType = columnTypes.get(c) || 'text'
+          return (
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
+              <DataTypeIcon type={colType} className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+              <span>{props.displayName}</span>
+              {isReadonly && (
+                <span title="Read-only column">
+                  <Lock className="w-3 h-3 text-slate-500" />
+                </span>
+              )}
+            </div>
+          )
+        },
         editable: (params: any) => {
           // Don't allow editing deleted rows or non-editable columns
           const rowId = params.data?._row_id
@@ -533,14 +687,22 @@ export default function LiveEditPage() {
       }
     })
 
-    return [selectionCol, ...dataCols]
-  }, [columns, editableColumns, editedCellMap, deletedRowIds, validationErrors])
+    return dataCols
+  }, [columns, visibleColumns, editableColumns, editedCellMap, deletedRowIds, validationErrors])
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
     filter: true,
     resizable: true,
   }), [])
+
+  // Force AG Grid to refresh cells when edited cells or deleted rows change
+  // This ensures cell styling is updated after state changes
+  useEffect(() => {
+    if (api) {
+      api.refreshCells({ force: true })
+    }
+  }, [api, editedCellMap, deletedRowIds, validationErrors])
 
   const onGridReady = useCallback((params: { api: GridApi }) => {
     setApi(params.api)
@@ -656,12 +818,22 @@ export default function LiveEditPage() {
 
   // Undo all changes
   const handleUndo = useCallback(() => {
+    // Clear all edit state
     setEditedCells([])
     setDeletedRows([])
-    setValidationErrors(new Map()) // Clear validation errors
-    setRows(JSON.parse(JSON.stringify(originalRowsRef.current)))
-    api?.setGridOption('rowData', originalRowsRef.current)
-    api?.refreshCells({ force: true })
+    setValidationErrors(new Map())
+    
+    // Restore original rows
+    const originalData = JSON.parse(JSON.stringify(originalRowsRef.current))
+    setRows(originalData)
+    
+    // Force AG Grid to refresh with the new data
+    if (api) {
+      api.setGridOption('rowData', originalData)
+      // Redraw all rows to clear cell styles (force: true ensures styles are recalculated)
+      api.redrawRows()
+    }
+    
     setToast('All changes reverted')
   }, [api])
 
@@ -773,15 +945,33 @@ export default function LiveEditPage() {
                 <span className="px-2 py-0.5 rounded text-xs font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase tracking-wider">
                   Beta
                 </span>
+                {/* Hint icon with tooltip */}
+                <div className="relative inline-flex">
+                  <button
+                    type="button"
+                    onMouseEnter={() => setShowInfoTooltip(true)}
+                    onMouseLeave={() => setShowInfoTooltip(false)}
+                    onClick={() => setShowInfoDialog(true)}
+                    className="p-1 rounded-full text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 transition-colors"
+                    title="How to use Live Edit"
+                  >
+                    <Lightbulb className="w-4 h-4" />
+                  </button>
+                  {showInfoTooltip && (
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 w-72 p-3 bg-surface-2 border border-divider rounded-lg shadow-xl text-sm text-text-secondary">
+                      <p className="font-medium text-text mb-1">Live Edit Mode</p>
+                      <p className="text-xs">
+                        Edit cells by double-clicking. Select rows to mark for deletion.
+                        Changes are staged until you submit a change request for approval.
+                      </p>
+                      <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-3 h-3 bg-surface-2 border-l border-t border-divider rotate-45"></div>
+                    </div>
+                  )}
+                </div>
               </h1>
-              <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5">
-                <span className="flex items-center gap-1">
-                  <div className={`w-1.5 h-1.5 rounded-full ${sessionId ? 'bg-green-500 animate-pulse' : 'bg-slate-500'}`}></div>
-                  {sessionId ? 'Connected' : 'Connecting...'}
-                </span>
-                <span>•</span>
-                <span>{totalRows.toLocaleString()} rows</span>
-              </div>
+              <p className="text-xs text-text-secondary mt-0.5">
+                {totalRows.toLocaleString()} rows
+              </p>
             </div>
           </div>
 
@@ -818,47 +1008,101 @@ export default function LiveEditPage() {
       </div>
 
       {/* Alerts */}
-      <div className="px-6 pt-4 space-y-2">
+      <div className="px-4 pt-3 space-y-2">
         {error && <Alert type="error" message={error} onClose={() => setError('')} />}
         {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss />}
       </div>
 
-      {/* Dismissible Info Dialog */}
+      {/* Welcome Popup Modal - shows on first visit */}
       {showInfoDialog && (
-        <div className="px-6 pt-4">
-          <div className="flex items-start gap-3 p-4 bg-purple-900/20 border border-purple-500/30 rounded-3xl relative">
-            <button
-              onClick={() => setShowInfoDialog(false)}
-              className="absolute top-2 right-2 p-1 text-purple-400 hover:text-purple-200 hover:bg-purple-800/30 rounded transition-colors"
-              title="Dismiss"
-            >
-              <X className="w-4 h-4" />
-            </button>
-            <Info className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-purple-200 pr-6">
-              <p className="font-medium mb-1">Live Edit Mode</p>
-              <p className="text-purple-300/80">
-                Edit cells by double-clicking. Select rows and click "Delete Selected" to mark for deletion.
-                Changes are staged until you submit a change request for approval.
-                {editableColumns.size < columns.length && (
-                  <span className="block mt-1 text-purple-400">
-                    Note: Some columns are read-only based on business rules.
-                  </span>
-                )}
-                {businessRules.length > 0 && (
-                  <span className="block mt-1 text-purple-400">
-                    Business rules are enforced. Invalid values will be highlighted in red.
-                  </span>
-                )}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={dismissInfoDialog}
+          />
+          {/* Modal */}
+          <div className="relative w-full max-w-lg bg-surface border border-divider rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-divider bg-gradient-to-r from-purple-500/10 to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-purple-500/20">
+                  <Lightbulb className="w-5 h-5 text-purple-400" />
+                </div>
+                <h2 className="text-lg font-semibold text-text">Welcome to Live Edit</h2>
+              </div>
+              <button
+                onClick={dismissInfoDialog}
+                className="p-1.5 rounded-lg text-text-secondary hover:text-text hover:bg-surface-2 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {/* Content */}
+            <div className="p-5 space-y-4">
+              <p className="text-text-secondary text-sm">
+                Live Edit mode allows you to make changes to the dataset directly. Here's how it works:
               </p>
+              <ul className="space-y-3">
+                <li className="flex items-start gap-3 text-sm">
+                  <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Pencil className="w-3 h-3 text-purple-400" />
+                  </div>
+                  <span className="text-text-secondary">
+                    <span className="text-text font-medium">Edit cells</span> by double-clicking on them. Modified cells will be highlighted.
+                  </span>
+                </li>
+                <li className="flex items-start gap-3 text-sm">
+                  <div className="w-6 h-6 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Trash2 className="w-3 h-3 text-red-400" />
+                  </div>
+                  <span className="text-text-secondary">
+                    <span className="text-text font-medium">Delete rows</span> by selecting them (checkbox) and clicking "Delete Selected".
+                  </span>
+                </li>
+                <li className="flex items-start gap-3 text-sm">
+                  <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Send className="w-3 h-3 text-green-400" />
+                  </div>
+                  <span className="text-text-secondary">
+                    <span className="text-text font-medium">Submit changes</span> for approval via a Change Request when you're ready.
+                  </span>
+                </li>
+              </ul>
+              {(editableColumns.size < columns.length || businessRules.length > 0) && (
+                <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg text-sm">
+                  {editableColumns.size < columns.length && (
+                    <p className="flex items-center gap-2 text-purple-300">
+                      <Lock className="w-4 h-4 flex-shrink-0" />
+                      Some columns are read-only based on business rules.
+                    </p>
+                  )}
+                  {businessRules.length > 0 && (
+                    <p className="flex items-center gap-2 text-purple-300 mt-1">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                      Business rules will validate your changes in real-time.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* Footer */}
+            <div className="p-4 border-t border-divider bg-surface-2 flex justify-end">
+              <button
+                onClick={dismissInfoDialog}
+                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
+              >
+                Got it, let's start!
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Toolbar */}
-      <div className="px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      {/* Toolbar - Actions on left, Tools on right */}
+      <div className="px-4 py-2 flex items-center justify-between bg-surface-1 border-b border-divider">
+        <div className="flex items-center gap-3">
+          {/* Delete/Restore selection actions */}
           {selectedRows.length > 0 && (
             <button
               onClick={handleDeleteRows}
@@ -878,37 +1122,150 @@ export default function LiveEditPage() {
               Restore All ({deletedRows.length})
             </button>
           )}
-        </div>
 
-        {/* Stats */}
-        <div className="flex items-center gap-4 text-sm text-slate-400">
+          {/* Stats */}
           {editedCells.length > 0 && (
-            <span className="flex items-center gap-1.5 px-2 py-1 bg-blue-900/30 text-blue-300 rounded">
+            <span className="flex items-center gap-1.5 px-2 py-1 bg-blue-900/30 text-blue-300 rounded text-sm">
               <Pencil className="w-3.5 h-3.5" />
               {editedCells.length} cell{editedCells.length !== 1 ? 's' : ''} edited
             </span>
           )}
           {deletedRows.length > 0 && (
-            <span className="flex items-center gap-1.5 px-2 py-1 bg-red-900/30 text-red-300 rounded">
+            <span className="flex items-center gap-1.5 px-2 py-1 bg-red-900/30 text-red-300 rounded text-sm">
               <Trash2 className="w-3.5 h-3.5" />
               {deletedRows.length} row{deletedRows.length !== 1 ? 's' : ''} deleted
             </span>
           )}
           {validationErrors.size > 0 && (
-            <span className="flex items-center gap-1.5 px-2 py-1 bg-red-900/50 text-red-300 rounded border border-red-500/30">
+            <span className="flex items-center gap-1.5 px-2 py-1 bg-red-900/50 text-red-300 rounded border border-red-500/30 text-sm">
               <AlertCircle className="w-3.5 h-3.5" />
               {validationErrors.size} validation error{validationErrors.size !== 1 ? 's' : ''}
             </span>
           )}
-          <span>{totalRows.toLocaleString()} total rows</span>
+        </div>
+
+        {/* Tools - Search, Column toggle on right */}
+        <div className="flex items-center gap-2">
+          {/* Search */}
+          {showSearch ? (
+            <div className="flex items-center gap-2 px-3 py-2 bg-surface-2 border border-divider rounded-lg">
+              <Search className="w-4 h-4 text-text-muted" />
+              <input
+                type="text"
+                value={searchValue}
+                onChange={e => handleSearch(e.target.value)}
+                placeholder="Search displayed data"
+                className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none min-w-[200px]"
+                autoFocus
+              />
+              {searchValue && (
+                <>
+                  <span className="text-xs text-text-muted px-2 border-l border-divider">
+                    {searchMatches > 0 ? `${currentMatch} of ${searchMatches}` : 'No matches'}
+                  </span>
+                  <div className="flex items-center gap-0.5 border-l border-divider pl-2">
+                    <button 
+                      onClick={() => setCurrentMatch(m => Math.max(1, m - 1))} 
+                      className="p-1 hover:bg-surface-3 rounded transition-colors" 
+                      disabled={searchMatches === 0}
+                    >
+                      <ArrowUp className="w-3.5 h-3.5 text-text-muted" />
+                    </button>
+                    <button 
+                      onClick={() => setCurrentMatch(m => Math.min(searchMatches, m + 1))} 
+                      className="p-1 hover:bg-surface-3 rounded transition-colors" 
+                      disabled={searchMatches === 0}
+                    >
+                      <ArrowDown className="w-3.5 h-3.5 text-text-muted" />
+                    </button>
+                  </div>
+                </>
+              )}
+              <button 
+                onClick={() => { setShowSearch(false); setSearchValue(''); setSearchMatches(0) }} 
+                className="p-1 hover:bg-surface-3 rounded transition-colors ml-1"
+              >
+                <X className="w-4 h-4 text-text-muted" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowSearch(true)}
+              className="p-2 hover:bg-surface-2 rounded-lg transition-colors text-text-muted hover:text-text-primary"
+              title="Search displayed data"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Column toggle */}
+          <div className="relative" ref={columnToggleRef}>
+            <button
+              onClick={() => setShowColumnToggle(!showColumnToggle)}
+              className="p-2 hover:bg-surface-2 rounded-lg transition-colors text-text-muted hover:text-text-primary"
+              title="Explore columns"
+            >
+              <Columns3 className="w-4 h-4" />
+            </button>
+            {showColumnToggle && (
+              <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-surface-2 border border-divider rounded-xl shadow-elevated overflow-hidden">
+                <div className="px-3 py-2.5 border-b border-divider bg-surface-3/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-text-primary">Explore Columns</span>
+                    <span className="text-[10px] text-text-muted">{visibleColumns.size} of {columns.length} visible</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2 border-b border-divider">
+                  <button
+                    onClick={selectAllColumns}
+                    disabled={visibleColumns.size === columns.length}
+                    className="flex-1 px-2 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-3 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Select All
+                  </button>
+                  <div className="w-px h-4 bg-divider" />
+                  <button
+                    onClick={deselectAllColumns}
+                    disabled={visibleColumns.size <= 1}
+                    className="flex-1 px-2 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-3 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Deselect All
+                  </button>
+                </div>
+                <div className="max-h-72 overflow-y-auto">
+                  {columns.map(col => (
+                    <div 
+                      key={col}
+                      className={`flex items-center gap-2.5 px-3 py-2 hover:bg-surface-3 cursor-pointer transition-colors ${
+                        visibleColumns.has(col) ? 'bg-primary/5' : ''
+                      }`}
+                      onClick={() => toggleColumn(col)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.has(col)}
+                        onChange={() => toggleColumn(col)}
+                        className="w-4 h-4 rounded border-divider bg-surface-3 text-primary focus:ring-primary/30"
+                      />
+                      <DataTypeIcon type={columnTypes.get(col) || 'text'} className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+                      <span className="text-sm text-text-primary truncate flex-1">{col}</span>
+                      {visibleColumns.has(col) && (
+                        <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Grid */}
-      <div className="px-6 pb-6">
+      <div className="w-full">
         <div
-          className="ag-theme-quartz-dark rounded-3xl overflow-hidden border border-divider shadow-lg shadow-black/5"
-          style={{ height: 'calc(100vh - 320px)', width: '100%' }}
+          className="ag-theme-quartz-dark overflow-hidden border-y border-divider"
+          style={{ height: 'calc(100vh - 220px)', width: '100%' }}
         >
           <AgGridReact
             ref={gridRef}
@@ -928,6 +1285,35 @@ export default function LiveEditPage() {
               'deleted-row': (params) => deletedRowIds.has(params.data?._row_id)
             }}
           />
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 flex items-center justify-between border-t border-divider bg-surface-1">
+          {/* Download Button - Left */}
+          <button
+            onClick={exportCsv}
+            className="flex items-center gap-2 px-4 py-2 bg-surface-2 hover:bg-surface-3 border border-divider rounded-xl text-sm text-text-secondary hover:text-text-primary transition-all"
+          >
+            <Download className="w-4 h-4" />
+            <span>Download CSV</span>
+          </button>
+
+          {/* Stats - Right */}
+          <div className="flex items-center gap-4 text-sm text-text-muted">
+            <span>{rows.length.toLocaleString()} total rows</span>
+            {editedCells.length > 0 && (
+              <span className="flex items-center gap-1.5 text-blue-400">
+                <Pencil className="w-3.5 h-3.5" />
+                {editedCells.length} edited
+              </span>
+            )}
+            {deletedRows.length > 0 && (
+              <span className="flex items-center gap-1.5 text-red-400">
+                <Trash2 className="w-3.5 h-3.5" />
+                {deletedRows.length} deleted
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

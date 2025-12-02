@@ -140,7 +140,7 @@ export default function DatasetViewerPage() {
   return (
     <div className="min-h-screen bg-surface-1 text-text animate-fade-in">
       <div className="bg-surface-1/50 backdrop-blur-sm border-b border-divider sticky top-0 z-40">
-        <div className="max-w-full px-6 py-4">
+        <div className="max-w-full px-4 py-3">
           <div className="flex items-start justify-between gap-6">
             <div className="flex items-center gap-4">
               <Link
@@ -182,11 +182,11 @@ export default function DatasetViewerPage() {
         </div>
       </div>
 
-      <div className="max-w-full px-6 py-6">
-        {error && <Alert type="error" message={error} onClose={() => setError('')} />}
+      <div className="w-full">
+        {error && <div className="px-4 py-2"><Alert type="error" message={error} onClose={() => setError('')} /></div>}
 
         {loading && rows.length === 0 ? (
-          <div className="flex items-center justify-center h-[calc(100vh-220px)]">
+          <div className="flex items-center justify-center h-[calc(100vh-140px)]">
             <div className="text-text-secondary flex items-center gap-2">
               <RefreshCw className="w-4 h-4 animate-spin" />
               Loading data...
@@ -199,7 +199,7 @@ export default function DatasetViewerPage() {
             columnTypes={detectedColumnTypes}
             columnMappings={columnMappings}
             title={dataset?.name || 'Dataset'}
-            height="calc(100vh - 220px)"
+            height="calc(100vh - 140px)"
             allowEdit={false}
             allowSearch={true}
             allowFilter={true}
@@ -213,7 +213,6 @@ export default function DatasetViewerPage() {
             onRefresh={handleRefresh}
             runtime={runtime}
             lastRefreshed={lastRefreshed}
-            className="shadow-lg shadow-black/5"
           />
         )}
       </div>

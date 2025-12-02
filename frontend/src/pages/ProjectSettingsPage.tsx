@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { deleteProject, getProject, updateProject, myProjectRole } from '../api'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '../components/ui/dialog'
+import { DeleteConfirmationDialog } from '../components/ui/DeleteConfirmationDialog'
 import ProjectLayout from '../components/ProjectLayout'
-import Card from '../components/Card'
 import Alert from '../components/Alert'
 import { Settings, Trash2, AlertTriangle, Save, Type, FileText, Loader2 } from 'lucide-react'
 
@@ -14,7 +13,6 @@ export default function ProjectSettingsPage() {
   const [toast, setToast] = useState<{ type: 'success' | 'error', message: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [name, setName] = useState('')
-  const [confirmName, setConfirmName] = useState('')
   const [description, setDescription] = useState('')
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -157,69 +155,25 @@ export default function ProjectSettingsPage() {
       </div>
 
       {/* Delete confirmation modal */}
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-w-md w-full p-0 overflow-hidden rounded-2xl border-0 bg-surface-1">
-          <div className="bg-error/5 p-6 flex flex-col items-center text-center border-b border-error/10">
-            <div className="w-12 h-12 rounded-full bg-error/10 flex items-center justify-center mb-4 text-error">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-            <DialogTitle className="text-xl font-bold text-text">Delete Project?</DialogTitle>
-            <DialogDescription className="text-text-secondary mt-2">
-              This will permanently delete <span className="font-bold text-text">{project?.name}</span>. This action cannot be undone.
-            </DialogDescription>
-          </div>
-
-          <div className="p-6 bg-surface-1">
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-text-secondary mb-2">
-                Type <span className="font-mono font-bold select-all text-text">{project?.name}</span> to confirm
-              </label>
-              <input
-                type="text"
-                className="w-full px-4 py-2 rounded-lg border border-divider bg-surface-2 text-text focus:ring-2 focus:ring-error/20 focus:border-error outline-none transition-all"
-                placeholder="Type project name"
-                onChange={(e) => setConfirmName(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center justify-end gap-3">
-              <DialogClose asChild>
-                <button
-                  className="px-4 py-2 rounded-xl font-medium text-text-secondary hover:bg-surface-2 transition-colors"
-                  disabled={deleting}
-                >
-                  Cancel
-                </button>
-              </DialogClose>
-              <button
-                className="px-6 py-2 rounded-xl bg-error hover:bg-error-hover text-white font-semibold shadow-lg shadow-error/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                disabled={deleting || confirmName !== project?.name}
-                onClick={async () => {
-                  setDeleting(true)
-                  try {
-                    await deleteProject(projectId)
-                    setDeleteOpen(false)
-                    nav('/projects')
-                  }
-                  catch (e: any) { setToast({ type: 'error', message: e.message }) }
-                  finally { setDeleting(false) }
-                }}
-              >
-                {deleting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Deleting...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4" />
-                    Yes, Delete Project
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        itemName={project?.name || ''}
+        itemType="project"
+        loading={deleting}
+        onConfirm={async () => {
+          setDeleting(true)
+          try {
+            await deleteProject(projectId)
+            setDeleteOpen(false)
+            nav('/projects')
+          } catch (e: any) {
+            setToast({ type: 'error', message: e.message })
+          } finally {
+            setDeleting(false)
+          }
+        }}
+      />
     </ProjectLayout>
   )
 }

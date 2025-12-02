@@ -37,21 +37,29 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
-      {/* Background Elements */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-secondary/5 rounded-full blur-3xl"></div>
+    <div className="min-h-screen flex items-center justify-center bg-surface-1 p-4 relative overflow-hidden">
+      {/* Background Elements - Warm purple glow */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-primary/10 rounded-full blur-[120px]"></div>
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-primary-glow/10 rounded-full blur-[120px]"></div>
+        {/* Subtle grid pattern */}
+        <div 
+          className="absolute inset-0 opacity-[0.02]"
+          style={{
+            backgroundImage: `linear-gradient(rgba(123, 75, 255, 0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(123, 75, 255, 0.5) 1px, transparent 1px)`,
+            backgroundSize: '60px 60px'
+          }}
+        />
       </div>
 
       <div className="w-full max-w-md relative z-10 animate-fade-in">
-        <div className="bg-surface-1 border border-divider rounded-3xl shadow-xl overflow-hidden">
+        <div className="bg-surface-2 border border-divider rounded-2xl shadow-elevated overflow-hidden">
           {/* Header */}
           <div className="px-8 pt-8 pb-6 text-center">
-            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-6 text-primary">
+            <div className="w-16 h-16 bg-gradient-to-br from-primary/20 to-primary/5 rounded-2xl flex items-center justify-center mx-auto mb-6 text-primary ring-1 ring-inset ring-primary/10">
               {isLogin ? <LogIn className="w-8 h-8" /> : <UserPlus className="w-8 h-8" />}
             </div>
-            <h1 className="text-2xl font-bold text-text font-display mb-2">
+            <h1 className="text-2xl font-bold text-text-primary mb-2">
               {isLogin ? 'Welcome Back' : 'Create Account'}
             </h1>
             <p className="text-text-secondary text-sm">
@@ -73,13 +81,13 @@ export default function AuthPage() {
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider ml-1">Email</label>
                 <div className="relative group">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors z-10">
                     <Mail className="w-5 h-5" />
                   </div>
                   <input
                     type="email"
                     required
-                    className="w-full pl-10 pr-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-text placeholder:text-text-muted focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    className="input pl-10"
                     placeholder="name@company.com"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
@@ -90,13 +98,13 @@ export default function AuthPage() {
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider ml-1">Password</label>
                 <div className="relative group">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors z-10">
                     <Lock className="w-5 h-5" />
                   </div>
                   <input
                     type="password"
                     required
-                    className="w-full pl-10 pr-4 py-2.5 bg-surface-2 border border-divider rounded-xl text-text placeholder:text-text-muted focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    className="input pl-10"
                     placeholder="••••••••"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
@@ -107,7 +115,7 @@ export default function AuthPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 group mt-2"
+                className="w-full py-3 bg-gradient-to-r from-primary to-primary-glow hover:from-primary-hover hover:to-primary text-white font-semibold rounded-btn shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all flex items-center justify-center gap-2 group mt-2"
               >
                 {loading ? (
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
