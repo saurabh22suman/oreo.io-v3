@@ -18,15 +18,6 @@ type QueryResult = {
   executionTime?: number
 }
 
-type SharedQuery = {
-  id: string
-  sql: string
-  result: QueryResult
-  createdAt: string
-  datasetName: string
-  projectName: string
-}
-
 // ============================================================================
 // Constants
 // ============================================================================
@@ -44,10 +35,6 @@ const SAMPLE_QUERIES = [
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-function generateShareId(): string {
-  return Math.random().toString(36).substring(2, 10) + Date.now().toString(36)
-}
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`
@@ -323,24 +310,31 @@ export default function DeveloperOptionsPage() {
 
     setSharing(true)
     try {
-      // Store in localStorage for now (in production, would use backend)
-      const shareId = generateShareId()
-      const sharedQuery: SharedQuery = {
-        id: shareId,
-        sql,
-        result,
-        createdAt: new Date().toISOString(),
-        datasetName: dataset?.name || 'Unknown',
-        projectName: project?.name || 'Unknown',
+      // Store in backend for public sharing
+      const response = await fetch(`${API_BASE}/shared-queries`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({
+          dataset_id: dsId,
+          project_id: projectId,
+          sql,
+          columns: result.columns,
+          rows: result.rows,
+          total: result.total,
+          dataset_name: dataset?.name || 'Unknown',
+          project_name: project?.name || 'Unknown',
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to create share link')
       }
 
-      // Store in localStorage
-      const shares = JSON.parse(localStorage.getItem('shared_queries') || '{}')
-      shares[shareId] = sharedQuery
-      localStorage.setItem('shared_queries', JSON.stringify(shares))
-
-      // Generate share URL
-      const url = `${window.location.origin}/share/${shareId}`
+      const data = await response.json()
+      const url = `${window.location.origin}/share/${data.id}`
       setShareUrl(url)
       setShareModalOpen(true)
     } catch (e: any) {

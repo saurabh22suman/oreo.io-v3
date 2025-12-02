@@ -19,11 +19,24 @@ type QueryResult = {
 type SharedQuery = {
   id: string
   sql: string
+  columns: string
+  rows: string
+  total: number
+  created_at: string
+  dataset_name: string
+  project_name: string
+}
+
+type ParsedSharedQuery = {
+  id: string
+  sql: string
   result: QueryResult
   createdAt: string
   datasetName: string
   projectName: string
 }
+
+const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
 // ============================================================================
 // Helper Functions
@@ -123,26 +136,47 @@ function ResultsTable({ result }: { result: QueryResult }) {
 
 export default function SharedQueryPage() {
   const { shareId } = useParams()
-  const [sharedQuery, setSharedQuery] = useState<SharedQuery | null>(null)
+  const [sharedQuery, setSharedQuery] = useState<ParsedSharedQuery | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    // Load shared query from localStorage
-    try {
-      const shares = JSON.parse(localStorage.getItem('shared_queries') || '{}')
-      const query = shares[shareId || '']
-      
-      if (query) {
-        setSharedQuery(query)
-      } else {
-        setError('Shared query not found or has expired')
+    // Load shared query from backend
+    const fetchSharedQuery = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/shared-queries/${shareId}`)
+        
+        if (!response.ok) {
+          const err = await response.json()
+          throw new Error(err.error || 'Shared query not found')
+        }
+
+        const data: SharedQuery = await response.json()
+        
+        // Parse JSON strings for columns and rows
+        const columns = JSON.parse(data.columns || '[]')
+        const rows = JSON.parse(data.rows || '[]')
+        
+        setSharedQuery({
+          id: data.id,
+          sql: data.sql,
+          result: {
+            columns,
+            rows,
+            total: data.total,
+          },
+          createdAt: data.created_at,
+          datasetName: data.dataset_name,
+          projectName: data.project_name,
+        })
+      } catch (e: any) {
+        setError(e.message || 'Failed to load shared query')
+      } finally {
+        setLoading(false)
       }
-    } catch (e) {
-      setError('Failed to load shared query')
-    } finally {
-      setLoading(false)
     }
+
+    fetchSharedQuery()
   }, [shareId])
 
   const handleDownload = () => {

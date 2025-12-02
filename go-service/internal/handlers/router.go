@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -15,6 +18,13 @@ import (
 	services "github.com/oreo-io/oreo.io-v2/go-service/internal/service"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/storage"
 )
+
+// generateShareID creates a random 16-character hex string for share URLs
+func generateShareID() string {
+	bytes := make([]byte, 8)
+	rand.Read(bytes)
+	return hex.EncodeToString(bytes)
+}
 
 // SetupRouter configures the Gin engine. Exposed for tests.
 func SetupRouter() *gin.Engine {
@@ -83,6 +93,7 @@ func SetupRouter() *gin.Engine {
 			&models.DataQualityRule{},
 			&models.DataQualityResult{},
 			&models.AuditEvent{},
+			&models.SharedQuery{},
 		)
 
 		// Only migrate jobs table and start worker when using Postgres (skip for sqlite tests)
@@ -99,6 +110,22 @@ func SetupRouter() *gin.Engine {
 
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// Public endpoint for viewing shared queries (no auth required)
+	r.GET("/api/shared-queries/:id", func(c *gin.Context) {
+		shareID := c.Param("id")
+		var sq models.SharedQuery
+		if err := gdb.Where("id = ?", shareID).First(&sq).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Shared query not found or has expired"})
+			return
+		}
+		// Check if expired
+		if sq.ExpiresAt != nil && sq.ExpiresAt.Before(time.Now()) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Shared query has expired"})
+			return
+		}
+		c.JSON(http.StatusOK, sq)
 	})
 
 	api := r.Group("/api")
@@ -271,6 +298,54 @@ func SetupRouter() *gin.Engine {
 			dsTop.POST(":id/data/append/json/validate", DatasetAppendJSONValidateTop)
 		}
 
+		// Shared queries (create requires auth)
+		api.POST("/shared-queries", AuthMiddleware(), func(c *gin.Context) {
+			var payload struct {
+				DatasetID   uint     `json:"dataset_id"`
+				ProjectID   uint     `json:"project_id"`
+				SQL         string   `json:"sql"`
+				Columns     []string `json:"columns"`
+				Rows        [][]any  `json:"rows"`
+				Total       int      `json:"total"`
+				DatasetName string   `json:"dataset_name"`
+				ProjectName string   `json:"project_name"`
+			}
+			if err := c.ShouldBindJSON(&payload); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json"})
+				return
+			}
+
+			// Generate share ID
+			shareID := generateShareID()
+
+			// Convert columns and rows to JSON strings
+			columnsJSON, _ := json.Marshal(payload.Columns)
+			rowsJSON, _ := json.Marshal(payload.Rows)
+
+			userID, _ := c.Get("user_id")
+
+			sq := models.SharedQuery{
+				ID:          shareID,
+				DatasetID:   payload.DatasetID,
+				ProjectID:   payload.ProjectID,
+				UserID:      userID.(uint),
+				SQL:         payload.SQL,
+				Columns:     string(columnsJSON),
+				Rows:        string(rowsJSON),
+				Total:       payload.Total,
+				DatasetName: payload.DatasetName,
+				ProjectName: payload.ProjectName,
+				CreatedAt:   time.Now(),
+			}
+
+			if err := gdb.Create(&sq).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create shared query"})
+				return
+			}
+
+			c.JSON(http.StatusCreated, gin.H{"id": shareID})
+		})
+
 		// Reverse proxy to Python service for data validation
 		api.POST("/data/validate", func(c *gin.Context) {
 			base := cfg.PythonServiceURL
@@ -350,6 +425,14 @@ func SetupRouter() *gin.Engine {
 				base = "http://python-service:8000"
 			}
 			forwardJSON(c, base+"/rules/validate/batch")
+		})
+		// Proxy: /delta/query -> python /delta/query (SQL queries against Delta tables)
+		api.POST("/delta/query", func(c *gin.Context) {
+			base := cfg.PythonServiceURL
+			if strings.TrimSpace(base) == "" {
+				base = "http://python-service:8000"
+			}
+			forwardJSON(c, base+"/delta/query")
 		})
 	}
 
