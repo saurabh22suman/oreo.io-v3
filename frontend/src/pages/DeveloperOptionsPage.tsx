@@ -4,7 +4,8 @@ import { getDataset, getProject } from '../api'
 import Alert from '../components/Alert'
 import {
   ArrowLeft, Play, Loader2, Code2, Share2, Copy, Check, Download,
-  Table2, Clock, Database, AlertCircle, ChevronDown, X, Link2, ExternalLink
+  Table2, Clock, Database, AlertCircle, ChevronDown, X, Link2, ExternalLink,
+  Trash2, LinkIcon
 } from 'lucide-react'
 
 // ============================================================================
@@ -17,6 +18,19 @@ type QueryResult = {
   total: number
   executionTime?: number
 }
+
+type SharedLink = {
+  id: string
+  dataset_id: number
+  project_id: number
+  sql: string
+  total: number
+  dataset_name: string
+  project_name: string
+  created_at: string
+}
+
+type TabType = 'sql-query' | 'shared-links'
 
 // ============================================================================
 // Constants
@@ -61,6 +75,28 @@ function downloadCSV(columns: string[], rows: any[][], filename: string) {
   a.download = filename
   a.click()
   URL.revokeObjectURL(url)
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString()
+}
+
+function authHeaders(): HeadersInit {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+  }
 }
 
 // ============================================================================
@@ -203,6 +239,9 @@ export default function DeveloperOptionsPage() {
   const projectId = Number(id)
   const dsId = Number(datasetId)
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<TabType>('sql-query')
+
   // State
   const [project, setProject] = useState<any>(null)
   const [dataset, setDataset] = useState<any>(null)
@@ -221,6 +260,11 @@ export default function DeveloperOptionsPage() {
   const [shareUrl, setShareUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const [sharing, setSharing] = useState(false)
+
+  // Shared links state
+  const [sharedLinks, setSharedLinks] = useState<SharedLink[]>([])
+  const [loadingLinks, setLoadingLinks] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // Sample queries dropdown
   const [showSamples, setShowSamples] = useState(false)
@@ -244,6 +288,48 @@ export default function DeveloperOptionsPage() {
       }
     })()
   }, [projectId, dsId])
+
+  // Load shared links when tab is active
+  const loadSharedLinks = async () => {
+    setLoadingLinks(true)
+    try {
+      const response = await fetch(
+        `${API_BASE}/shared-queries?dataset_id=${dsId}&project_id=${projectId}`,
+        { headers: authHeaders() }
+      )
+      if (!response.ok) throw new Error('Failed to fetch shared links')
+      const data = await response.json()
+      setSharedLinks(data || [])
+    } catch (e: any) {
+      setError(e.message || 'Failed to load shared links')
+    } finally {
+      setLoadingLinks(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'shared-links') {
+      loadSharedLinks()
+    }
+  }, [activeTab, dsId, projectId])
+
+  // Delete shared link
+  const deleteSharedLink = async (id: string) => {
+    setDeletingId(id)
+    try {
+      const response = await fetch(`${API_BASE}/shared-queries/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      })
+      if (!response.ok) throw new Error('Failed to delete shared link')
+      setSharedLinks(prev => prev.filter(link => link.id !== id))
+      setToast('Shared link deleted')
+    } catch (e: any) {
+      setError(e.message || 'Failed to delete shared link')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   // Execute query
   const executeQuery = async () => {
@@ -386,7 +472,7 @@ export default function DeveloperOptionsPage() {
     <div className="min-h-screen bg-surface-1 text-text animate-fade-in">
       {/* Header */}
       <div className="bg-surface-1/50 backdrop-blur-sm border-b border-divider sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link
@@ -409,17 +495,53 @@ export default function DeveloperOptionsPage() {
               </div>
             </div>
           </div>
+
+          {/* Tabs */}
+          <div className="px-6 border-b border-divider">
+            <div className="flex gap-1">
+              <button
+                onClick={() => setActiveTab('sql-query')}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'sql-query'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-text-secondary hover:text-text hover:border-divider'
+                }`}
+              >
+                <Database className="w-4 h-4" />
+                SQL Query
+              </button>
+              <button
+                onClick={() => setActiveTab('shared-links')}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'shared-links'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-text-secondary hover:text-text hover:border-divider'
+                }`}
+              >
+                <LinkIcon className="w-4 h-4" />
+                Shared Links
+                {sharedLinks.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-surface-3 text-xs">
+                    {sharedLinks.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Alerts */}
-      <div className="max-w-7xl mx-auto px-6 pt-4 space-y-2">
+      <div className="px-6 pt-4 space-y-2">
         {error && <Alert type="error" message={error} onClose={() => setError('')} />}
         {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss />}
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+      <div className="px-6 py-6 space-y-6">
+        {/* SQL Query Tab */}
+        {activeTab === 'sql-query' && (
+          <>
         {/* SQL Editor Section */}
         <div className="bg-surface-1 rounded-2xl border border-divider overflow-hidden shadow-sm">
           {/* Editor Header */}
@@ -572,6 +694,111 @@ export default function DeveloperOptionsPage() {
             <p className="text-text-secondary text-sm max-w-md mx-auto">
               Write a SQL query above and click "Run Query" to see results. Use <code className="px-1.5 py-0.5 rounded bg-surface-2 font-mono text-xs">dataset</code> as the table name to query your data.
             </p>
+          </div>
+        )}
+          </>
+        )}
+
+        {/* Shared Links Tab */}
+        {activeTab === 'shared-links' && (
+          <div className="bg-surface-1 rounded-2xl border border-divider overflow-hidden shadow-sm">
+            <div className="px-5 py-4 border-b border-divider bg-surface-2/30 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <LinkIcon className="w-5 h-5 text-text-muted" />
+                <h2 className="font-semibold text-text">Active Shared Links</h2>
+                <span className="text-xs text-text-muted">
+                  Manage public links to query results
+                </span>
+              </div>
+              <button
+                onClick={loadSharedLinks}
+                disabled={loadingLinks}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-2 hover:bg-surface-3 text-text-secondary text-sm transition-colors"
+              >
+                {loadingLinks ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  'Refresh'
+                )}
+              </button>
+            </div>
+
+            <div className="p-4">
+              {loadingLinks ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              ) : sharedLinks.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="inline-flex p-4 rounded-2xl bg-surface-2 mb-4">
+                    <LinkIcon className="w-8 h-8 text-text-muted" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-text mb-2">No Shared Links</h3>
+                  <p className="text-text-secondary text-sm max-w-md mx-auto">
+                    When you share query results, the links will appear here. You can delete them at any time.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {sharedLinks.map((link) => (
+                    <div
+                      key={link.id}
+                      className="flex items-center justify-between p-4 rounded-xl border border-divider bg-surface-2/30 hover:bg-surface-2/50 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1">
+                          <code className="text-xs font-mono text-text-muted bg-surface-3 px-2 py-0.5 rounded">
+                            {link.id}
+                          </code>
+                          <span className="text-xs text-text-muted">
+                            {formatRelativeTime(link.created_at)}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-success/10 text-success text-xs font-medium">
+                            {link.total} rows
+                          </span>
+                        </div>
+                        <p className="text-sm text-text font-mono truncate" title={link.sql}>
+                          {link.sql}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 ml-4">
+                        <a
+                          href={`${window.location.origin}/share/${link.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 rounded-lg hover:bg-surface-3 text-text-secondary hover:text-primary transition-colors"
+                          title="Open link"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/share/${link.id}`)
+                            setToast('Link copied to clipboard')
+                          }}
+                          className="p-2 rounded-lg hover:bg-surface-3 text-text-secondary hover:text-text transition-colors"
+                          title="Copy link"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => deleteSharedLink(link.id)}
+                          disabled={deletingId === link.id}
+                          className="p-2 rounded-lg hover:bg-danger/10 text-text-secondary hover:text-danger transition-colors"
+                          title="Delete link"
+                        >
+                          {deletingId === link.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

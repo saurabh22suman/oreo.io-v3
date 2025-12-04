@@ -756,7 +756,7 @@ export default function DatasetRulesPage() {
     <div className="min-h-screen bg-surface-1 text-text animate-fade-in">
       {/* Header */}
       <div className="bg-surface-1/50 backdrop-blur-sm border-b border-divider sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-6 py-4">
+        <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link 
@@ -838,13 +838,13 @@ export default function DatasetRulesPage() {
       </div>
 
       {/* Alerts */}
-      <div className="max-w-6xl mx-auto px-6 pt-4 space-y-2">
+      <div className="px-6 pt-4 space-y-2">
         {error && <Alert type="error" message={error} onClose={() => setError('')} />}
         {toast && <Alert type="success" message={toast} onClose={() => setToast('')} autoDismiss />}
       </div>
 
       {/* Content */}
-      <div className="max-w-6xl mx-auto px-6 py-6">
+      <div className="px-6 py-6">
         {/* Schema Tab */}
         {activeTab === 'schema' && (
           <div className="space-y-6">

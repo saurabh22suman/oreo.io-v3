@@ -191,7 +191,7 @@ export default function DatasetAuditPage() {
 
       {/* Header Section */}
       <div className="bg-surface-1/50 backdrop-blur-sm border-b border-divider z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link to={`/projects/${projectId}/datasets/${dsId}`} className="p-2 rounded-full hover:bg-surface-2 text-text-secondary hover:text-text transition-colors">
               <ArrowLeft className="h-5 w-5" />
@@ -203,7 +203,7 @@ export default function DatasetAuditPage() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex gap-6 min-h-0 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
+      <div className="flex-1 flex gap-6 min-h-0 w-full px-4 sm:px-6 py-6">
         {/* Timeline Panel (Left) */}
         <div className="w-[400px] flex-shrink-0 flex flex-col bg-surface-1 rounded-3xl border border-divider shadow-lg shadow-black/5 overflow-hidden">
           {/* Filter */}

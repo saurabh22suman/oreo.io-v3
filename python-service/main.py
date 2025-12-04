@@ -23,6 +23,26 @@ except Exception as e:
     _merge_executor = None
     print(f"Warning: Merge executor not available: {e}")
 
+# Global DuckDB connection for read-only queries (singleton pattern)
+# This avoids the overhead of INSTALL/LOAD delta on every request
+_duckdb_read_connection = None
+
+def get_duckdb_read_connection():
+    """Get or create a global DuckDB connection with Delta extension loaded.
+    
+    This connection is reused for all read-only queries to avoid the ~2-3s
+    overhead of loading the Delta extension on each request.
+    """
+    global _duckdb_read_connection
+    if _duckdb_read_connection is None:
+        import duckdb
+        print("[DuckDB] Initializing global read connection with Delta extension...")
+        _duckdb_read_connection = duckdb.connect()
+        _duckdb_read_connection.execute("INSTALL delta;")
+        _duckdb_read_connection.execute("LOAD delta;")
+        print("[DuckDB] Global read connection ready")
+    return _duckdb_read_connection
+
 app = FastAPI(title="Oreo.io-v2 Python Service")
 
 
@@ -38,6 +58,12 @@ class ValidateRequest(BaseModel):
         if v is None and isinstance(values, dict) and "schema" in values:
             return values["schema"]
         return v
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Log startup - DuckDB will be lazily initialized on first query."""
+    print("[Startup] Python service ready. DuckDB will be initialized on first query.")
 
 
 @app.get("/health")
@@ -1717,14 +1743,11 @@ def delta_query(req: DeltaQueryRequest):
         raise HTTPException(status_code=500, detail="Delta adapter not available")
     
     try:
-        import duckdb
         from deltalake import DeltaTable
         import os
         
-        # Create DuckDB connection
-        con = duckdb.connect()
-        con.execute("INSTALL delta;")
-        con.execute("LOAD delta;")
+        # Use global DuckDB connection (pre-loaded with Delta extension)
+        con = get_duckdb_read_connection()
         
         # Register each Delta table as a view in DuckDB
         for table_ref, path_info in req.table_mappings.items():

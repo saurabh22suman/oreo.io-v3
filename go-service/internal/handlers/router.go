@@ -322,13 +322,22 @@ func SetupRouter() *gin.Engine {
 			columnsJSON, _ := json.Marshal(payload.Columns)
 			rowsJSON, _ := json.Marshal(payload.Rows)
 
-			userID, _ := c.Get("user_id")
+			userIDVal, _ := c.Get("user_id")
+			var userID uint
+			switch v := userIDVal.(type) {
+			case float64:
+				userID = uint(v)
+			case uint:
+				userID = v
+			case int:
+				userID = uint(v)
+			}
 
 			sq := models.SharedQuery{
 				ID:          shareID,
 				DatasetID:   payload.DatasetID,
 				ProjectID:   payload.ProjectID,
-				UserID:      userID.(uint),
+				UserID:      userID,
 				SQL:         payload.SQL,
 				Columns:     string(columnsJSON),
 				Rows:        string(rowsJSON),
@@ -344,6 +353,68 @@ func SetupRouter() *gin.Engine {
 			}
 
 			c.JSON(http.StatusCreated, gin.H{"id": shareID})
+		})
+
+		// List shared queries for a dataset (requires auth)
+		api.GET("/shared-queries", AuthMiddleware(), func(c *gin.Context) {
+			userID, _ := c.Get("user_id")
+			datasetIDStr := c.Query("dataset_id")
+			projectIDStr := c.Query("project_id")
+
+			var queries []models.SharedQuery
+			query := gdb.Where("user_id = ?", userID)
+
+			if datasetIDStr != "" {
+				query = query.Where("dataset_id = ?", datasetIDStr)
+			}
+			if projectIDStr != "" {
+				query = query.Where("project_id = ?", projectIDStr)
+			}
+
+			if err := query.Order("created_at DESC").Find(&queries).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch shared queries"})
+				return
+			}
+
+			// Convert to response format
+			var result []gin.H
+			for _, sq := range queries {
+				// Check if expired
+				if sq.ExpiresAt != nil && sq.ExpiresAt.Before(time.Now()) {
+					continue
+				}
+				result = append(result, gin.H{
+					"id":           sq.ID,
+					"dataset_id":   sq.DatasetID,
+					"project_id":   sq.ProjectID,
+					"sql":          sq.SQL,
+					"total":        sq.Total,
+					"dataset_name": sq.DatasetName,
+					"project_name": sq.ProjectName,
+					"created_at":   sq.CreatedAt,
+				})
+			}
+
+			c.JSON(http.StatusOK, result)
+		})
+
+		// Delete a shared query (requires auth, owner only)
+		api.DELETE("/shared-queries/:id", AuthMiddleware(), func(c *gin.Context) {
+			shareID := c.Param("id")
+			userID, _ := c.Get("user_id")
+
+			var sq models.SharedQuery
+			if err := gdb.Where("id = ? AND user_id = ?", shareID, userID).First(&sq).Error; err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Shared query not found or not owned by you"})
+				return
+			}
+
+			if err := gdb.Delete(&sq).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete shared query"})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{"message": "Shared query deleted"})
 		})
 
 		// Reverse proxy to Python service for data validation

@@ -51,9 +51,45 @@ type DeletedRow = {
 type ValidationError = {
   column: string
   rowId: string
-  severity: 'error' | 'warning' | 'info'
+  severity: 'fatal' | 'error' | 'warning' | 'info'
   message: string
   ruleType: string
+}
+
+// Severity styling configurations
+const SEVERITY_STYLES = {
+  fatal: {
+    textColor: 'text-red-300',
+    iconColor: 'text-red-500',
+    bgColor: 'bg-red-950',
+    borderColor: 'border-red-700',
+    Icon: XCircle,
+    label: 'Fatal'
+  },
+  error: {
+    textColor: 'text-red-300',
+    iconColor: 'text-red-500',
+    bgColor: 'bg-red-950',
+    borderColor: 'border-red-700',
+    Icon: AlertCircle,
+    label: 'Error'
+  },
+  warning: {
+    textColor: 'text-yellow-300',
+    iconColor: 'text-yellow-500',
+    bgColor: 'bg-yellow-950',
+    borderColor: 'border-yellow-700',
+    Icon: AlertCircle,
+    label: 'Warning'
+  },
+  info: {
+    textColor: 'text-blue-300',
+    iconColor: 'text-blue-500',
+    bgColor: 'bg-blue-950',
+    borderColor: 'border-blue-700',
+    Icon: Info,
+    label: 'Info'
+  }
 }
 
 // Custom cell renderer for cells with validation errors (shows tooltip on hover)
@@ -93,8 +129,12 @@ const ValidationErrorCellRenderer = (params: any) => {
     )
   }
 
-  // Validation error styling with tooltip
+  // Validation error styling with tooltip - severity-aware
   if (validationError) {
+    const severity = validationError.severity || 'error'
+    const style = SEVERITY_STYLES[severity] || SEVERITY_STYLES.error
+    const SeverityIcon = style.Icon
+    
     return (
       <div
         ref={cellRef}
@@ -102,8 +142,8 @@ const ValidationErrorCellRenderer = (params: any) => {
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
-        <span className="text-red-300">{value}</span>
-        <AlertCircle className="w-3 h-3 ml-1 text-red-500 flex-shrink-0" />
+        <span className={style.textColor}>{value}</span>
+        <SeverityIcon className={`w-3 h-3 ml-1 ${style.iconColor} flex-shrink-0`} />
         {showTooltip && createPortal(
           <div
             style={{
@@ -112,20 +152,23 @@ const ValidationErrorCellRenderer = (params: any) => {
               top: `${tooltipPos.y}px`,
               transform: 'translate(-50%, -100%)',
             }}
-            className="z-[9999] px-3 py-2 bg-red-950 border border-red-700 rounded-lg shadow-xl text-xs whitespace-nowrap pointer-events-none max-w-xs"
+            className={`z-[9999] px-3 py-2 ${style.bgColor} border ${style.borderColor} rounded-lg shadow-xl text-xs whitespace-nowrap pointer-events-none max-w-xs`}
           >
             <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+              <SeverityIcon className={`w-4 h-4 ${style.iconColor} flex-shrink-0 mt-0.5`} />
               <div>
-                <p className="text-red-300 font-medium">{validationError.message}</p>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className={`text-[10px] font-bold uppercase ${style.textColor}`}>{style.label}</span>
+                </div>
+                <p className={`${style.textColor} font-medium`}>{validationError.message}</p>
                 {editInfo && (
-                  <p className="text-red-400/70 text-[10px] mt-1">
+                  <p className={`${style.textColor}/70 text-[10px] mt-1`}>
                     Original: {String(editInfo.oldValue ?? '(empty)')}
                   </p>
                 )}
               </div>
             </div>
-            <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-2 h-2 bg-red-950 border-r border-b border-red-700"></div>
+            <div className={`absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-2 h-2 ${style.bgColor} border-r border-b ${style.borderColor}`}></div>
           </div>,
           document.body
         )}
@@ -637,17 +680,24 @@ export default function LiveEditPage() {
             return { backgroundColor: '#450a0a', color: '#fca5a5', textDecoration: 'line-through' }
           }
 
-          // Validation error styling (red border/background)
+          // Validation styling by severity (validation takes priority over edit styling)
           if (validationErrors.has(key)) {
             const error = validationErrors.get(key)!
-            if (error.severity === 'error') {
-              return { backgroundColor: '#7f1d1d', color: '#fca5a5', borderLeft: '3px solid #ef4444' }
-            } else if (error.severity === 'warning') {
-              return { backgroundColor: '#78350f', color: '#fcd34d', borderLeft: '3px solid #f59e0b' }
+            switch (error.severity) {
+              case 'fatal':
+                return { backgroundColor: '#450a0a', color: '#fca5a5', borderLeft: '4px solid #dc2626' }
+              case 'error':
+                return { backgroundColor: '#7f1d1d', color: '#fca5a5', borderLeft: '3px solid #ef4444' }
+              case 'warning':
+                return { backgroundColor: '#78350f', color: '#fcd34d', borderLeft: '3px solid #f59e0b' }
+              case 'info':
+                return { backgroundColor: '#1e3a5f', color: '#93c5fd', borderLeft: '3px solid #3b82f6' }
+              default:
+                return { backgroundColor: '#7f1d1d', color: '#fca5a5', borderLeft: '3px solid #ef4444' }
             }
           }
 
-          // Edited cell styling
+          // Edited cell styling (only if no validation issue)
           if (editedCellMap.has(key)) {
             return { backgroundColor: '#1e3a5f', color: '#93c5fd', fontWeight: '600' }
           }
@@ -837,9 +887,22 @@ export default function LiveEditPage() {
     setToast('All changes reverted')
   }, [api])
 
-  // Check if submission is allowed (has changes but no validation errors)
-  const hasValidationErrors = validationErrors.size > 0
-  const canSubmit = hasChanges && !hasValidationErrors
+  // Count validation issues by severity
+  const validationCounts = useMemo(() => {
+    const counts = { fatal: 0, error: 0, warning: 0, info: 0 }
+    validationErrors.forEach((err) => {
+      const severity = err.severity || 'error'
+      if (counts.hasOwnProperty(severity)) {
+        counts[severity as keyof typeof counts]++
+      }
+    })
+    return counts
+  }, [validationErrors])
+
+  // Check if submission is allowed - only block for error and fatal severity
+  const hasBlockingErrors = validationCounts.fatal > 0 || validationCounts.error > 0
+  const hasWarningsOrInfo = validationCounts.warning > 0 || validationCounts.info > 0
+  const canSubmit = hasChanges && !hasBlockingErrors
 
   // Approver options (exclude current user)
   const approverOptions = useMemo(() => {
@@ -850,7 +913,7 @@ export default function LiveEditPage() {
   // Submit change request
   const handleSubmit = async () => {
     if (!canSubmit) {
-      if (hasValidationErrors) {
+      if (hasBlockingErrors) {
         setError('Please fix validation errors before submitting')
       }
       return
@@ -986,10 +1049,31 @@ export default function LiveEditPage() {
                   <RotateCcw className="w-4 h-4" />
                   Undo All
                 </button>
-                {hasValidationErrors ? (
+                
+                {/* Show validation status badges */}
+                {(validationCounts.fatal > 0 || validationCounts.error > 0) && (
+                  <div className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-400 bg-red-950/50 border border-red-800 rounded-lg">
+                    <XCircle className="w-4 h-4" />
+                    <span>{validationCounts.fatal + validationCounts.error} error{(validationCounts.fatal + validationCounts.error) > 1 ? 's' : ''}</span>
+                  </div>
+                )}
+                {validationCounts.warning > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-yellow-400 bg-yellow-950/50 border border-yellow-800 rounded-lg">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>{validationCounts.warning} warning{validationCounts.warning > 1 ? 's' : ''}</span>
+                  </div>
+                )}
+                {validationCounts.info > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-400 bg-blue-950/50 border border-blue-800 rounded-lg">
+                    <Info className="w-4 h-4" />
+                    <span>{validationCounts.info} info</span>
+                  </div>
+                )}
+                
+                {hasBlockingErrors ? (
                   <div className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-400 bg-red-950/50 border border-red-800 rounded-lg cursor-not-allowed">
                     <AlertCircle className="w-4 h-4" />
-                    <span>{validationErrors.size} validation error{validationErrors.size > 1 ? 's' : ''}</span>
+                    <span>Fix errors to proceed</span>
                   </div>
                 ) : (
                   <button
@@ -1413,10 +1497,16 @@ export default function LiveEditPage() {
             </div>
 
             <div className="p-6 border-t border-slate-700 flex justify-end gap-3">
-              {hasValidationErrors && (
+              {hasBlockingErrors && (
                 <div className="flex-1 flex items-center gap-2 text-red-400 text-sm">
                   <AlertCircle className="w-4 h-4" />
-                  <span>Fix {validationErrors.size} validation error{validationErrors.size !== 1 ? 's' : ''} before submitting</span>
+                  <span>Fix {validationCounts.fatal + validationCounts.error} error{(validationCounts.fatal + validationCounts.error) !== 1 ? 's' : ''} before submitting</span>
+                </div>
+              )}
+              {!hasBlockingErrors && hasWarningsOrInfo && (
+                <div className="flex-1 flex items-center gap-2 text-yellow-400 text-sm">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>{validationCounts.warning + validationCounts.info} warning{(validationCounts.warning + validationCounts.info) !== 1 ? 's' : ''} (will be included in submission)</span>
                 </div>
               )}
               <button
@@ -1427,7 +1517,7 @@ export default function LiveEditPage() {
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={submitting || selectedReviewerIds.length === 0 || hasValidationErrors}
+                disabled={submitting || selectedReviewerIds.length === 0 || hasBlockingErrors}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? (
