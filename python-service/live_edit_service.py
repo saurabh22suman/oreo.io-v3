@@ -25,6 +25,15 @@ except ImportError:
     duckdb = None
     pa = None
 
+# Import centralized DuckDB connection pool
+try:
+    from duckdb_pool import get_connection as get_duckdb_connection
+except ImportError:
+    def get_duckdb_connection():
+        con = duckdb.connect()
+        con.execute("INSTALL delta; LOAD delta;")
+        return con
+
 from live_edit_models import (
     LiveEditSession,
     SessionMode,
@@ -185,8 +194,7 @@ class LiveEditService:
             if not os.path.exists(main_path):
                 return []
             
-            con = duckdb.connect()
-            con.execute("INSTALL delta; LOAD delta;")
+            con = get_duckdb_connection()
             
             result = con.execute(
                 f"SELECT * FROM delta_scan('{main_path}') LIMIT {limit}"
@@ -348,8 +356,7 @@ class LiveEditService:
                     rows=[]
                 )
             
-            con = duckdb.connect()
-            con.execute("INSTALL delta; LOAD delta;")
+            con = get_duckdb_connection()
             
             # Get base data with pagination
             offset = (request.page - 1) * request.limit
@@ -575,8 +582,7 @@ class LiveEditService:
                 return {"ok": False, "error": "dataset_not_found"}
             
             # Connect to DuckDB
-            conn = duckdb.connect()
-            conn.execute("INSTALL delta; LOAD delta;")
+            conn = get_duckdb_connection()
             
             rows_updated = 0
             rows_deleted = 0
@@ -675,8 +681,7 @@ class LiveEditService:
                 return {"ok": False, "error": "dataset_not_found", "rows": [], "columns": []}
             
             # Connect to DuckDB and load delta extension
-            conn = duckdb.connect()
-            conn.execute("INSTALL delta; LOAD delta;")
+            conn = get_duckdb_connection()
             
             # Read all data and filter by row_id
             df = conn.execute(f"SELECT * FROM delta_scan('{main_path}')").df()

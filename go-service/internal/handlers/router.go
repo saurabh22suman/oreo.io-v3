@@ -112,6 +112,9 @@ func SetupRouter() *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	// DuckDB health check endpoint (POC)
+	r.GET("/healthz/duckdb", DuckDBHealthHandler)
+
 	// Public endpoint for viewing shared queries (no auth required)
 	r.GET("/api/shared-queries/:id", func(c *gin.Context) {
 		shareID := c.Param("id")
@@ -133,6 +136,10 @@ func SetupRouter() *gin.Engine {
 		api.GET("/ping", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"message": "pong"})
 		})
+
+		// DuckDB direct query endpoint (POC) - bypasses Python service for reads
+		// This provides a fast path when USE_DUCKDB_DIRECT=true
+		api.POST("/duckdb/query", DuckDBQueryHandler)
 
 		// Introspection: report active storage backend (used in tests & ops diagnostics)
 		api.GET("/storage/backend", func(c *gin.Context) {

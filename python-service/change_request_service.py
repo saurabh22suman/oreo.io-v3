@@ -24,6 +24,15 @@ except ImportError:
     duckdb = None
     pa = None
 
+# Import centralized DuckDB connection pool
+try:
+    from duckdb_pool import get_connection as get_duckdb_connection
+except ImportError:
+    def get_duckdb_connection():
+        con = duckdb.connect()
+        con.execute("INSTALL delta; LOAD delta;")
+        return con
+
 from change_request_models import (
     ChangeRequest,
     ChangeRequestStatus,
@@ -351,8 +360,7 @@ class ChangeRequestService:
             if duckdb is None:
                 raise RuntimeError("DuckDB required for merge")
             
-            con = duckdb.connect()
-            con.execute("INSTALL delta; LOAD delta;")
+            con = get_duckdb_connection()
             
             # Get version before
             # Note: This is a simplified approach - proper version tracking would use Delta Lake history

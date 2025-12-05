@@ -100,7 +100,7 @@ func executeDeltaQuery(sqlText string, tableMappings map[string]string, limit, p
 		var errResp map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&errResp)
 		if detail, ok := errResp["detail"].(string); ok {
-			return nil, fmt.Errorf(detail)
+			return nil, fmt.Errorf("python service error: %s", detail)
 		}
 		return nil, fmt.Errorf("python service returned %d", resp.StatusCode)
 	}

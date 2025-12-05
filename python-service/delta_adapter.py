@@ -11,6 +11,18 @@ import shutil
 import duckdb
 from deltalake import DeltaTable, write_deltalake
 
+# Import centralized DuckDB connection pool
+try:
+    from duckdb_pool import get_connection as get_duckdb_connection, get_new_connection as get_duckdb_new_connection
+except ImportError:
+    # Fallback: create local connections (with overhead)
+    def get_duckdb_connection():
+        con = duckdb.connect()
+        con.execute("INSTALL delta;")
+        con.execute("LOAD delta;")
+        return con
+    get_duckdb_new_connection = get_duckdb_connection
+
 try:
     import pyarrow as pa
     import pyarrow.dataset as ds
@@ -238,8 +250,7 @@ class DeltaStorageAdapter:
             return {"ok": True, "inserted": len(rows), "duplicates": 0}
         
         # Use DuckDB MERGE to prevent duplicates
-        con = duckdb.connect()
-        con.execute("INSTALL delta; LOAD delta;")
+        con = get_duckdb_connection()
         
         # Register existing table as target
         con.execute(f"CREATE OR REPLACE VIEW tgt AS SELECT * FROM delta_scan('{path}')")
@@ -359,8 +370,7 @@ class DeltaStorageAdapter:
             raise ValueError(f"Staging table not found for change request {change_request_id}")
         
         # Use DuckDB-based merge (more reliable across versions)
-        con = duckdb.connect()
-        con.execute("INSTALL delta; LOAD delta;")
+        con = get_duckdb_connection()
         con.execute(f"CREATE OR REPLACE VIEW tgt AS SELECT * FROM delta_scan('{main_path}')")
         con.execute(f"CREATE OR REPLACE VIEW src AS SELECT * FROM delta_scan('{staging_path}')")
         
@@ -520,9 +530,7 @@ class DeltaStorageAdapter:
                     offset: int = 0, filters: Optional[Dict[str, Any]] = None,
                     order_by: Optional[str] = None) -> Dict[str, Any]:
         """Internal query method for any Delta table."""
-        con = duckdb.connect()
-        con.execute("INSTALL delta;")
-        con.execute("LOAD delta;")
+        con = get_duckdb_connection()
         con.execute(f"CREATE OR REPLACE VIEW v AS SELECT * FROM delta_scan('{path}')")
         
         base_query = "SELECT * FROM v"
@@ -774,8 +782,7 @@ class DeltaStorageAdapter:
 
     def _align_to_existing_schema(self, path: str, at: pa.Table) -> pa.Table:
         """Align an Arrow table to match existing Delta table schema."""
-        con = duckdb.connect()
-        con.execute("INSTALL delta; LOAD delta;")
+        con = get_duckdb_connection()
         ti = con.execute(f"PRAGMA table_info(delta_scan('{path}'))").fetchall()
         
         target_cols = []
@@ -836,8 +843,7 @@ class DeltaStorageAdapter:
 
     def _discover_columns(self, target_path: str, stage_path: str) -> List[str]:
         """Discover union of column names across target and source tables."""
-        con = duckdb.connect()
-        con.execute("INSTALL delta; LOAD delta;")
+        con = get_duckdb_connection()
         
         tgt_cols = []
         if os.path.exists(os.path.join(target_path, "_delta_log")):
@@ -976,8 +982,7 @@ class DeltaStorageAdapter:
             write_deltalake(stage_path, at, mode="overwrite")
         
         # Use DuckDB-based merge
-        con = duckdb.connect()
-        con.execute("INSTALL delta; LOAD delta;")
+        con = get_duckdb_connection()
         con.execute(f"CREATE OR REPLACE VIEW tgt AS SELECT * FROM delta_scan('{target_path}')")
         con.execute(f"CREATE OR REPLACE VIEW src AS SELECT * FROM delta_scan('{stage_path}')")
         
@@ -1138,8 +1143,7 @@ class DeltaStorageAdapter:
             return {"ok": True, "method": "native"}
         
         except Exception as e:
-            con = duckdb.connect()
-            con.execute("INSTALL delta; LOAD delta;")
+            con = get_duckdb_connection()
             con.execute(f"CREATE OR REPLACE VIEW tgt AS SELECT * FROM delta_scan('{target_path}')")
             con.execute(f"CREATE OR REPLACE VIEW src AS SELECT * FROM delta_scan('{stage_path}')")
             

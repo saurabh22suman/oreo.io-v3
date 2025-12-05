@@ -24,6 +24,20 @@ try:
     import pyarrow as pa
     import pandas as pd
 except ImportError as e:
+    duckdb = None
+    DeltaTable = None
+    write_deltalake = None
+    pa = None
+    pd = None
+
+# Import centralized DuckDB connection pool
+try:
+    from duckdb_pool import get_connection as get_duckdb_connection
+except ImportError:
+    def get_duckdb_connection():
+        con = duckdb.connect()
+        con.execute("INSTALL delta; LOAD delta;")
+        return con
     raise ImportError(f"Required dependencies missing: {e}")
 
 logger = logging.getLogger("merge_executor")
@@ -118,8 +132,7 @@ class MergeExecutor:
                 return False, []
         
         try:
-            con = duckdb.connect()
-            con.execute("INSTALL delta; LOAD delta;")
+            con = get_duckdb_connection()
             
             # Get staging primary key values
             staging_df = con.execute(
@@ -183,8 +196,7 @@ class MergeExecutor:
         Returns statistics: rows_added, rows_updated, rows_deleted
         """
         try:
-            con = duckdb.connect()
-            con.execute("INSTALL delta; LOAD delta;")
+            con = get_duckdb_connection()
             
             # This is a simplified diff - full implementation would use Delta log
             # For now, compute row counts
@@ -262,8 +274,7 @@ class MergeExecutor:
                 raise ValueError(f"Main path does not exist: {main_path}")
             
             # Use DuckDB for merge
-            con = duckdb.connect()
-            con.execute("INSTALL delta; LOAD delta;")
+            con = get_duckdb_connection()
             
             # Create views
             con.execute(f"CREATE OR REPLACE VIEW tgt AS SELECT * FROM delta_scan('{main_path}')")

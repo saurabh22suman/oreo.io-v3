@@ -23,25 +23,27 @@ except Exception as e:
     _merge_executor = None
     print(f"Warning: Merge executor not available: {e}")
 
-# Global DuckDB connection for read-only queries (singleton pattern)
-# This avoids the overhead of INSTALL/LOAD delta on every request
-_duckdb_read_connection = None
-
-def get_duckdb_read_connection():
-    """Get or create a global DuckDB connection with Delta extension loaded.
+# Import centralized DuckDB connection pool
+try:
+    from duckdb_pool import get_connection as get_duckdb_read_connection, health_check as duckdb_health_check
+except ImportError:
+    # Fallback if duckdb_pool module not available
+    _duckdb_read_connection = None
     
-    This connection is reused for all read-only queries to avoid the ~2-3s
-    overhead of loading the Delta extension on each request.
-    """
-    global _duckdb_read_connection
-    if _duckdb_read_connection is None:
-        import duckdb
-        print("[DuckDB] Initializing global read connection with Delta extension...")
-        _duckdb_read_connection = duckdb.connect()
-        _duckdb_read_connection.execute("INSTALL delta;")
-        _duckdb_read_connection.execute("LOAD delta;")
-        print("[DuckDB] Global read connection ready")
-    return _duckdb_read_connection
+    def get_duckdb_read_connection():
+        """Fallback: Get or create a global DuckDB connection with Delta extension loaded."""
+        global _duckdb_read_connection
+        if _duckdb_read_connection is None:
+            import duckdb
+            print("[DuckDB] Initializing global read connection with Delta extension...")
+            _duckdb_read_connection = duckdb.connect()
+            _duckdb_read_connection.execute("INSTALL delta;")
+            _duckdb_read_connection.execute("LOAD delta;")
+            print("[DuckDB] Global read connection ready")
+        return _duckdb_read_connection
+    
+    def duckdb_health_check():
+        return {"ok": False, "message": "duckdb_pool module not available"}
 
 app = FastAPI(title="Oreo.io-v2 Python Service")
 
@@ -69,6 +71,16 @@ async def startup_event():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/health/duckdb")
+def health_duckdb():
+    """Health check for DuckDB connection pool."""
+    import time
+    start = time.time()
+    result = duckdb_health_check()
+    result["response_time_ms"] = int((time.time() - start) * 1000)
+    return result
 
 
 @app.post("/validate")

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
@@ -20,12 +21,27 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/config"
 	dbpkg "github.com/oreo-io/oreo.io-v2/go-service/internal/database"
+	"github.com/oreo-io/oreo.io-v2/go-service/internal/duckdb"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/models"
 	"github.com/oreo-io/oreo.io-v2/go-service/internal/utils"
 	"gorm.io/gorm"
 )
 
 const maxUploadBytes = 100 * 1024 * 1024 // 100 MB
+
+// queryDatasetWithDuckDB performs a direct DuckDB query for dataset data.
+// This is used when USE_DUCKDB_DIRECT=true for improved performance.
+func queryDatasetWithDuckDB(c *gin.Context, projectID, datasetID, limit, offset int) (*duckdb.QueryResult, error) {
+	pool, err := duckdb.GetPool()
+	if err != nil {
+		return nil, fmt.Errorf("duckdb pool not available: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	return pool.QueryDataset(ctx, projectID, datasetID, limit, offset)
+}
 
 // getPythonServiceURL returns the configured Python service URL with a fallback
 func getPythonServiceURL() string {
@@ -1319,6 +1335,21 @@ func DatasetDataGet(c *gin.Context) {
 		}
 		n, _ := strconv.Atoi(nStr)
 		off, _ := strconv.Atoi(offStr)
+
+		// POC: Try direct DuckDB query first if enabled
+		if IsDuckDBEnabled() {
+			result, err := queryDatasetWithDuckDB(c, int(ds.ProjectID), int(ds.ID), n, off)
+			if err == nil {
+				c.JSON(200, gin.H{
+					"data":    result.Rows,
+					"columns": result.Columns,
+					"backend": "duckdb-direct",
+				})
+				return
+			}
+			// Log error and fallback to Python service
+			log.Printf("[DuckDB] Direct query failed, falling back to Python: %v", err)
+		}
 
 		// Get the table location from metadata
 		gdb := dbpkg.Get()

@@ -39,6 +39,10 @@ services:
       - DEFAULT_STORAGE_BACKEND=delta
       # - DATABASE_URL=postgres://oreo:oreo@db:5432/oreo?sslmode=disable
       
+      # POC: Enable direct DuckDB queries (bypasses Python for reads)
+      # Set to true to enable the optimized path, false to use Python service
+      - USE_DUCKDB_DIRECT=true
+      
       # Secure JWT_SECRET (32+ characters, generated with openssl)
       - JWT_SECRET=N1OaXOyjhvN9VqHP4W60tvSmQ0kAXGBFyp978b489Sc=
       

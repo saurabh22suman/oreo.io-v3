@@ -25,6 +25,15 @@ except ImportError:
     duckdb = None
     pa = None
 
+# Import centralized DuckDB connection pool
+try:
+    from duckdb_pool import get_connection as get_duckdb_connection
+except ImportError:
+    def get_duckdb_connection():
+        con = duckdb.connect()
+        con.execute("INSTALL delta; LOAD delta;")
+        return con
+
 from validation_models import (
     ValidationState,
     ValidationSeverity,
@@ -244,8 +253,7 @@ class ValidationService:
             # Load base data and edits
             main_path = self._get_dataset_path(project_id, dataset_id, "main")
 
-            con = duckdb.connect()
-            con.execute("INSTALL delta; LOAD delta;")
+            con = get_duckdb_connection()
 
             # Create synthetic dataframe with edits applied
             # This is a simplified approach - in production, properly merge edits
@@ -344,8 +352,7 @@ class ValidationService:
             if not os.path.exists(staging_path):
                 raise ValueError(f"Change request {change_request_id} staging not found")
 
-            con = duckdb.connect()
-            con.execute("INSTALL delta; LOAD delta;")
+            con = get_duckdb_connection()
 
             staging_df = con.execute(f"SELECT * FROM delta_scan('{staging_path}')").fetch_arrow_table()
 
