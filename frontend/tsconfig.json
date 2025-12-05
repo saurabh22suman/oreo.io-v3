@@ -16,7 +16,26 @@
     "noEmit": true,
     "types": [
       "vite/client"
-    ]
+    ],
+    
+    /* Strict Type-Checking Options - Enable gradually */
+    /* Phase 1 (enabled): Core strictness */
+    "strict": false,
+    "noImplicitAny": false,
+    "alwaysStrict": true,
+    
+    /* Phase 2 (TODO): Enable after fixing existing code */
+    // "strictNullChecks": true,
+    // "strictFunctionTypes": true,
+    // "strictBindCallApply": true,
+    // "strictPropertyInitialization": true,
+    // "noImplicitThis": true,
+    
+    /* Additional Checks - Less strict for now */
+    // "noUnusedLocals": true,          // Enable after cleanup
+    // "noUnusedParameters": true,       // Enable after cleanup
+    "noImplicitReturns": false,
+    "noFallthroughCasesInSwitch": true
   },
   "include": [
     "src"

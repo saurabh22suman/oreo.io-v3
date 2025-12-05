@@ -75,27 +75,27 @@ func detectDeltaTables(db *gorm.DB, sqlText string, projectID uint) (map[string]
 // executeDeltaQuery sends query to Python service for DuckDB execution
 func executeDeltaQuery(sqlText string, tableMappings map[string]string, limit, page int) (*QueryExecuteResponse, error) {
 	pyBase := getPythonServiceURL()
-	
+
 	reqBody := map[string]interface{}{
 		"sql":            sqlText,
 		"table_mappings": tableMappings,
 		"limit":          limit,
 		"offset":         (page - 1) * limit,
 	}
-	
+
 	bodyBytes, _ := json.Marshal(reqBody)
 	req, err := http.NewRequest(http.MethodPost, pyBase+"/delta/query", bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != 200 {
 		var errResp map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&errResp)
@@ -104,12 +104,12 @@ func executeDeltaQuery(sqlText string, tableMappings map[string]string, limit, p
 		}
 		return nil, fmt.Errorf("python service returned %d", resp.StatusCode)
 	}
-	
+
 	var result QueryExecuteResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
-	
+
 	return &result, nil
 }
 
@@ -150,7 +150,7 @@ func ExecuteQueryHandler(db *gorm.DB) gin.HandlerFunc {
 				})
 				return
 			}
-			
+
 			// Route to Python service for DuckDB-based execution
 			resp, err := executeDeltaQuery(req.SQL, tableMappings, req.Limit, req.Page)
 			if err != nil {

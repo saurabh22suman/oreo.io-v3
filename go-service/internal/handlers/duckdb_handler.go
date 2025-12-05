@@ -25,7 +25,10 @@ func init() {
 
 // DatasetDataGetDuckDB handles data fetching using direct DuckDB queries.
 // This is the optimized path that bypasses the Python service for read operations.
-func DatasetDataGetDuckDB(c *gin.Context, ds interface{ GetProjectID() uint; GetID() uint }) (*duckdb.QueryResult, error) {
+func DatasetDataGetDuckDB(c *gin.Context, ds interface {
+	GetProjectID() uint
+	GetID() uint
+}) (*duckdb.QueryResult, error) {
 	// Parse query parameters
 	limitStr := c.DefaultQuery("limit", "50")
 	offsetStr := c.DefaultQuery("offset", "0")
@@ -80,13 +83,13 @@ func DuckDBHealthHandler(c *gin.Context) {
 	}
 
 	c.JSON(httpStatus, gin.H{
-		"ok":            status.OK,
-		"message":       status.Message,
-		"delta_root":    status.DeltaRoot,
-		"response_ms":   status.ResponseTime.Milliseconds(),
-		"backend":       "duckdb",
-		"pool_stats":    stats,
-		"feature_flag":  useDuckDBDirect,
+		"ok":           status.OK,
+		"message":      status.Message,
+		"delta_root":   status.DeltaRoot,
+		"response_ms":  status.ResponseTime.Milliseconds(),
+		"backend":      "duckdb",
+		"pool_stats":   stats,
+		"feature_flag": useDuckDBDirect,
 	})
 }
 
@@ -141,18 +144,12 @@ func DuckDBQueryHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"columns":      result.Columns,
-		"rows":         rows,
-		"total":        result.Total,
-		"elapsed_ms":   elapsed.Milliseconds(),
-		"backend":      "duckdb-direct",
+		"columns":    result.Columns,
+		"rows":       rows,
+		"total":      result.Total,
+		"elapsed_ms": elapsed.Milliseconds(),
+		"backend":    "duckdb-direct",
 	})
-}
-
-// Helper interface for dataset access
-type datasetAccessor interface {
-	GetProjectID() uint
-	GetID() uint
 }
 
 // IsDuckDBEnabled returns whether direct DuckDB queries are enabled
