@@ -186,9 +186,9 @@ func fetchDeltaHistory(projectID, datasetID uint) []models.AuditEventListRespons
 		// Skip operations that are already tracked by our audit system:
 		// - WRITE: tracked by "CR Merged" or "Append" events
 		// - RESTORE: tracked by "Restore" audit event
-		// Only show CREATE TABLE (dataset creation) from Delta history
+		// - CREATE TABLE: tracked by "Dataset Created" audit event in DatasetsFinalize
 		upperOp := strings.ToUpper(operation)
-		if upperOp == "WRITE" || upperOp == "RESTORE" {
+		if upperOp == "WRITE" || upperOp == "RESTORE" || upperOp == "CREATE TABLE" {
 			continue
 		}
 
@@ -209,7 +209,7 @@ func fetchDeltaHistory(projectID, datasetID uint) []models.AuditEventListRespons
 		if strings.EqualFold(operation, "CREATE TABLE") {
 			title = "Dataset Created"
 		} else {
-			title = humanizeOperation(operation)
+			title = humanizeDeltaOperation(operation)
 		}
 
 		// Extract metrics if available
@@ -248,27 +248,27 @@ func fetchDeltaHistory(projectID, datasetID uint) []models.AuditEventListRespons
 	return events
 }
 
-// humanizeOperation converts Delta operation to human-readable text
-func humanizeOperation(op string) string {
+// humanizeDeltaOperation converts Delta operation to user-friendly text (no technical jargon)
+func humanizeDeltaOperation(op string) string {
 	switch strings.ToUpper(op) {
 	case "WRITE":
-		return "Data written"
+		return "Data Added"
 	case "CREATE TABLE":
-		return "Table created"
+		return "Dataset Created"
 	case "MERGE":
-		return "Data merged"
+		return "Changes Applied"
 	case "DELETE":
-		return "Data deleted"
+		return "Data Removed"
 	case "UPDATE":
-		return "Data updated"
+		return "Data Updated"
 	case "RESTORE":
-		return "Restored to previous version"
+		return "Restored to Previous Version"
 	case "OPTIMIZE":
-		return "Table optimized"
+		return "Performance Improved"
 	case "VACUUM":
-		return "Old files cleaned up"
+		return "Storage Cleaned Up"
 	default:
-		return op
+		return "Data Changed"
 	}
 }
 
@@ -319,8 +319,8 @@ func handleDeltaEventDetail(c *gin.Context, auditIDStr string) {
 		AuditID:     auditIDStr,
 		SnapshotID:  fmt.Sprintf("v%d", version),
 		Type:        "delta_operation",
-		Title:       fmt.Sprintf("Delta Version %d", version),
-		Description: "This event was recorded in the Delta Lake transaction log.",
+		Title:       fmt.Sprintf("Data Update (Version %d)", version),
+		Description: "This change was recorded in the dataset history.",
 		CreatedBy:   "system",
 		Timestamp:   time.Now(), // Will be overwritten if we fetch from Delta
 		Summary:     models.AuditEventSummary{},
@@ -330,7 +330,7 @@ func handleDeltaEventDetail(c *gin.Context, auditIDStr string) {
 	if version == 0 {
 		response.Title = "Dataset Created"
 		response.Type = "dataset_created"
-		response.Description = "The dataset table was created in Delta Lake."
+		response.Description = "A new dataset was created and is ready for use."
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -585,16 +585,16 @@ func backfillAuditEventsFromChangeRequests(datasetID uint) {
 			switch cr.Status {
 			case "approved":
 				eventType = models.AuditEventTypeCRApproved
-				title = fmt.Sprintf("Change Request #%d approved", cr.ID)
+				title = "Changes Approved"
 			case "rejected":
 				eventType = models.AuditEventTypeCRRejected
-				title = fmt.Sprintf("Change Request #%d rejected", cr.ID)
+				title = "Changes Rejected"
 			case "withdrawn":
 				eventType = models.AuditEventTypeCRWithdrawn
-				title = fmt.Sprintf("Change Request #%d withdrawn", cr.ID)
+				title = "Request Cancelled"
 			case "merged":
 				eventType = models.AuditEventTypeCRMerged
-				title = fmt.Sprintf("Change Request #%d merged", cr.ID)
+				title = "Changes Applied Successfully"
 			}
 
 			if eventType != "" {

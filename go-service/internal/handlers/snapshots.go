@@ -444,8 +444,8 @@ func SnapshotRestore(c *gin.Context) {
 		uint(datasetID),
 		actorID,
 		models.AuditEventTypeRestore,
-		fmt.Sprintf("Restored to Snapshot #%d", version),
-		fmt.Sprintf("Dataset was restored to a previous snapshot. Rows: %d → %d",
+		fmt.Sprintf("Restored to Version %d", version),
+		fmt.Sprintf("The dataset was rolled back to a previous version. Row count changed from %d to %d.",
 			totalRows-rowsAdded+rowsDeleted, totalRows),
 		nil,
 		models.AuditEventSummary{

@@ -191,8 +191,8 @@ func LiveEditSubmit(c *gin.Context) {
 		}
 	}
 	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, models.AuditEventTypeCRCreated,
-		fmt.Sprintf("Live Edit Change Request #%d created", cr.ID),
-		fmt.Sprintf("%d cells edited, %d rows deleted", len(body.EditedCells), len(body.DeletedRows)),
+		"Review Requested: Data Edits",
+		fmt.Sprintf("%d data cells were modified and %d rows were removed. Waiting for approval.", len(body.EditedCells), len(body.DeletedRows)),
 		&crID,
 		models.AuditEventSummary{CellsChanged: len(body.EditedCells), RowsDeleted: len(body.DeletedRows)},
 		nil,

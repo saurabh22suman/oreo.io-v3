@@ -33,15 +33,18 @@ import {
   Table2,
   AlertTriangle,
   AlertCircle,
-  Trash2
+  Trash2,
+  Database,
+  FilePlus
 } from 'lucide-react'
 
 // Event type icon mapping
 const eventTypeIcons: Record<string, React.ReactNode> = {
+  dataset_created: <Database className="w-4 h-4" />,
   edit: <Pencil className="w-4 h-4" />,
   append: <Upload className="w-4 h-4" />,
   upload: <Upload className="w-4 h-4" />,
-  cr_created: <FileText className="w-4 h-4" />,
+  cr_created: <FilePlus className="w-4 h-4" />,
   cr_approved: <Check className="w-4 h-4" />,
   cr_rejected: <X className="w-4 h-4" />,
   cr_merged: <GitMerge className="w-4 h-4" />,
@@ -54,6 +57,7 @@ const eventTypeIcons: Record<string, React.ReactNode> = {
 
 // Event type color mapping for light/dark mode
 const eventTypeColors: Record<string, string> = {
+  dataset_created: 'bg-accent/10 text-accent border-accent/20',
   edit: 'bg-primary/10 text-primary border-primary/20',
   append: 'bg-success/10 text-success border-success/20',
   upload: 'bg-success/10 text-success border-success/20',
@@ -68,20 +72,21 @@ const eventTypeColors: Record<string, string> = {
   validation: 'bg-success/10 text-success border-success/20',
 }
 
-// Human-readable event type labels
+// Human-readable event type labels (user-friendly for non-developers)
 const eventTypeLabels: Record<string, string> = {
-  edit: 'Edit',
-  append: 'Append',
-  upload: 'Upload',
-  cr_created: 'CR Created',
-  cr_approved: 'CR Approved',
-  cr_rejected: 'CR Rejected',
-  cr_merged: 'CR Merged',
-  cr_withdrawn: 'CR Withdrawn',
-  restore: 'Restore',
-  schema_change: 'Schema Change',
-  rule_change: 'Rule Change',
-  validation: 'Validation',
+  dataset_created: 'New Dataset',
+  edit: 'Data Edited',
+  append: 'Data Added',
+  upload: 'File Uploaded',
+  cr_created: 'Review Requested',
+  cr_approved: 'Approved',
+  cr_rejected: 'Rejected',
+  cr_merged: 'Changes Applied',
+  cr_withdrawn: 'Request Cancelled',
+  restore: 'Restored',
+  schema_change: 'Structure Updated',
+  rule_change: 'Rules Updated',
+  validation: 'Validation Check',
 }
 
 type Dataset = { id: number; name: string; schema?: string; rules?: string }
@@ -216,15 +221,16 @@ export default function DatasetAuditPage() {
                   setFilterType(e.target.value)
                   setOffset(0)
                 }}
-                className="flex-1 bg-transparent border-none text-sm text-text focus:outline-none cursor-pointer"
+                className="flex-1 bg-surface-2 border-none text-sm text-text focus:outline-none cursor-pointer [&>option]:bg-surface-1 [&>option]:text-text"
               >
                 <option value="">All Events</option>
-                <option value="cr_created,cr_approved,cr_rejected,cr_merged,cr_withdrawn">Change Requests</option>
-                <option value="append,upload">Uploads</option>
-                <option value="edit">Edits</option>
+                <option value="dataset_created">Dataset Creation</option>
+                <option value="cr_created,cr_approved,cr_rejected,cr_merged,cr_withdrawn">Reviews & Approvals</option>
+                <option value="append,upload">Data Uploads</option>
+                <option value="edit">Data Edits</option>
                 <option value="restore">Restores</option>
-                <option value="schema_change,rule_change">Config Changes</option>
-                <option value="validation">Validations</option>
+                <option value="schema_change,rule_change">Settings Changes</option>
+                <option value="validation">Validation Checks</option>
               </select>
             </div>
           </div>

@@ -44,18 +44,19 @@ type AuditEvent struct {
 
 // AuditEventType constants for event types
 const (
-	AuditEventTypeEdit         = "edit"
-	AuditEventTypeAppend       = "append"
-	AuditEventTypeCRCreated    = "cr_created"
-	AuditEventTypeCRApproved   = "cr_approved"
-	AuditEventTypeCRRejected   = "cr_rejected"
-	AuditEventTypeCRMerged     = "cr_merged"
-	AuditEventTypeCRWithdrawn  = "cr_withdrawn"
-	AuditEventTypeRestore      = "restore"
-	AuditEventTypeSchemaChange = "schema_change"
-	AuditEventTypeRuleChange   = "rule_change"
-	AuditEventTypeValidation   = "validation"
-	AuditEventTypeUpload       = "upload"
+	AuditEventTypeEdit           = "edit"
+	AuditEventTypeAppend         = "append"
+	AuditEventTypeCRCreated      = "cr_created"
+	AuditEventTypeCRApproved     = "cr_approved"
+	AuditEventTypeCRRejected     = "cr_rejected"
+	AuditEventTypeCRMerged       = "cr_merged"
+	AuditEventTypeCRWithdrawn    = "cr_withdrawn"
+	AuditEventTypeRestore        = "restore"
+	AuditEventTypeSchemaChange   = "schema_change"
+	AuditEventTypeRuleChange     = "rule_change"
+	AuditEventTypeValidation     = "validation"
+	AuditEventTypeUpload         = "upload"
+	AuditEventTypeDatasetCreated = "dataset_created"
 )
 
 // AuditEventListResponse is the response format for listing audit events

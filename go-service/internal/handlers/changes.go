@@ -287,8 +287,8 @@ func ChangeApprove(c *gin.Context) {
 			// Record audit event for CR merge with Delta stats
 			crID := cr.ID
 			_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, models.AuditEventTypeCRMerged,
-				fmt.Sprintf("Change Request #%d merged", cr.ID),
-				fmt.Sprintf("%d rows added, %d duplicates skipped, %d cells changed", actualRowsAdded, pyResp.Duplicates, cellsChanged),
+				"Changes Applied Successfully",
+				fmt.Sprintf("%d rows were added to the dataset, %d duplicate entries were skipped, and %d data cells were updated.", actualRowsAdded, pyResp.Duplicates, cellsChanged),
 				&crID,
 				models.AuditEventSummary{RowsAdded: actualRowsAdded, RowsUpdated: rowsUpdated, CellsChanged: cellsChanged},
 				nil,
@@ -439,10 +439,10 @@ func ChangeApprove(c *gin.Context) {
 		// Record audit event for CR merge (DB path) with proper stats
 		crID := cr.ID
 		eventType := models.AuditEventTypeCRMerged
-		eventTitle := fmt.Sprintf("Change Request #%d merged", cr.ID)
+		eventTitle := "Changes Applied Successfully"
 		if !usedDB {
 			eventType = models.AuditEventTypeCRApproved
-			eventTitle = fmt.Sprintf("Change Request #%d approved", cr.ID)
+			eventTitle = "Changes Approved"
 		}
 
 		// Get cells changed from payload
@@ -456,7 +456,7 @@ func ChangeApprove(c *gin.Context) {
 
 		_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, eventType,
 			eventTitle,
-			fmt.Sprintf("%d rows added, %d cells changed", rowCount, cellsChanged),
+			fmt.Sprintf("%d rows were added and %d data cells were updated.", rowCount, cellsChanged),
 			&crID,
 			models.AuditEventSummary{RowsAdded: int(rowCount), CellsChanged: cellsChanged},
 			nil,
@@ -544,8 +544,8 @@ func ChangeApprove(c *gin.Context) {
 		// Record audit event
 		crID := cr.ID
 		_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, models.AuditEventTypeCRMerged,
-			fmt.Sprintf("Live Edit Change Request #%d merged", cr.ID),
-			fmt.Sprintf("%d cells edited, %d rows deleted", len(payload.EditedCells), len(payload.DeletedRows)),
+			"Edits Applied Successfully",
+			fmt.Sprintf("%d data cells were updated and %d rows were removed from the dataset.", len(payload.EditedCells), len(payload.DeletedRows)),
 			&crID,
 			models.AuditEventSummary{CellsChanged: len(payload.EditedCells), RowsDeleted: len(payload.DeletedRows)},
 			nil,
@@ -671,8 +671,8 @@ func ChangeReject(c *gin.Context) {
 	// Record audit event for CR rejection
 	crID := cr.ID
 	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, actingUID, models.AuditEventTypeCRRejected,
-		fmt.Sprintf("Change Request #%d rejected", cr.ID),
-		fmt.Sprintf("Change request was rejected by reviewer"),
+		"Changes Rejected",
+		"The requested changes were reviewed and not approved.",
 		&crID,
 		models.AuditEventSummary{},
 		nil,
@@ -734,8 +734,8 @@ func ChangeWithdraw(c *gin.Context) {
 	// Record audit event for CR withdrawal
 	crID := cr.ID
 	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, uid, models.AuditEventTypeCRWithdrawn,
-		fmt.Sprintf("Change Request #%d withdrawn", cr.ID),
-		fmt.Sprintf("Change request was withdrawn by the requester"),
+		"Request Cancelled",
+		"The change request was cancelled by the person who submitted it.",
 		&crID,
 		models.AuditEventSummary{},
 		nil,

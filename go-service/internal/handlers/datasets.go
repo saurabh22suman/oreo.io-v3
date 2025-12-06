@@ -1112,15 +1112,44 @@ func DatasetsFinalize(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
+	respBody, _ := io.ReadAll(resp.Body)
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		b, _ := io.ReadAll(resp.Body)
 		_ = gdb.Delete(&models.Dataset{}, ds.ID).Error
-		c.JSON(resp.StatusCode, gin.H{"error": "finalize_failed", "message": string(b)})
+		c.JSON(resp.StatusCode, gin.H{"error": "finalize_failed", "message": string(respBody)})
 		return
 	}
 
+	// Parse response to get row count
+	var finalizeResp struct {
+		Inserted int `json:"inserted"`
+	}
+	_ = json.Unmarshal(respBody, &finalizeResp)
+
 	// Update metadata
 	upsertDatasetMeta(gdb, &ds)
+
+	// Get user ID from context for audit event
+	var actorID uint
+	if uid, exists := c.Get("user_id"); exists {
+		switch v := uid.(type) {
+		case float64:
+			actorID = uint(v)
+		case int:
+			actorID = uint(v)
+		case uint:
+			actorID = v
+		}
+	}
+
+	// Record audit event for dataset creation with actual user and row count
+	_ = RecordAuditEvent(ds.ProjectID, ds.ID, actorID, models.AuditEventTypeDatasetCreated,
+		"Dataset Created",
+		fmt.Sprintf("A new dataset '%s' was created with %d rows of data.", ds.Name, finalizeResp.Inserted),
+		nil,
+		models.AuditEventSummary{RowsAdded: finalizeResp.Inserted},
+		nil,
+	)
 
 	c.JSON(201, gin.H{
 		"id":         ds.ID,
@@ -2116,8 +2145,8 @@ func AppendUpload(c *gin.Context) {
 	// Record audit event for CR creation
 	crID := cr.ID
 	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, cr.UserID, models.AuditEventTypeCRCreated,
-		fmt.Sprintf("Change Request #%d created: %s", cr.ID, cr.Title),
-		fmt.Sprintf("%d rows appended", rowCount),
+		fmt.Sprintf("Review Requested: %s", cr.Title),
+		fmt.Sprintf("%d new rows ready to be added. Waiting for approval.", rowCount),
 		&crID,
 		models.AuditEventSummary{RowsAdded: rowCount},
 		nil,
@@ -2530,8 +2559,8 @@ func AppendOpen(c *gin.Context) {
 	crID := cr.ID
 	cellsChanged := len(body.EditedCells)
 	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, cr.UserID, models.AuditEventTypeCRCreated,
-		fmt.Sprintf("Change Request #%d created: %s", cr.ID, cr.Title),
-		fmt.Sprintf("Pending: %d rows to append, %d cells edited", rowCount2, cellsChanged),
+		fmt.Sprintf("Review Requested: %s", cr.Title),
+		fmt.Sprintf("%d new rows and %d modified cells are waiting for approval.", rowCount2, cellsChanged),
 		&crID,
 		models.AuditEventSummary{}, // Stats recorded on merge, not creation
 		nil,
@@ -2763,8 +2792,8 @@ func AppendJSON(c *gin.Context) {
 	// Record audit event for CR creation
 	crID := cr.ID
 	_ = RecordAuditEvent(cr.ProjectID, cr.DatasetID, cr.UserID, models.AuditEventTypeCRCreated,
-		fmt.Sprintf("Change Request #%d created: %s", cr.ID, cr.Title),
-		fmt.Sprintf("%d rows appended, %d cells edited", rowCount3, cellsEdited),
+		fmt.Sprintf("Review Requested: %s", cr.Title),
+		fmt.Sprintf("%d new rows with %d modified cells are waiting for approval.", rowCount3, cellsEdited),
 		&crID,
 		models.AuditEventSummary{RowsAdded: rowCount3, CellsChanged: cellsEdited},
 		nil,
