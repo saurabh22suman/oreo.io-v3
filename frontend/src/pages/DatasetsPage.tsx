@@ -136,11 +136,6 @@ export default function DatasetsPage() {
                             {new Date(dataset.last_upload_at).toLocaleDateString()}
                           </span>
                         )}
-                        {dataset.schema ? (
-                          <span className="badge badge-success text-[10px]">Schema</span>
-                        ) : (
-                          <span className="badge badge-warning text-[10px]">No Schema</span>
-                        )}
                       </div>
                     </div>
                   </div>

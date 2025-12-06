@@ -97,6 +97,17 @@ export default function ChangeDetailsPage() {
     }
   }, [change])
 
+  // Parse deleted_rows from payload for append type CRs
+  const deletedRows = useMemo(() => {
+    if (!change?.payload) return []
+    try {
+      const p = JSON.parse(change.payload)
+      return p.deleted_rows || []
+    } catch {
+      return []
+    }
+  }, [change])
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved': return 'bg-success/10 text-success border-success/20'
@@ -348,18 +359,35 @@ export default function ChangeDetailsPage() {
                     </div>
                   )}
                 </div>
-              ) : preview ? (
-                <AgGridTable
-                  rows={preview.data}
-                  columns={preview.columns}
-                  pageSize={50}
-                  allowEdit={false}
-                  compact={false}
-                  editedCells={editedCells}
-                  className="h-full border-0 rounded-none"
-                  title=""
-                />
-              ) : (
+              ) : preview ? (() => {
+                // For append type CRs, transform editedCells and deletedRows for display
+                // editedCells from payload has row_index, column, old_value, new_value
+                const editedCellsForGrid = editedCells.map((edit: any) => ({
+                  rowIndex: typeof edit.row_index === 'number' ? edit.row_index : parseInt(String(edit.row_index), 10),
+                  column: edit.column,
+                  oldValue: edit.old_value,
+                  newValue: edit.new_value
+                }))
+                
+                // Build deletedRowIds set from deletedRows array
+                const deletedRowIdsSet = new Set<number>(
+                  deletedRows.map((idx: any) => typeof idx === 'number' ? idx : parseInt(String(idx), 10))
+                )
+                
+                return (
+                  <AgGridTable
+                    rows={preview.data}
+                    columns={preview.columns}
+                    pageSize={50}
+                    allowEdit={false}
+                    compact={false}
+                    editedCells={editedCellsForGrid}
+                    deletedRowIds={deletedRowIdsSet}
+                    className="h-full border-0 rounded-none"
+                    title=""
+                  />
+                )
+              })() : (
                 <div className="h-full flex items-center justify-center text-text-muted">
                   <div className="flex flex-col items-center gap-4">
                     <div className="w-16 h-16 rounded-full bg-surface-2 flex items-center justify-center">

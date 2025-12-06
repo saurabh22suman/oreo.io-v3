@@ -1065,6 +1065,7 @@ func DatasetsFinalize(c *gin.Context) {
 		}
 	}
 
+	now := time.Now()
 	ds := models.Dataset{
 		ProjectID:      uint(body.ProjectID),
 		Name:           body.Name,
@@ -1073,6 +1074,7 @@ func DatasetsFinalize(c *gin.Context) {
 		TargetTable:    tableName,
 		StorageBackend: backend,
 		Schema:         body.Schema,
+		LastUploadAt:   &now,
 	}
 	if err := gdb.Create(&ds).Error; err != nil {
 		log.Printf("DatasetsFinalize: create dataset record failed: %v", err)
@@ -2444,6 +2446,7 @@ func AppendOpen(c *gin.Context) {
 		Title       string           `json:"title"`
 		Comment     string           `json:"comment"`
 		EditedCells []map[string]any `json:"edited_cells"`
+		DeletedRows []int            `json:"deleted_rows"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(400, gin.H{"error": "invalid_payload"})
@@ -2491,7 +2494,7 @@ func AppendOpen(c *gin.Context) {
 		return
 	}
 	// Create change request and staging ingest
-	payloadObj := map[string]any{"upload_id": up.ID, "filename": up.Filename, "edited_cells": body.EditedCells}
+	payloadObj := map[string]any{"upload_id": up.ID, "filename": up.Filename, "edited_cells": body.EditedCells, "deleted_rows": body.DeletedRows}
 	pb, _ := json.Marshal(payloadObj)
 	reviewersJSON, _ := json.Marshal(cleaned)
 	// Initialize reviewer states (pending)

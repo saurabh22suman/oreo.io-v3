@@ -47,7 +47,7 @@ export default function DatasetDetailsPage() {
 
       {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 text-sm text-text-muted">
-        <button onClick={() => nav(`/projects/${projectId}/datasets`)} className="hover:text-text-primary transition-colors">
+        <button onClick={() => nav(`/projects/${projectId}`)} className="hover:text-text-primary transition-colors">
           Datasets
         </button>
         <ChevronRight size={14} />

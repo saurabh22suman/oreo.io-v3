@@ -39,7 +39,7 @@ export default function DatasetSettingsPage() {
 
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-text-secondary">
-        <span className="cursor-pointer hover:text-primary transition-colors" onClick={() => nav(`/projects/${projectId}/datasets`)}>Datasets</span>
+        <span className="cursor-pointer hover:text-primary transition-colors" onClick={() => nav(`/projects/${projectId}`)}>Datasets</span>
         <ChevronRight className="w-4 h-4" />
         <span className="cursor-pointer hover:text-primary transition-colors" onClick={() => nav(`/projects/${projectId}/datasets/${dsId}`)}>{dataset?.name || 'Dataset'}</span>
         <ChevronRight className="w-4 h-4" />

@@ -388,8 +388,33 @@ export async function validateEditedJSONTop(datasetId: number, rows: any[], file
 }
 
 // New: open a change after successful validation
-export async function openAppendChangeTop(datasetId: number, uploadId: number, reviewerId: number | number[]) {
-  const body = Array.isArray(reviewerId) ? { upload_id: uploadId, reviewer_ids: reviewerId } : { upload_id: uploadId, reviewer_id: reviewerId }
+export interface OpenAppendChangeOptions {
+  uploadId: number
+  reviewerId: number | number[]
+  title?: string
+  comment?: string
+  editedCells?: Array<{ rowIndex: number; column: string; oldValue: any; newValue: any }>
+  deletedRows?: number[]
+}
+export async function openAppendChangeTop(datasetId: number, options: OpenAppendChangeOptions) {
+  const { uploadId, reviewerId, title, comment, editedCells, deletedRows } = options
+  const body: any = Array.isArray(reviewerId) 
+    ? { upload_id: uploadId, reviewer_ids: reviewerId } 
+    : { upload_id: uploadId, reviewer_id: reviewerId }
+  if (title) body.title = title
+  if (comment) body.comment = comment
+  if (editedCells && editedCells.length > 0) {
+    // Transform frontend editedCells format to backend format
+    body.edited_cells = editedCells.map(e => ({
+      row_index: e.rowIndex,
+      column: e.column,
+      old_value: e.oldValue,
+      new_value: e.newValue
+    }))
+  }
+  if (deletedRows && deletedRows.length > 0) {
+    body.deleted_rows = deletedRows
+  }
   const r = await fetch(`${API_BASE}/datasets/${datasetId}/data/append/open`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body) })
   if (!r.ok) throw new Error(await r.text()); return r.json()
 }

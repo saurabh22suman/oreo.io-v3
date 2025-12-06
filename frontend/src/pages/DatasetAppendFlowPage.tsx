@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { getProject, getDataset, previewAppend, appendUpload, validateEditedJSONTop, validateBatchRules, getDatasetSchemaTop, listMembers, myProjectRole, currentUser } from '../api'
+import { getProject, getDataset, previewAppend, validateEditedJSONTop, openAppendChangeTop, validateBatchRules, getDatasetSchemaTop, listMembers, myProjectRole, currentUser } from '../api'
 import Alert from '../components/Alert'
 import AgGridDialog from '../components/AgGridDialog'
 import { AgGridReact } from 'ag-grid-react'
@@ -1130,19 +1130,25 @@ export default function DatasetAppendFlowPage() {
                   if (!file) return
                   setSubmitting(true)
                   try {
-                    // If we have edited rows, we need to submit those instead of the file
-                    // But the API expects a file. In a real app we'd convert rows to CSV/JSON file
-                    // For now we'll just use the original file if no edits, or warn if edits exist
-                    // Since we can't easily create a File object from rows in browser without more logic
+                    // Get the rows to submit (with deleted rows removed)
+                    const rowsToSubmit = rows.filter((_, idx) => !deletedRowIds.has(idx))
                     
-                    // NOTE: In a real implementation, we would convert 'rows' back to a Blob/File
-                    // and send that. For this demo, we'll assume the backend handles the file upload
-                    // or we'd implement a 'rows to file' conversion here.
+                    // Step 1: Validate the edited rows and get an upload_id
+                    const validateResult = await validateEditedJSONTop(dsId, rowsToSubmit, file.name)
+                    if (!validateResult.ok && !validateResult.upload_id) {
+                      throw new Error(validateResult.error || 'Validation failed')
+                    }
                     
-                    // For now, we'll proceed with the original file upload logic
-                    // but in a production version we'd handle the edited data submission
+                    // Step 2: Open the change request with title, edited cells, and deleted rows
+                    await openAppendChangeTop(dsId, {
+                      uploadId: validateResult.upload_id,
+                      reviewerId: selectedReviewerIds.length > 1 ? selectedReviewerIds : selectedReviewerIds[0],
+                      title: title.trim(),
+                      comment: comment.trim() || undefined,
+                      editedCells: editedCells,
+                      deletedRows: Array.from(deletedRowIds)
+                    })
                     
-                    await appendUpload(projectId, dsId, file, selectedReviewerIds[0])
                     setToast('Change request created successfully')
                     setSubmitDialog(false)
                     resetAppendState()
